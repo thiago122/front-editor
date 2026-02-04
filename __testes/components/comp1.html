@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="pt-br">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Blueprint Engine - Loop with Slots</title>
+    <style>
+      body {
+        font-family: 'Inter', sans-serif;
+        background: #f1f5f9;
+        padding: 40px;
+      }
+      .dashboard-header {
+        margin-bottom: 30px;
+        border-bottom: 2px solid #e2e8f0;
+        padding-bottom: 10px;
+      }
+      .team-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 20px;
+      }
+
+      /* Card Styles */
+      .card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+      .avatar {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        background: #eee;
+        margin-bottom: 15px;
+        object-fit: cover;
+      }
+      .senior-tag {
+        font-size: 10px;
+        font-weight: bold;
+        text-transform: uppercase;
+        padding: 3px 8px;
+        border-radius: 4px;
+        background: #e0e7ff;
+        color: #4f46e5;
+        margin-bottom: 10px;
+        display: inline-block;
+      }
+      .tag-pro {
+        background: #dcfce7;
+        color: #166534;
+      }
+      .skills-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 15px;
+      }
+      .skill {
+        font-size: 11px;
+        background: #eef2ff;
+        color: #4338ca;
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+      .card-actions {
+        border-top: 1px solid #eee;
+        padding-top: 15px;
+        margin-top: 20px;
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+      }
+      .btn {
+        background: #e2e8f0;
+        border: none;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        cursor: pointer;
+      }
+      .btn-primary {
+        background: #4f46e5;
+        color: white;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <template id="tpl-dashboard">
+      <div class="dashboard">
+        <div class="dashboard-header">
+          <h1>{{ title }}</h1>
+          <p>Total de colaboradores: {{ totalEmployees }}</p>
+        </div>
+
+        <div class="team-grid">
+          <div class="card" data-for="employee in teamList">
+            <img class="avatar" data-attr:src="employee.photo" />
+
+            <div>
+              ss
+              <template data-if="employee.yearsExp >= 10"> meu template if </template>
+              <span data-if="employee.yearsExp >= 10" class="senior-tag tag-pro">Especialista</span>
+              <span data-else-if="employee.yearsExp >= 5" class="senior-tag">Pleno</span>
+              <span data-else class="senior-tag">Junior</span>
+            </div>
+
+            <strong>{{ employee.name }} {{ employee.surname }}</strong>
+
+            <div class="skills-list">
+              <span class="skill" data-for="s in employee.skills">{{ s }}</span>
+            </div>
+
+            <div class="card-actions" data-slot="employee-actions" data-remove-empty></div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <template id="tpl-profile-btn">
+      <button class="btn btn-primary">Ver Perfil</button>
+    </template>
+
+    <template id="tpl-message-btn">
+      <button class="btn">Enviar Mensagem</button>
+    </template>
+
+    <script>
+      const Evaluator = {
+        run(expression, data) {
+          try {
+            const fn = new Function(...Object.keys(data), `return ${expression}`)
+            return fn(...Object.values(data))
+          } catch (e) {
+            return undefined
+          }
+        },
+      }
+
+      const Engine = {
+        molds: {
+          Dashboard: document.getElementById('tpl-dashboard').innerHTML,
+          ProfileButton: document.getElementById('tpl-profile-btn').innerHTML,
+          MessageButton: document.getElementById('tpl-message-btn').innerHTML,
+        },
+
+        // Função central de renderização que agora gerencia slots e recursão
+        render(node, parentContext = {}) {
+          const templateHtml = this.molds[node.tag]
+          if (!templateHtml) return document.createTextNode(`Molde ${node.tag} não encontrado!`)
+
+          const container = document.createElement('div')
+          container.innerHTML = templateHtml.trim()
+          const element = container.firstElementChild
+
+          element.setAttribute('data-node-id', node.nodeId) // Para o DomSync do Editor
+
+          // Contexto de dados para este nó (props + computeds + contexto do pai)
+          let currentContext = { ...parentContext, ...node.props }
+          if (node.computed) {
+            Object.entries(node.computed).forEach(([key, expr]) => {
+              currentContext[key] = Evaluator.run(expr, currentContext)
+            })
+          }
+
+          // 1. HIDRATAR: Processar Loops, Condicionais, Texto e Atributos
+          this.hydrateElement(element, currentContext)
+
+          // 2. SLOTS: Injete os filhos recursivamente
+          if (node.slots) {
+            element.querySelectorAll('[data-slot]').forEach((slotEl) => {
+              const slotName = slotEl.getAttribute('data-slot')
+              const childrenToInject = node.slots[slotName] || []
+
+              if (childrenToInject.length > 0) slotEl.innerHTML = '' // Limpa fallback
+
+              childrenToInject.forEach((childNode) => {
+                // Renderiza cada filho do slot recursivamente com o contexto ATUAL
+                slotEl.appendChild(this.render(childNode, currentContext))
+              })
+
+              // data-remove-empty para slots vazios
+              if (slotEl.hasAttribute('data-remove-empty') && !slotEl.innerHTML.trim()) {
+                slotEl.remove()
+              }
+            })
+          }
+
+          return element
+        },
+
+        // Função que aplica a lógica de texto, loops e condicionais a um único elemento
+        hydrateElement(element, context) {
+          // Loops (processa a si mesmo e seus filhos, RECURSIVAMENTE)
+          const loops = Array.from(element.querySelectorAll(':scope [data-for], [data-for]'))
+          loops.forEach((loopEl) => {
+            const [itemKey, , listKey] = loopEl.getAttribute('data-for').split(' ')
+            const list = Evaluator.run(listKey, context) || []
+
+            list.forEach((item) => {
+              const clone = loopEl.cloneNode(true)
+              clone.removeAttribute('data-for')
+              const localContext = { ...context, [itemKey]: item } // Novo contexto para cada item
+              this.hydrateElement(clone, localContext) // Hidrata o CLONE
+              loopEl.parentElement.insertBefore(clone, loopEl)
+            })
+            loopEl.remove() // Remove o template original do loop
+          })
+
+          // Condicionais (após loops)
+          const directChildren = Array.from(element.children)
+          let satisfied = false
+          directChildren.forEach((child) => {
+            if (child.hasAttribute('data-if')) {
+              satisfied = !!Evaluator.run(child.getAttribute('data-if'), context)
+              if (!satisfied) child.remove()
+            } else if (child.hasAttribute('data-else-if')) {
+              if (satisfied) child.remove()
+              else {
+                satisfied = !!Evaluator.run(child.getAttribute('data-else-if'), context)
+                if (!satisfied) child.remove()
+              }
+            } else if (child.hasAttribute('data-else')) {
+              if (satisfied) child.remove()
+            }
+          })
+
+          // Texto e Atributos (no contexto final)
+          element.innerHTML = element.innerHTML.replace(
+            /{{ \s*([\w.]+)\s* }}/g,
+            (m, p) => Evaluator.run(p, context) ?? '',
+          )
+
+          Array.from(element.attributes).forEach((attr) => {
+            if (attr.name.startsWith('data-attr:')) {
+              element.setAttribute(attr.name.split(':')[1], Evaluator.run(attr.value, context))
+            }
+          })
+
+          const bindClass = element.getAttribute('data-bind-class')
+          if (bindClass) {
+            const classMap = Evaluator.run(bindClass, context)
+            Object.entries(classMap).forEach(([cls, val]) => element.classList.toggle(cls, !!val))
+          }
+        },
+      }
+
+      // --- AST COMPLEXA DO DASHBOARD ---
+      const dashboardAST = {
+        tag: 'Dashboard',
+        nodeId: 'main-dashboard',
+        props: {
+          title: 'Nossa Equipe de Desenvolvedores',
+          teamList: [
+            // A lista de funcionários é passada como uma prop
+            {
+              name: 'Alice',
+              surname: 'Silva',
+              yearsExp: 11,
+              photo: 'https://i.pravatar.cc/100?img=1',
+              skills: ['TypeScript', 'Kubernetes'],
+            },
+            {
+              name: 'Bob',
+              surname: 'Santos',
+              yearsExp: 6,
+              photo: 'https://i.pravatar.cc/100?img=2',
+              skills: ['Python', 'Django', 'AWS'],
+            },
+            {
+              name: 'Carlos',
+              surname: 'Melo',
+              yearsExp: 3,
+              photo: 'https://i.pravatar.cc/100?img=3',
+              skills: ['JavaScript', 'HTML', 'CSS'],
+            },
+          ],
+        },
+        computed: {
+          totalEmployees: 'teamList.length', // Computed para mostrar o total
+        },
+        slots: {
+          // Aqui podemos adicionar slots para o dashboard se quisermos,
+          // mas o foco é nos slots DENTRO do loop de funcionários
+        },
+      }
+
+      // Renderiza o Dashboard. Os cards de funcionário são gerados no loop interno do molde
+      const app = document.getElementById('app')
+      app.appendChild(Engine.render(dashboardAST))
+    </script>
+  </body>
+</html>
