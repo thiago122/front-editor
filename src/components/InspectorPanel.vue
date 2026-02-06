@@ -303,7 +303,81 @@ function toggleGroup(groupKey) {
   }
 }
 
-function updateRules() {
+  // helper to safely find a CSS node by ID in the tree
+  const findCssNode = (root, targetId) => {
+    if (!root) return null
+    if (Array.isArray(root)) {
+       for (const item of root) {
+          const found = findCssNode(item, targetId)
+          if (found) return found
+       }
+       return null
+    }
+    if (root._nodeId === targetId) return root
+    if (root.block && root.block.children) {
+       // block.children is a List, convert to array or iterate
+       const children = root.block.children.toArray ? root.block.children.toArray() : root.block.children
+       return findCssNode(children, targetId)
+    }
+    return null
+  }
+
+  // Handle Explicit CSS Rule Selection (From Explorer)
+  if (store.selectedCssRuleNodeId) {
+      console.log('Explicit CSS Rule Mode:', store.selectedCssRuleNodeId)
+      // Reset element-specific state
+      elementClasses.value = []
+      
+      const ast = toRaw(cssAst.value)
+      const targetNode = findCssNode(ast.children, store.selectedCssRuleNodeId)
+      
+      if (targetNode && targetNode.type === 'Rule') {
+          // Format as Inspector Rule
+          const dectList = []
+          if (targetNode.block && targetNode.block.children) {
+             const decls = targetNode.block.children.toArray ? targetNode.block.children.toArray() : targetNode.block.children
+             decls.forEach((d, i) => {
+                 if (d.type === 'Declaration') {
+                     const propName = d.property.toLowerCase()
+                     const isDisabled = propName.startsWith('--disabled-')
+                     dectList.push({
+                         id: d.id || `decl-${i}`,
+                         prop: isDisabled ? propName.replace('--disabled-', '') : propName,
+                         value: generate(d.value),
+                         important: !!d.important,
+                         disabled: isDisabled,
+                         overridden: false
+                     })
+                 }
+             })
+          }
+
+          const inspectorRule = {
+              uid: targetNode._nodeId,
+              selector: generate(targetNode.prelude),
+              declarations: dectList,
+              origin: targetNode.origin,
+              sourceName: targetNode.sourceName,
+              specificity: [0,0,0,0], // Unknown without matching context
+              context: [],
+              active: true,
+              loc: targetNode.origin,
+              astNode: targetNode
+          }
+
+          rules.value = [inspectorRule]
+          ruleGroups.value = [{
+             isTarget: true,
+             tagName: 'Selected Rule',
+             rules: [inspectorRule]
+          }]
+          // Force expand the new "virtual" group
+          expandedGroups.value.clear()
+          expandedGroups.value.add(`group-0-Selected Rule`)
+          return
+      }
+  }
+
   if (!selectedElement.value || !cssAst.value) {
     rules.value = []
     ruleGroups.value = []

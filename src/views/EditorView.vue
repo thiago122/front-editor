@@ -17,6 +17,7 @@ import HistoryControls from '@/components/HistoryControls.vue'
 import InspectorPanel from '@/components/InspectorPanel.vue'
 import HighlightOverlay from '@/components/HighlightOverlay.vue'
 import ASTExplorer from '@/components/ASTExplorer.vue'
+import CssExplorer from '@/components/CssExplorer.vue'
 import Preview from '@/components/Preview.vue'
 import Breadcrumbs from '@/components/Breadcrumbs.vue'
 const EditorStore = useEditorStore()
@@ -50,6 +51,7 @@ import HtmlImportModal from '@/components/HtmlImportModal.vue'
 
 const isSaveModalOpen = ref(false)
 const isImportModalOpen = ref(false)
+const activeExplorer = ref(null) // 'html' | 'css' | null
 
 const handleHtmlLoad = (newHtml) => {
   input.value = newHtml
@@ -290,8 +292,13 @@ watch(
           :class="EditorStore.inspectMode ? 'bg-gray-200' : ''">
           <IconInspect />
         </IconSidebarButton>
-        <IconSidebarButton title="Layers" @click="showExplorer = !showExplorer">
+        <IconSidebarButton title="Layers" @click="activeExplorer = activeExplorer === 'html' ? null : 'html'"
+          :class="activeExplorer === 'html' ? 'bg-gray-200' : ''">
           <IconLayer />
+        </IconSidebarButton>
+        <IconSidebarButton title="CSS" @click="activeExplorer = activeExplorer === 'css' ? null : 'css'"
+          :class="activeExplorer === 'css' ? 'bg-gray-200' : ''">
+          <IconCSS />
         </IconSidebarButton>
 
         <IconSidebarButton title="HTML">
@@ -324,8 +331,12 @@ watch(
         </IconSidebarButton>
       </IconSidebar>
 
-      <AsidePanel class="w-[280px]" title="LayerExplorer" v-if="showExplorer">
+      <AsidePanel class="w-[280px]" title="LayerExplorer" v-if="activeExplorer === 'html'">
         <ASTExplorer :ast="EditorStore.ctx.ast" :selectedNodeId="EditorStore.selectedNodeId" />
+      </AsidePanel>
+
+      <AsidePanel class="w-[280px]" title="CSS Explorer" v-if="activeExplorer === 'css'">
+        <CssExplorer />
       </AsidePanel>
 
       <div class="flex flex-col h-full w-full overflow-hidden gap-3">

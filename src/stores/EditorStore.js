@@ -26,6 +26,7 @@ export const useEditorStore = defineStore('editor', () => {
   const cssAst = ref(null) // cache do AST do css-tree
   const manipulation = ref(null)
   const clipboard = ref({ type: null, data: null }) // Clipboard tipado
+  const selectedCssRuleNodeId = ref(null) // ID of the selected CSS rule (CSSTree Node ID)
 
   const pipeline = new Pipeline()
   pipeline.use(htmlPlugin())
@@ -216,6 +217,7 @@ export const useEditorStore = defineStore('editor', () => {
     selectNode,
     selectedNode,
     selectedNodeId,
+    selectedCssRuleNodeId,
     selectedElement,
     hoveredNodeId,
     hoveredElement,
