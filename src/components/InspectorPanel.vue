@@ -1,10 +1,12 @@
 <script setup>
-import { ref, watch, computed, toRaw, nextTick } from 'vue'
+import { ref, watch, computed, toRaw, nextTick, markRaw } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
+import { useStyleStore } from '@/stores/StyleStore'
 import { useCssParser } from '@/composables/useCssParser'
 
 const store = useEditorStore()
-const { extractCssAst, getMatchedRules, syncAstToStyles, isColor, createNode, generate } =
+const styleStore = useStyleStore()
+const { extractCssAst, getMatchedRules, syncAstToStyles, isColor, createNode, generate, getSpecificity, generateId } =
   useCssParser()
 
 const rules = ref([])
@@ -30,21 +32,28 @@ const ignoredClasses = ['is-hovered-sync']
 
 // Active CSS Source Selection
 const availableSources = computed(() => {
-  if (!store.cssAst) return [{ origin: 'on_page', name: 'style' }]
-  const sourcesMap = new Map()
+  if (!styleStore.cssAst) return [{ origin: 'on_page', name: 'style' }]
+  const sources = []
   
-  // Always include on_page style as a fallback
-  sourcesMap.set('on_page:style', { origin: 'on_page', name: 'style' })
+  // Always ensure on_page style exists for new rules
+  sources.push({ origin: 'on_page', name: 'style' })
 
-  store.cssAst.children.forEach(node => {
-     if (node.origin && node.origin !== 'external') {
-        const key = `${node.origin}:${node.sourceName || 'style'}`
-        if (!sourcesMap.has(key)) {
-          sourcesMap.set(key, { origin: node.origin, name: node.sourceName || 'style' })
-        }
-     }
+  styleStore.cssAst.forEach(root => {
+    if (root.metadata.origin === 'external') return // Cannot add rules to external
+    root.children.forEach(file => {
+      if (root.metadata.origin === 'on_page' && file.label === 'style') return // Already added
+      sources.push({ origin: root.metadata.origin, name: file.label })
+    })
   })
-  return Array.from(sourcesMap.values())
+  
+  // deduplicate
+  const seen = new Set()
+  return sources.filter(s => {
+    const key = `${s.origin}:${s.name}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 })
 
 const selectedSource = ref(null)
@@ -125,8 +134,7 @@ function safeAppend(list, data, prepend = false) {
 function addNewRule(overrideSelector = null) {
   console.log('addNewRule clicked', { overrideSelector, selectedSource: selectedSource.value })
   if (!selectedElement.value || !store.cssAst) return
-  const ast = toRaw(store.cssAst)
-
+  
   const selector =
     overrideSelector ||
     selectedElement.value.tagName.toLowerCase() +
@@ -134,17 +142,61 @@ function addNewRule(overrideSelector = null) {
 
   const ruleNode = createNode(`${selector} {}`, 'Rule')
   if (ruleNode) {
-    // Set target source
-    if (selectedSource.value) {
-      ruleNode.origin = selectedSource.value.origin
-      ruleNode.sourceName = selectedSource.value.name
+    const origin = selectedSource.value?.origin || 'on_page'
+    const sourceName = selectedSource.value?.name || (origin === 'on_page' ? 'style' : 'styles.css')
+
+    // Find the file node in the Logic Tree to append to
+    const logicTree = toRaw(styleStore.cssAst)
+    let root = logicTree.find(n => n.metadata.origin === origin)
+    
+    // If root doesn't exist (unlikely if source is in selector), create it?
+    // Actually availableSources ensures it exists or it's 'on_page'
+    if (!root) {
+       root = {
+           id: generateId(),
+           type: 'root',
+           label: origin.toUpperCase(),
+           metadata: { origin },
+           children: []
+       }
+       styleStore.cssAst.push(root)
     }
 
-    // Prepend new rules to make them appear at the top
-    safeAppend(ast.children, ruleNode, true)
-    syncAstToStyles(ast, activeDoc.value)
+    let fileNode = root.children.find(n => n.label === sourceName)
+    if (!fileNode) {
+       fileNode = {
+           id: generateId(),
+           type: 'file',
+           label: sourceName,
+           metadata: { origin, sourceName },
+           children: []
+       }
+       root.children.push(fileNode)
+    }
+
+    // Create the Logic Node for the new rule
+    const newLogicNode = {
+        id: generateId(),
+        type: 'selector',
+        label: selector,
+        metadata: {
+            origin,
+            sourceName,
+            astNode: ruleNode,
+            specificity: getSpecificity(selector)
+        },
+        children: []
+    }
+
+    // Add to Logic Tree
+    fileNode.children.unshift(newLogicNode) // Prepend for visibility
+
+    // Sync and Refresh
+    syncAstToStyles(styleStore.cssAst, activeDoc.value)
+    styleStore.refreshCssAst(activeDoc.value)
+    styleStore.setActiveRule(newLogicNode.id)
     updateRules()
-    console.log('Rule added to AST (prepended)', ruleNode)
+    console.log('Rule added to Logic Tree', newLogicNode)
   }
 }
 
@@ -218,7 +270,7 @@ const boxModel = ref({
 })
 
 const selectedElement = computed(() => store.selectedElement)
-const cssAst = computed(() => store.cssAst)
+const cssAst = computed(() => styleStore.cssAst)
 const viewport = computed(() => store.viewport)
 
 function compareSpecificity(a, b) {
@@ -277,7 +329,7 @@ function refreshAll() {
   console.log('Force Refresh: Re-extracting AST and updating rules...')
   try {
     const ast = extractCssAst(activeDoc.value)
-    store.cssAst = markRaw(ast)
+    styleStore.cssAst = markRaw(ast)
     updateRules()
   } catch (err) {
     console.error('Failed to refresh AST:', err)
@@ -287,6 +339,50 @@ function refreshAll() {
 const ruleGroups = ref([])
 const expandedGroups = ref(new Set())
 const ruleRefs = ref({}) // Map of rule.uid -> DOM Element
+
+// --- COMPUTED: Selector Tabs ---
+const selectorTabs = computed(() => {
+  // We only show tabs for the TARGET element (not inherited)
+  const targetGroup = ruleGroups.value.find(g => g.isTarget)
+  if (!targetGroup) return []
+  
+  const rules = targetGroup.rules
+  const selectorCounts = {}
+  rules.forEach(r => {
+    selectorCounts[r.selector] = (selectorCounts[r.selector] || 0) + 1
+  })
+  
+  return rules.map(rule => {
+    const isId = rule.selector.includes('#')
+    const isClass = rule.selector.includes('.')
+    const isAttributeLinked = isId || isClass
+    
+    // Add source suffix if selector is duplicated
+    let label = rule.selector
+    if (selectorCounts[rule.selector] > 1 && rule.selector !== 'element.style') {
+      label = `${rule.selector} [${rule.sourceName || 'style'}]`
+    }
+    
+    return {
+      uid: rule.uid,
+      selector: rule.selector,
+      label,
+      source: rule.sourceName || 'style',
+      origin: rule.origin,
+      isAttributeLinked
+    }
+  })
+})
+
+const activeInspectorRule = computed(() => {
+  if (!styleStore.activeRuleNodeId) return null
+  // Search in all groups (including inherited for viewing)
+  for (const group of ruleGroups.value) {
+    const found = group.rules.find(r => r.uid === styleStore.activeRuleNodeId)
+    if (found) return found
+  }
+  return null
+})
 
 // Function to register rule element refs
 const setRuleRef = (el, rule) => {
@@ -302,67 +398,58 @@ function toggleGroup(groupKey) {
     expandedGroups.value.add(groupKey)
   }
 }
-
-  // helper to safely find a CSS node by ID in the tree
-  const findCssNode = (root, targetId) => {
-    if (!root) return null
-    if (Array.isArray(root)) {
-       for (const item of root) {
-          const found = findCssNode(item, targetId)
-          if (found) return found
-       }
-       return null
-    }
-    if (root._nodeId === targetId) return root
-    if (root.block && root.block.children) {
-       // block.children is a List, convert to array or iterate
-       const children = root.block.children.toArray ? root.block.children.toArray() : root.block.children
-       return findCssNode(children, targetId)
+function updateRules() {
+  // helper to safely find a CSS node by ID in the logic tree
+  const findCssNode = (nodes, targetId) => {
+    if (!nodes || !Array.isArray(nodes)) return null
+    for (const node of nodes) {
+      if (node.id === targetId) return node
+      if (node.children) {
+        const found = findCssNode(node.children, targetId)
+        if (found) return found
+      }
     }
     return null
   }
 
   // Handle Explicit CSS Rule Selection (From Explorer)
-  if (store.selectedCssRuleNodeId) {
-      console.log('Explicit CSS Rule Mode:', store.selectedCssRuleNodeId)
+  if (styleStore.selectedCssRuleNodeId) {
+      console.log('Explicit CSS Rule Mode:', styleStore.selectedCssRuleNodeId)
       // Reset element-specific state
       elementClasses.value = []
       
       const ast = toRaw(cssAst.value)
-      const targetNode = findCssNode(ast.children, store.selectedCssRuleNodeId)
+      const targetNode = findCssNode(ast, styleStore.selectedCssRuleNodeId)
       
-      if (targetNode && targetNode.type === 'Rule') {
+      if (targetNode && targetNode.type === 'selector') {
           // Format as Inspector Rule
           const dectList = []
-          if (targetNode.block && targetNode.block.children) {
-             const decls = targetNode.block.children.toArray ? targetNode.block.children.toArray() : targetNode.block.children
-             decls.forEach((d, i) => {
-                 if (d.type === 'Declaration') {
-                     const propName = d.property.toLowerCase()
-                     const isDisabled = propName.startsWith('--disabled-')
-                     dectList.push({
-                         id: d.id || `decl-${i}`,
-                         prop: isDisabled ? propName.replace('--disabled-', '') : propName,
-                         value: generate(d.value),
-                         important: !!d.important,
-                         disabled: isDisabled,
-                         overridden: false
-                     })
-                 }
-             })
-          }
+          targetNode.children.forEach((d) => {
+              if (d.type === 'declaration') {
+                  const propName = d.label.toLowerCase()
+                  const isDisabled = propName.startsWith('--disabled-')
+                  dectList.push({
+                      id: d.id,
+                      prop: isDisabled ? propName.replace('--disabled-', '') : propName,
+                      value: d.value,
+                      important: d.metadata?.astNode?.important || false,
+                      disabled: isDisabled,
+                      overridden: false
+                  })
+              }
+          })
 
           const inspectorRule = {
-              uid: targetNode._nodeId,
-              selector: generate(targetNode.prelude),
+              uid: targetNode.id,
+              selector: targetNode.label,
               declarations: dectList,
-              origin: targetNode.origin,
-              sourceName: targetNode.sourceName,
-              specificity: [0,0,0,0], // Unknown without matching context
+              origin: targetNode.metadata?.origin,
+              sourceName: targetNode.metadata?.sourceName,
+              specificity: targetNode.metadata?.specificity || [0,0,0,0],
               context: [],
               active: true,
-              loc: targetNode.origin,
-              astNode: targetNode
+              loc: targetNode.metadata?.line || '?',
+              astNode: targetNode.metadata?.astNode
           }
 
           rules.value = [inspectorRule]
@@ -412,6 +499,16 @@ function toggleGroup(groupKey) {
   // rules.value remains a flat list of rules from the TARGET group primarily for property editing logic
   const targetGroup = groups.find((g) => g.isTarget)
   rules.value = targetGroup ? targetGroup.rules : []
+
+  // AUTO-SELECT first rule if none active or current one lost
+  if (targetGroup && targetGroup.rules.length > 0) {
+    const currentActive = targetGroup.rules.find(r => r.uid === styleStore.activeRuleNodeId)
+    if (!currentActive) {
+      styleStore.setActiveRule(targetGroup.rules[0].uid)
+    }
+  } else if (!targetGroup) {
+      styleStore.setActiveRule(null)
+  }
 
   // Calculate Winners (Global across all rules for override strikes)
   // We want to see if a property in an inherited rule is overridden by a direct rule
@@ -512,7 +609,7 @@ function addNewProperty(rule) {
 
     // Case 2: AST Rule
     if (rule.astNode && rule.astNode.block) {
-      const ast = toRaw(store.cssAst)
+      const ast = toRaw(styleStore.cssAst)
       const block = toRaw(rule.astNode.block)
       const children = block.children
       const countBefore = children.toArray ? children.toArray().length : children.length
@@ -522,10 +619,9 @@ function addNewProperty(rule) {
       if (newDeclNode) {
         // Append new properties within the rule
         safeAppend(children, newDeclNode, false)
-        const countAfter = children.toArray ? children.toArray().length : children.length
-        console.log('Decls after:', countAfter)
 
-        syncAstToStyles(ast, activeDoc.value)
+        syncAstToStyles(styleStore.cssAst, activeDoc.value)
+        styleStore.refreshCssAst(activeDoc.value)
         updateRules()
         
         // Auto-focus the newly added property via Refs
@@ -596,7 +692,7 @@ function updateProperty(rule, decl, field, newValue) {
       setInline(decl.prop, newValue, decl.important ? 'important' : '')
     }
   } else if (decl.astNode) {
-    const ast = toRaw(store.cssAst)
+    const ast = toRaw(styleStore.cssAst)
     const node = toRaw(decl.astNode)
     if (field === 'prop') {
       const wasDisabled = node.property.startsWith('--disabled-')
@@ -604,9 +700,10 @@ function updateProperty(rule, decl, field, newValue) {
     } else if (field === 'value') {
       node.value = { type: 'Raw', value: newValue }
     }
-    syncAstToStyles(ast, activeDoc.value)
+    syncAstToStyles(styleStore.cssAst, activeDoc.value)
+    styleStore.refreshCssAst(activeDoc.value)
+    updateRules()
   }
-  updateRules()
 }
 
 function updateSelector(rule, newSelector) {
@@ -615,10 +712,18 @@ function updateSelector(rule, newSelector) {
 
   const newPrelude = createNode(newSelector, 'SelectorList')
   if (newPrelude) {
-    const ast = toRaw(store.cssAst)
     const node = toRaw(rule.astNode)
     node.prelude = newPrelude
-    syncAstToStyles(ast)
+    
+    // Also update the logic node label if we can find it
+    const logicNode = findCssNode(toRaw(styleStore.cssAst), rule.uid)
+    if (logicNode) {
+      logicNode.label = newSelector
+      logicNode.metadata.specificity = getSpecificity(newSelector)
+    }
+
+    syncAstToStyles(styleStore.cssAst)
+    styleStore.refreshCssAst(activeDoc.value)
     updateRules()
   }
 }
@@ -659,6 +764,44 @@ function updateId(newId) {
   store.manipulation.setAttribute(nodeId, 'id', newId)
 }
 
+function unlinkRule(tab) {
+  if (!selectedElement.value || !store.manipulation) return
+  const el = selectedElement.value
+  const nodeId = el.getAttribute('data-node-id')
+  if (!nodeId) return
+
+  // Extract base classes and IDs (strip pseudo-classes/states)
+  // e.g., ".class1.class2:hover" -> [".class1", ".class2"]
+  const baseSelector = tab.selector.split(':')[0]
+  const classes = baseSelector.match(/\.[a-zA-Z0-9_-]+/g)?.map(c => c.substring(1)) || []
+  const ids = baseSelector.match(/#[a-zA-Z0-9_-]+/g)?.map(i => i.substring(1)) || []
+
+  let changed = false
+
+  classes.forEach(cls => {
+    if (el.classList.contains(cls)) {
+      el.classList.remove(cls)
+      changed = true
+    }
+  })
+
+  ids.forEach(id => {
+    if (el.id === id) {
+      el.id = ''
+      changed = true
+    }
+  })
+
+  if (changed) {
+    // Persist changes to AST/Manipulation Store
+    store.manipulation.setAttribute(nodeId, 'class', el.className.trim())
+    store.manipulation.setAttribute(nodeId, 'id', el.id || '')
+    
+    // Force a rule update if needed, though MutationObserver should handle it
+    console.log('Rule unlinked from element attributes')
+  }
+}
+
 function createCustomRule() {
   const selector = customSelector.value.trim()
   if (!selector) return
@@ -689,378 +832,119 @@ function updateAtRule(rule, contextItem, newCond) {
 
 function wrapInAtRule(rule, type) {
   console.log('wrapInAtRule clicked', { ruleSelector: rule.selector, type })
-  if (!rule.astNode || !store.cssAst) return
-  const ast = toRaw(store.cssAst)
-
-  const findAndReplace = (list, target, replacement) => {
-    if (!list) return false
-    if (list.head) {
-      // It's a css-tree List
-      let item = list.head
-      while (item) {
-        if (item.data === target) {
-          list.insertData(replacement, item)
-          list.remove(item)
-          return true
-        }
-        item = item.next
-      }
-    } else if (Array.isArray(list)) {
-      const idx = list.indexOf(target)
-      if (idx !== -1) {
-        list[idx] = replacement
-        return true
-      }
-    }
-    return false
-  }
-
-  const atRuleNode = {
-    type: 'Atrule',
-    name: type,
-    prelude: { type: 'Raw', value: type === 'media' ? '(min-width: 0px)' : 'name' },
-    block: {
-      type: 'Block',
-      children: [rule.astNode],
-    },
-  }
-
-  // Determine the parent list containing the rule
-  const findParentList = (node, target) => {
-    // Helper to check a list for the target
-    const checkList = (list) => {
-      if (!list) return false
-
-      // 1. Array check
-      if (Array.isArray(list)) {
-        // Strict match
-        if (list.includes(target)) return true
-        // Looser match by LOC
-        if (target.loc) {
-          return list.some(
-            (item) =>
-              item.type === target.type &&
-              item.loc &&
-              item.loc.start.line === target.loc.start.line,
-          )
-        }
-        return false
-      }
-
-      // 2. css-tree List check
-      if (list.head) {
-        let item = list.head
-        while (item) {
-          if (nodesMatch(item.data, target)) return true
-          item = item.next
-        }
-      }
-      return false
-    }
-
-    // Check direct children
-    if (node.children && checkList(node.children)) {
-      return node.children
-    }
-    // Check block children
-    if (node.block && node.block.children && checkList(node.block.children)) {
-      return node.block.children
-    }
-
-    // Recurse
-    if (node.children) {
-      const children = node.children.toArray ? node.children.toArray() : node.children
-      for (const child of children) {
-        if (child.type === 'Atrule' || child.type === 'Rule') {
-          const res = findParentList(child, target)
-          if (res) return res
-        }
-      }
-    }
-    // Recurse block
-    if (node.block && node.block.children) {
-      const children = node.block.children.toArray
-        ? node.block.children.toArray()
-        : node.block.children
-      for (const child of children) {
-        if (child.type === 'Atrule' || child.type === 'Rule') {
-          const res = findParentList(child, target)
-          if (res) return res
-        }
+  if (!rule.astNode || !styleStore.cssAst) return
+  
+  const logicTree = toRaw(styleStore.cssAst)
+  
+  // Helper to find parent logic node
+  const findParentOfLogicNode = (nodes, targetId, parent = null) => {
+    for (const node of nodes) {
+      if (node.id === targetId) return parent
+      if (node.children) {
+        const found = findParentOfLogicNode(node.children, targetId, node)
+        if (found) return found
       }
     }
     return null
   }
 
-  const parentList = findParentList(ast, rule.astNode)
-
-  if (parentList) {
-    console.log('Parent list found. Attempting replacement...')
-
-    const robustReplace = (list, target, replacement) => {
-      if (list.head) {
-        let item = list.head
-        while (item) {
-          if (nodesMatch(item.data, target)) {
-            list.insertData(replacement, item)
-            list.remove(item)
-            return true
-          }
-          item = item.next
-        }
-      } else if (Array.isArray(list)) {
-        const idx = list.findIndex((item) => nodesMatch(item, target))
-        if (idx !== -1) {
-          list[idx] = replacement
-          return true
-        }
-      }
-      return false
-    }
-
-    if (robustReplace(parentList, rule.astNode, atRuleNode)) {
-      syncAstToStyles(ast, activeDoc.value)
-      updateRules()
-      return
-    }
+  const parentLogicNode = findParentOfLogicNode(logicTree, rule.uid)
+  if (!parentLogicNode) {
+    console.error('Could not find parent logic node for rule to wrap')
+    return
   }
-  console.error('Could not find parent list for rule to wrap', rule.selector)
+
+  const targetLogicNode = parentLogicNode.children.find(n => n.id === rule.uid)
+  const idx = parentLogicNode.children.indexOf(targetLogicNode)
+
+  if (idx !== -1) {
+    // Create new AtRule CSS node
+    const atRuleAst = {
+      type: 'Atrule',
+      name: type,
+      prelude: { type: 'Raw', value: type === 'media' ? '(min-width: 0px)' : 'name' },
+      block: {
+        type: 'Block',
+        children: [rule.astNode]
+      }
+    }
+
+    // Create new AtRule Logic Node
+    const atRuleLogicNode = {
+      id: generateId(),
+      type: 'at-rule',
+      label: `@${type} ${atRuleAst.prelude.value}`,
+      metadata: { 
+        origin: targetLogicNode.metadata.origin,
+        sourceName: targetLogicNode.metadata.sourceName,
+        astNode: atRuleAst 
+      },
+      children: [targetLogicNode]
+    }
+
+    // Replace in parent
+    parentLogicNode.children.splice(idx, 1, atRuleLogicNode)
+
+    syncAstToStyles(styleStore.cssAst, activeDoc.value)
+    styleStore.refreshCssAst(activeDoc.value)
+    updateRules()
+  }
 }
 
 function unwrapFromAtRule(rule, contextItem) {
   console.log('unwrapFromAtRule clicked', { ruleSelector: rule.selector, contextItem })
-  if (!store.cssAst || !contextItem || !contextItem.astNode) return
-  const ast = toRaw(store.cssAst)
-  const targetAtRule = toRaw(contextItem.astNode)
-
-  // Helper to find the parent container of the targetAtRule
-  const findParentContainer = (node, target) => {
-    // Check direct children
-    if (node.children) {
-      const list = node.children
-      if (list.head) {
-        let item = list.head
-        while (item) {
-          if (nodesMatch(item.data, target)) return node
-          item = item.next
-        }
-      } else if (Array.isArray(list)) {
-        if (list.some((item) => nodesMatch(item, target))) return node
-      }
-    }
-    // Check block children
-    if (node.block && node.block.children) {
-      const list = node.block.children
-      if (list.head) {
-        let item = list.head
-        while (item) {
-          if (nodesMatch(item.data, target)) return node
-          item = item.next
-        }
-      } else if (Array.isArray(list)) {
-        if (list.some((item) => nodesMatch(item, target))) return node
-      }
-    }
-
-    // Recurse
-    if (node.children) {
-      const children = node.children.toArray ? node.children.toArray() : node.children
-      for (const child of children) {
-        if (child.type === 'Atrule' || child.type === 'Rule') {
-          const res = findParentContainer(child, target)
-          if (res) return res
-        }
-      }
-    }
-    if (node.block && node.block.children) {
-      const children = node.block.children.toArray
-        ? node.block.children.toArray()
-        : node.block.children
-      for (const child of children) {
-        if (child.type === 'Atrule' || child.type === 'Rule') {
-          const res = findParentContainer(child, target)
-          if (res) return res
-        }
+  if (!styleStore.cssAst || !contextItem || !contextItem.astNode) return
+  
+  const logicTree = toRaw(styleStore.cssAst)
+  
+  // Helper to find parent of a node
+  const findParentOfLogicNode = (nodes, targetId, parent = null) => {
+    for (const node of nodes) {
+      if (node.id === targetId) return parent
+      if (node.children) {
+        const found = findParentOfLogicNode(node.children, targetId, node)
+        if (found) return found
       }
     }
     return null
   }
 
-  const parent = findParentContainer(ast, targetAtRule)
-
-  if (parent) {
-    console.log('Found parent of AtRule:', parent.type)
-    let list = null
-    let targetItemInList = null
-
-    // Determine which list contains the target and find the item wrapper if using css-tree List
-    if (parent.children) {
-      const l = parent.children
-      if (l.head) {
-        let item = l.head
-        while (item) {
-          if (nodesMatch(item.data, targetAtRule)) {
-            list = l
-            targetItemInList = item
-            break
-          }
-          item = item.next
-        }
-      } else if (Array.isArray(l)) {
-        const idx = l.findIndex((item) => nodesMatch(item, targetAtRule))
-        if (idx !== -1) {
-          list = l
-          targetItemInList = idx
-        }
+  const atRuleLogicNode = findCssNode(logicTree, contextItem.astNode.id || contextItem.wrapper) // We might need a better way to find the atrule logic node
+  // Actually contextItem.astNode is the css-tree node. We need the logic node wrapping it.
+  
+  // Let's search by astNode identity
+  const findLogicNodeByAstNode = (nodes, astNode) => {
+    for (const node of nodes) {
+      if (node.metadata?.astNode === astNode) return node
+      if (node.children) {
+        const found = findLogicNodeByAstNode(node.children, astNode)
+        if (found) return found
       }
     }
-
-    if (!list && parent.block && parent.block.children) {
-      const l = parent.block.children
-      if (l.head) {
-        let item = l.head
-        while (item) {
-          if (nodesMatch(item.data, targetAtRule)) {
-            list = l
-            targetItemInList = item
-            break
-          }
-          item = item.next
-        }
-      } else if (Array.isArray(l)) {
-        const idx = l.findIndex((item) => nodesMatch(item, targetAtRule))
-        if (idx !== -1) {
-          list = l
-          targetItemInList = idx
-        }
-      }
-    }
-
-    if (list) {
-      // Move children of AtRule to parent list
-      if (targetAtRule.block && targetAtRule.block.children) {
-        const innerList = targetAtRule.block.children
-        if (list.head && innerList.head) {
-          // css-tree list manipulation
-          // We iterate inner list and insert each BEFORE the targetAtRule
-          let innerItem = innerList.head
-          while (innerItem) {
-            const next = innerItem.next
-            // Note: insert() might need the actual item wrapper, which we found
-            list.insert(innerItem, targetItemInList)
-            innerItem = next
-          }
-          list.remove(targetItemInList)
-        } else if (Array.isArray(list)) {
-          const idx =
-            typeof targetItemInList === 'number' ? targetItemInList : list.indexOf(targetAtRule)
-          const innerItems = Array.isArray(innerList)
-            ? innerList
-            : innerList.toArray
-              ? innerList.toArray()
-              : []
-          list.splice(idx, 1, ...innerItems)
-        }
-      } else {
-        // Empty block, just remove the AtRule
-        if (list.head) {
-          list.remove(targetItemInList)
-        } else if (Array.isArray(list)) {
-          const idx =
-            typeof targetItemInList === 'number' ? targetItemInList : list.indexOf(targetAtRule)
-          if (idx !== -1) list.splice(idx, 1)
-        }
-      }
-      syncAstToStyles(ast, activeDoc.value)
-      updateRules()
-      console.log('Successfully unwrapped AtRule')
-    }
-  } else {
-    console.error('Could not find parent of AtRule')
-  }
-}
-
-function deleteRule(rule) {
-  console.log('=== deleteRule START ===', rule.selector)
-
-  if (!store.cssAst || !rule.astNode) {
-    console.error('Missing cssAst or rule astNode')
-    return
+    return null
   }
 
-  // Cannot delete inline styles
-  if (rule.selector === 'element.style') return
-
-  const ast = toRaw(store.cssAst)
-  const targetNode = toRaw(rule.astNode)
-
-  // Helper to remove item from css-tree List or Array by nodesMatch
-  const removeFromListByNode = (list, target) => {
-    if (!list) return false
-
-    if (list.head) {
-      let item = list.head
-      while (item) {
-        if (nodesMatch(item.data, target)) {
-          list.remove(item)
-          return true
-        }
-        item = item.next
-      }
-    } else if (Array.isArray(list)) {
-      const idx = list.findIndex((item) => nodesMatch(item, target))
-      if (idx !== -1) {
-        list.splice(idx, 1)
-        return true
-      }
-    }
-    return false
+  const targetAtRuleLogicNode = findLogicNodeByAstNode(logicTree, contextItem.astNode)
+  if (!targetAtRuleLogicNode) {
+     console.error('Could not find logic node for at-rule to unwrap')
+     return
   }
 
-  const findAndRemove = (node, target) => {
-    // 1. Check children (Sheet or other containers)
-    if (node.children && removeFromListByNode(node.children, target)) {
-      return true
-    }
+  const parentLogicNode = findParentOfLogicNode(logicTree, targetAtRuleLogicNode.id)
+  if (!parentLogicNode) return
 
-    // 2. Check block.children (Rule or Atrule containers)
-    if (node.block && node.block.children && removeFromListByNode(node.block.children, target)) {
-      return true
-    }
+  const idx = parentLogicNode.children.indexOf(targetAtRuleLogicNode)
+  if (idx !== -1) {
+    // Insert all children of at-rule into parent before at-rule
+    parentLogicNode.children.splice(idx, 1, ...targetAtRuleLogicNode.children)
 
-    // 3. Recurse children
-    if (node.children) {
-      const children = node.children.toArray ? node.children.toArray() : node.children
-      for (const child of children) {
-        if (child.type === 'Atrule' || child.type === 'Rule') {
-          if (findAndRemove(child, target)) return true
-        }
-      }
-    }
-
-    // 4. Recurse block children
-    if (node.block && node.block.children) {
-      const children = node.block.children.toArray
-        ? node.block.children.toArray()
-        : node.block.children
-      for (const child of children) {
-        if (child.type === 'Atrule' || child.type === 'Rule') {
-          if (findAndRemove(child, target)) return true
-        }
-      }
-    }
-
-    return false
-  }
-
-  if (findAndRemove(ast, targetNode)) {
-    console.log('✓ Rule deleted from AST')
-    syncAstToStyles(ast, activeDoc.value)
+    syncAstToStyles(styleStore.cssAst, activeDoc.value)
+    styleStore.refreshCssAst(activeDoc.value)
     updateRules()
-  } else {
-    console.error('✗ Failed to delete rule: node not found in AST structure')
+    console.log('Successfully unwrapped at-rule in logic tree')
   }
 }
+
 
 function deleteDeclaration(rule, decl) {
   console.log('Deleting declaration:', decl.prop)
@@ -1078,12 +962,12 @@ function deleteDeclaration(rule, decl) {
   }
 
   // Case 2: AST Rule
-  if (!store.cssAst || !rule.astNode || !decl.astNode) {
+  if (!styleStore.cssAst || !rule.astNode || !decl.astNode) {
     console.error('Cannot delete declaration: missing AST nodes')
     return
   }
 
-  const ast = toRaw(store.cssAst)
+  const ast = toRaw(styleStore.cssAst)
   const ruleNode = toRaw(rule.astNode)
   const declNode = toRaw(decl.astNode)
 
@@ -1137,7 +1021,7 @@ function toggleDeclaration(rule, decl) {
       )
     }
   } else if (decl.astNode && rule.astNode) {
-    const ast = toRaw(store.cssAst)
+    const ast = toRaw(styleStore.cssAst)
     const ruleNode = toRaw(rule.astNode)
     const declNode = toRaw(decl.astNode)
 
@@ -1160,12 +1044,66 @@ watch(
   (newEl, oldEl) => {
     if (oldEl) observer.disconnect()
     if (newEl) {
-      observer.observe(newEl, { attributes: true, attributeFilter: ['style', 'class'] })
+      observer.observe(newEl, { attributes: true, attributeFilter: ['style', 'class', 'id'] })
       updateRules()
     }
   },
   { immediate: true },
 )
+
+function deleteRule(rule) {
+  console.log('=== deleteRule START ===', rule.selector)
+  if (!styleStore.cssAst || !rule.uid) return
+  if (rule.selector === 'element.style') return
+
+  const logicTree = toRaw(styleStore.cssAst)
+  
+  const findAndRemoveFromLogicTree = (nodes, targetId) => {
+    for (let i = 0; i < nodes.length; i++) {
+      if (nodes[i].id === targetId) {
+        nodes.splice(i, 1)
+        return true
+      }
+      if (nodes[i].children && findAndRemoveFromLogicTree(nodes[i].children, targetId)) {
+        return true
+      }
+    }
+    return false
+  }
+
+  if (findAndRemoveFromLogicTree(logicTree, rule.uid)) {
+    syncAstToStyles(styleStore.cssAst, activeDoc.value)
+    styleStore.refreshCssAst(activeDoc.value)
+    updateRules()
+    console.log('Rule deleted from Logic Tree')
+  }
+}
+
+const hasPseudo = (state) => {
+  if (!activeInspectorRule.value) return false
+  const baseSelector = activeInspectorRule.value.selector.split(':')[0]
+  const targetSelector = `${baseSelector}:${state}`
+  
+  // Look in the same file/source for this pseudo seletor
+  const targetGroup = ruleGroups.value.find(g => g.isTarget)
+  return targetGroup?.rules.some(r => r.selector === targetSelector)
+}
+
+const handlePseudoToggle = (state) => {
+  if (!activeInspectorRule.value) return
+  const baseSelector = activeInspectorRule.value.selector.split(':')[0]
+  const targetSelector = `${baseSelector}:${state}`
+  
+  const targetGroup = ruleGroups.value.find(g => g.isTarget)
+  const existing = targetGroup?.rules.find(r => r.selector === targetSelector)
+  
+  if (existing) {
+    styleStore.setActiveRule(existing.uid)
+  } else {
+    // Create new rule for pseudo-class
+    addNewRule(targetSelector)
+  }
+}
 
 watch([cssAst, viewport], updateRules)
 watch(forceStatus, updateRules, { deep: true })
@@ -1346,136 +1284,178 @@ watch(forceStatus, updateRules, { deep: true })
 
     <div v-else class="flex-1 overflow-y-auto font-mono leading-normal bg-white custom-scrollbar">
       <!-- STYLES TAB -->
-      <div v-if="activeTab === 'Styles'" class="pb-32">
-        <div v-for="(group, gIdx) in filteredGroups" :key="gIdx" class="mb-5 last:mb-0">
-          
-          <!-- Inheritance Header -->
-          <div v-if="!group.isTarget"
-            class="flex items-center gap-2 px-3 py-1 bg-gray-100 text-gray-500 text-[10px] border-y border-gray-200 sticky top-0 z-[1] cursor-pointer"
-            @click="toggleGroup(`group-${gIdx}-${group.tagName}`)">
-            <svg class="w-2.5 h-2.5 transition-transform duration-200"
-              :class="[expandedGroups.has(`group-${gIdx}-${group.tagName}`) ? 'rotate-90' : '']" fill="none"
-              stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-            </svg>
-            <span>Inherited from</span>
-            <span class="text-blue-600 font-bold px-1">{{ group.tagName }}</span>
-            <span v-if="group.id" class="text-orange-700">#{{ group.id }}</span>
-            <span v-if="group.className" class="text-blue-500">.{{
-              group.className
-                .split(' ')
-                .filter((c) => c && !ignoredClasses.includes(c))
-                .join('.')
-            }}</span>
+      <div v-if="activeTab === 'Styles'" class="pb-32 flex flex-col h-full">
+        
+        <!-- Target Rule Navigation (Sticky Top) -->
+        <div v-if="selectorTabs.length > 0" class="shrink-0 bg-[#f8f9fa] border-b border-[#d1d1d1] z-20">
+          <div class="flex flex-wrap items-center gap-1 px-3 py-2">
+            <button v-for="tab in selectorTabs" :key="tab.uid"
+              @click="styleStore.setActiveRule(tab.uid)"
+              :class="[
+                'group/tab flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] transition-all border shrink-0 font-medium',
+                styleStore.activeRuleNodeId === tab.uid 
+                  ? 'bg-blue-600 text-white border-blue-700 shadow-sm' 
+                  : 'bg-white text-gray-500 border-[#d1d1d1] hover:border-blue-300 hover:text-blue-600'
+              ]"
+              :title="tab.source"
+            >
+              <span v-if="tab.selector === 'element.style'" class="italic">element.style</span>
+              <span v-else class="truncate max-w-[150px]">{{ tab.label }}</span>
+              
+              <span v-if="tab.isAttributeLinked" 
+                @click.stop="unlinkRule(tab)"
+                class="ml-1 opacity-0 group-hover/tab:opacity-100 hover:bg-white/20 rounded transition-all w-3 h-3 flex items-center justify-center text-[7px]"
+                :class="styleStore.activeRuleNodeId === tab.uid ? 'text-white' : 'text-gray-400 hover:text-red-500'"
+                title="Unlink from element"
+              >✕</span>
+            </button>
+            
+            <button @click="addNewRule()" class="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors shrink-0" title="Add New Rule">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+            </button>
           </div>
 
-          <!-- Rules Area -->
-          <div v-show="group.isTarget || expandedGroups.has(`group-${gIdx}-${group.tagName}`)" 
-            class="space-y-4 px-3 pt-3">
-            
-            <div v-for="(rule, i) in group.rules" :key="rule.uid || i"
-              :ref="(el) => setRuleRef(el, rule)"
-              class="bg-white rounded-lg shadow-sm border border-gray-100 p-3 relative group/rule overflow-hidden">
-              
-              <!-- Indicator for specific rules -->
-              <div v-if="rule.selector === 'element.style'" class="absolute top-0 left-0 right-0 h-1 bg-blue-500"></div>
+          <!-- Pseudo-classes Control -->
+          <div v-if="styleStore.activeRuleNodeId && activeInspectorRule?.selector !== 'element.style'" 
+            class="flex flex-wrap items-center gap-1 px-3 pb-2">
+            <button v-for="state in ['hover', 'active', 'focus', 'visited', 'focus-within', 'focus-visible', 'target']" 
+              :key="state"
+              @click="handlePseudoToggle(state)"
+              :class="[
+                'px-1.5 py-0 rounded text-[9px] border transition-all font-mono',
+                hasPseudo(state) ? 'bg-indigo-50 text-indigo-700 border-indigo-200 font-bold' : 'text-gray-400 border-transparent hover:text-gray-600 hover:bg-black/5'
+              ]"
+            >
+              :{{ state }}
+            </button>
+          </div>
+        </div>
 
-              <!-- Rule Header -->
-              <div class="flex items-start justify-between mb-2">
-                <div class="flex flex-col flex-1">
-                  <div v-if="rule.context && rule.context.length" class="flex flex-wrap items-center gap-1 mb-2">
-                    <div v-for="(ctx, idx) in rule.context" :key="idx"
-                      class="flex items-center gap-1 bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 text-[10px] group/ctx">
-                      <span class="opacity-60">@{{ ctx.name }}</span>
-                      <span class="cursor-text hover:underline" contenteditable="true"
-                        @blur="(e) => updateAtRule(rule, ctx, e.target.innerText)"
-                        @keydown.enter.prevent="(e) => e.target.blur()">{{ ctx.prelude }}</span>
-                      <button @click.stop="unwrapFromAtRule(rule, ctx)" class="text-red-400 hover:text-red-600 opacity-0 group-hover/ctx:opacity-100 transition-opacity">✕</button>
+        <div class="flex-1 overflow-y-auto no-scrollbar">
+          <div v-for="(group, gIdx) in filteredGroups" :key="gIdx" class="mb-4 last:mb-0">
+            
+            <!-- Inheritance Header (Only for non-target groups) -->
+            <div v-if="!group.isTarget"
+              class="flex items-center gap-2 px-3 py-1.5 bg-gray-50 text-gray-500 text-[10px] border-y border-gray-100 sticky top-0 z-[1] cursor-pointer"
+              @click="toggleGroup(`group-${gIdx}-${group.tagName}`)">
+              <svg class="w-2.5 h-2.5 transition-transform duration-200"
+                :class="[expandedGroups.has(`group-${gIdx}-${group.tagName}`) ? 'rotate-90' : '']" fill="none"
+                stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+              </svg>
+              <span class="font-bold whitespace-nowrap">Inherited from</span>
+              <span class="text-blue-600 font-bold truncate">{{ group.tagName }}</span>
+              <span v-if="group.id" class="text-orange-700 shrink-0">#{{ group.id }}</span>
+            </div>
+
+            <!-- Focused Rule Area (Target) OR Expanded Inherited Area -->
+            <div v-show="group.isTarget || expandedGroups.has(`group-${gIdx}-${group.tagName}`)" 
+              class="space-y-4 px-3 pt-3">
+              
+              <!-- Filter: If target group, only show activeInspectorRule -->
+              <template v-for="(rule, i) in group.rules" :key="rule.uid || i">
+                <div v-if="!group.isTarget || rule.uid === styleStore.activeRuleNodeId"
+                  :ref="(el) => setRuleRef(el, rule)"
+                  class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 relative group/rule overflow-hidden transition-all"
+                  :class="{ 'ring-1 ring-blue-500/30 border-blue-100': group.isTarget }">
+                  
+                  <!-- Indicator for inline styles -->
+                  <div v-if="rule.selector === 'element.style'" class="absolute top-0 left-0 right-0 h-1 bg-blue-500/50"></div>
+
+                  <!-- Rule Header (Simple title) -->
+                  <div class="flex items-start justify-between mb-3">
+                    <div class="flex flex-col flex-1">
+                      <div v-if="rule.context && rule.context.length" class="flex flex-wrap items-center gap-1 mb-2">
+                        <div v-for="(ctx, idx) in rule.context" :key="idx"
+                          class="flex items-center gap-1 bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 text-[9px] group/ctx">
+                          <span class="opacity-60">@{{ ctx.name }}</span>
+                          <span class="cursor-text hover:underline" contenteditable="true"
+                            @blur="(e) => updateAtRule(rule, ctx, e.target.innerText)"
+                            @keydown.enter.prevent="(e) => e.target.blur()">{{ ctx.prelude }}</span>
+                        </div>
+                      </div>
+
+                      <div class="flex items-center gap-1">
+                        <span :class="[
+                          'text-orange-800 font-bold text-[12px] cursor-text hover:underline break-all font-mono',
+                          !isEditable(rule, group) ? 'opacity-40 !cursor-not-allowed no-underline' : '',
+                        ]" :contenteditable="rule.selector !== 'element.style' && isEditable(rule, group)"
+                          @blur="(e) => updateSelector(rule, e.target.innerText)"
+                          @keydown.enter.prevent="(e) => e.target.blur()">{{ rule.selector }}</span>
+                        <span class="text-gray-300 font-normal ml-1">{</span>
+                      </div>
+                    </div>
+                    
+                    <div class="flex items-center gap-1 shrink-0 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-tight"
+                      :class="[
+                        rule.origin === 'external' ? 'bg-rose-50 text-rose-600 border border-rose-100' :
+                        rule.origin === 'on_page' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                        'bg-blue-50 text-blue-600 border border-blue-100'
+                      ]">
+                       <span>{{ getOriginLabel(rule) }}</span>
                     </div>
                   </div>
 
-                  <div class="flex items-center gap-1">
-                    <span :class="[
-                      rule.selector === 'element.style' ? 'text-[#b83214] font-bold' : 'text-[#b83214] font-bold',
-                      'cursor-text hover:underline break-all',
-                      !isEditable(rule, group) ? 'opacity-40 !cursor-not-allowed no-underline' : '',
-                    ]" :contenteditable="rule.selector !== 'element.style' && isEditable(rule, group)"
-                      @blur="(e) => updateSelector(rule, e.target.innerText)"
-                      @keydown.enter.prevent="(e) => e.target.blur()">{{ rule.selector }}</span>
-                    <span class="text-gray-400 font-normal">{</span>
-                  </div>
-                </div>
-                
-                <div class="flex items-center gap-1 shrink-0 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-tight"
-                  :class="[
-                    rule.origin === 'external' ? 'bg-rose-50 text-rose-600 border border-rose-100' :
-                    rule.origin === 'on_page' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
-                    'bg-blue-50 text-blue-600 border border-blue-100'
-                  ]">
-                   <svg v-if="rule.origin === 'external'" class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z"/></svg>
-                   <svg v-else-if="rule.origin === 'on_page'" class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/></svg>
-                   <span>{{ getOriginLabel(rule) }}</span>
-                </div>
-              </div>
+                  <!-- Property List -->
+                  <div class="pl-4 space-y-1.5 relative mb-2">
+                    <div v-for="decl in rule.declarations" :key="decl.id || decl.prop"
+                      class="flex items-start gap-2 group/item relative min-h-[20px]">
+                      
+                      <div class="flex-1 flex flex-wrap items-baseline gap-x-1.5 transition-all"
+                        :class="{ 'opacity-30 line-through grayscale': decl.overridden || decl.disabled }">
+                        
+                        <input v-if="isEditable(rule, group)" type="checkbox" :checked="!decl.overridden && !decl.disabled"
+                          @change.stop="toggleDeclaration(rule, decl)"
+                          class="w-3.5 h-3.5 cursor-pointer accent-blue-600 rounded" />
 
-              <!-- Property List -->
-              <div class="pl-5 space-y-1 relative border-l-2 border-gray-50 ml-1 mb-2">
-                <div v-for="decl in rule.declarations" :key="decl.id || decl.prop"
-                  class="flex items-start gap-1.5 group/item relative min-h-[18px]">
-                  
-                  <input v-if="isEditable(rule, group)" type="checkbox" :checked="!decl.overridden && !decl.disabled"
-                    @change.stop="toggleDeclaration(rule, decl)"
-                    class="absolute -left-[24px] top-[3px] w-3 h-3 cursor-pointer opacity-0 group-hover/rule:group-hover/item:opacity-100 accent-blue-600 transition-opacity translate-y-[1px]" />
-                  
-                  <div :class="[
-                    'flex-1 flex flex-wrap items-center gap-x-1 transition-all',
-                    decl.overridden || decl.disabled ? 'opacity-30 line-through grayscale' : '',
-                  ]">
-                    <span class="text-rose-700 font-bold prop-name outline-none" 
-                      :class="[isEditable(rule, group) ? 'cursor-text hover:underline' : '']" 
-                      :contenteditable="isEditable(rule, group)"
-                      @blur="(e) => updateProperty(rule, decl, 'prop', e.target.innerText)"
-                      @keydown.enter.prevent="(e) => focusValue(rule, decl, e)">{{ decl.prop }}</span>
-                    <span class="text-gray-400">:</span>
-                    
-                    <span v-if="isColor(decl.value)"
-                      class="inline-block w-3 h-3 rounded shadow-sm border border-black/10 mx-0.5"
-                      :style="{ backgroundColor: decl.value }"></span>
-                    
-                    <span class="text-indigo-900 font-medium prop-value outline-none px-0.5 rounded break-all"
-                      :class="[isEditable(rule, group) ? 'cursor-text hover:bg-gray-50' : '']"
-                      :contenteditable="isEditable(rule, group)"
-                      @blur="(e) => updateProperty(rule, decl, 'value', e.target.innerText)"
-                      @keydown.enter.prevent="(e) => e.target.blur()">{{ decl.value }}</span>
-                    
-                    <span v-if="decl.important" class="text-amber-500 text-[8px] font-bold uppercase tracking-tight ml-1">!important</span>
-                    <span class="text-gray-400">;</span>
+                        <span class="text-rose-700 font-bold prop-name outline-none" 
+                          :class="[isEditable(rule, group) ? 'cursor-text hover:bg-gray-50 px-0.5 rounded' : '']" 
+                          :contenteditable="isEditable(rule, group)"
+                          @blur="(e) => updateProperty(rule, decl, 'prop', e.target.innerText)"
+                          @keydown.enter.prevent="(e) => focusValue(rule, decl, e)">{{ decl.prop }}</span>
+                        
+                        <span class="text-gray-300">:</span>
+                        
+                        <div class="flex items-center gap-1 min-w-0">
+                          <span v-if="isColor(decl.value)"
+                            class="shrink-0 w-3 h-3 rounded shadow-sm border border-black/10"
+                            :style="{ backgroundColor: decl.value }"></span>
+                          
+                          <span class="text-indigo-900 font-medium prop-value outline-none px-1 rounded break-all transition-colors"
+                            :class="[isEditable(rule, group) ? 'cursor-text hover:bg-blue-50' : '']"
+                            :contenteditable="isEditable(rule, group)"
+                            @blur="(e) => updateProperty(rule, decl, 'value', e.target.innerText)"
+                            @keydown.enter.prevent="(e) => e.target.blur()">{{ decl.value }}</span>
+                        </div>
+                        
+                        <span v-if="decl.important" class="text-amber-500 text-[8px] font-black uppercase tracking-tight ml-1">!important</span>
+                        <span class="text-gray-300">;</span>
+                      </div>
+
+                      <button v-if="isEditable(rule, group)" @click.stop="deleteDeclaration(rule, decl)"
+                        class="opacity-0 group-hover/item:opacity-100 text-gray-400 hover:text-red-500 transition-all p-1">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
+                    </div>
                   </div>
 
-                  <button v-if="isEditable(rule, group)" @click.stop="deleteDeclaration(rule, decl)"
-                    class="opacity-0 group-hover/item:opacity-100 text-gray-300 hover:text-rose-500 transition-all px-1 self-center">✕</button>
+                  <div class="text-gray-300 px-0.5 mb-2 font-normal">}</div>
+
+                  <!-- Rule Action Footer -->
+                  <div v-if="isEditable(rule, group)" 
+                    class="flex items-center gap-1.5 mt-3 pt-3 border-t border-gray-50">
+                     <button @click.stop="addNewProperty(rule)" class="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-[#166534] bg-[#dcfce7] hover:bg-green-200 px-3 py-1 rounded-lg border border-[#bbf7d0] transition-all">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                        Prop
+                     </button>
+                     <div class="flex-1"></div>
+                     <template v-if="rule.selector !== 'element.style'">
+                        <button @click.stop="wrapInAtRule(rule, 'media')" class="text-[9px] font-bold text-gray-500 hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded border border-transparent transition-all">@media</button>
+                        <button @click.stop="wrapInAtRule(rule, 'container')" class="text-[9px] font-bold text-gray-500 hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded border border-transparent transition-all">@container</button>
+                     </template>
+                  </div>
                 </div>
-              </div>
-
-              <div class="text-gray-400 px-0.5 mb-2 font-normal">}</div>
-
-              <!-- Rule Action Footer -->
-              <div v-if="isEditable(rule, group)" 
-                class="flex items-center gap-1.5 mt-1 pt-1 border-t border-gray-50">
-                
-                <template v-if="rule.selector !== 'element.style'">
-                   <button @click.stop="wrapInAtRule(rule, 'media')" class="bg-gray-100 hover:bg-gray-200 text-[10px] px-1.5 py-0.5 rounded text-gray-600 font-bold border border-gray-200" title="Wrap in @media">@m</button>
-                   <button @click.stop="wrapInAtRule(rule, 'layer')" class="bg-gray-100 hover:bg-gray-200 text-[10px] px-1.5 py-0.5 rounded text-gray-600 font-bold border border-gray-200" title="Wrap in @layer">@l</button>
-                   <button @click.stop="wrapInAtRule(rule, 'container')" class="bg-gray-100 hover:bg-gray-200 text-[10px] px-1.5 py-0.5 rounded text-gray-600 font-bold border border-gray-200" title="Wrap in @container">@c</button>
-                   <div class="flex-1"></div>
-                   <button @click.stop="deleteRule(rule)" class="bg-rose-50 hover:bg-rose-100 text-[10px] px-1.5 py-0.5 rounded text-rose-600 font-bold border border-rose-100" title="Delete Rule">X</button>
-                   <button @click.stop="addNewProperty(rule)" class="bg-[#dcfce7] hover:bg-green-200 text-[#166534] w-6 h-5 flex items-center justify-center rounded border border-[#bbf7d0] font-bold ml-1" title="Add Property">+</button>
-                </template>
-                <template v-else>
-                   <div class="flex-1"></div>
-                   <button @click.stop="addNewProperty(rule)" class="bg-[#dcfce7] hover:bg-green-200 text-[#166534] w-6 h-5 flex items-center justify-center rounded border border-[#bbf7d0] font-bold" title="Add Property">+</button>
-                </template>
-              </div>
+              </template>
             </div>
           </div>
         </div>

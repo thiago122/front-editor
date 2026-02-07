@@ -8,32 +8,33 @@ import { findNodeById } from '@/utils/ast'
 
 import { ManipulationEngine } from '@/editor/ManipulationEngine'
 import { history } from '@/editor/history/HistoryManager'
-import { useCssParser } from '@/composables/useCssParser'
+import { useStyleStore } from './StyleStore'
 
 export const useEditorStore = defineStore('editor', () => {
-  const { extractCssAst } = useCssParser()
-
   // --- STATE ---
   const ctx = ref(null)
   const selectedNodeId = ref(null)
   const selectedElement = ref(null) // From Inspector
   const hoveredNodeId = ref(null)
-  const hoveredElement = ref(null) // From Inspector
-  const hoverSource = ref(null) // 'preview' | 'explorer'
   const inspectMode = ref(null)
   const iframe = ref(null)
   const viewport = ref({ width: window.innerWidth, height: window.innerHeight })
-  const cssAst = ref(null) // cache do AST do css-tree
   const manipulation = ref(null)
   const clipboard = ref({ type: null, data: null }) // Clipboard tipado
-  const selectedCssRuleNodeId = ref(null) // ID of the selected CSS rule (CSSTree Node ID)
 
   const pipeline = new Pipeline()
   pipeline.use(htmlPlugin())
 
+  const styleStore = useStyleStore()
+
   // --- GETTERS ---
   const ast = computed(() => ctx.value?.ast)
   const selectedNode = computed(() => findNodeById(ast.value, selectedNodeId.value))
+  const hoveredElement = computed(() => {
+    if (!hoveredNodeId.value) return null
+    const doc = getIframeDoc()
+    return doc?.querySelector(`[data-node-id="${hoveredNodeId.value}"]`)
+  })
 
   function loadHTML(rawHTML) {
     ctx.value = pipeline.run(rawHTML)
@@ -97,15 +98,6 @@ export const useEditorStore = defineStore('editor', () => {
   // Getters para a UI
   const canPaste = computed(() => clipboard.value.type === 'html-node')
 
-  function refreshCssAst() {
-    const doc = getIframeDoc()
-    if (doc) {
-      console.log('[EditorStore] Refreshing CSS AST...')
-      const ast = extractCssAst(doc)
-      cssAst.value = markRaw(ast)
-    }
-  }
-
   watch(iframe, (newIframe) => {
     if (newIframe) {
       initEngine(newIframe.contentDocument)
@@ -114,7 +106,7 @@ export const useEditorStore = defineStore('editor', () => {
       newIframe.addEventListener('load', () => {
         // Wait a small bit for external stylesheets to be parsed by the browser
         setTimeout(() => {
-          refreshCssAst()
+          styleStore.refreshCssAst(getIframeDoc())
         }, 500)
       })
     }
@@ -124,10 +116,8 @@ export const useEditorStore = defineStore('editor', () => {
   function setViewport(width, height) {
     viewport.value = { width, height }
   }
-
   function handleHover({ id, source }) {
     hoveredNodeId.value = id
-    hoverSource.value = source
     
     // 1. Limpa o hover anterior em ambos os documentos
     const oldHovered = document.querySelectorAll('.is-hovered-sync')
@@ -138,10 +128,7 @@ export const useEditorStore = defineStore('editor', () => {
       el.classList.remove('is-hovered-sync')
     })
 
-    if (!id) {
-      hoveredElement.value = null
-      return
-    }
+    if (!id) return
 
     // 2. Aplica o novo hover no Explorer (DOM Principal)
     const astEl = document.querySelector(`[data-ast-node-id="${id}"]`)
@@ -149,12 +136,7 @@ export const useEditorStore = defineStore('editor', () => {
 
     // 3. Aplica o novo hover no Preview (Iframe)
     const previewEl = iframeDoc?.querySelector(`[data-node-id="${id}"]`)
-    if (previewEl) {
-      previewEl.classList.add('is-hovered-sync')
-      hoveredElement.value = markRaw(previewEl)
-    } else {
-      hoveredElement.value = null
-    }
+    if (previewEl) previewEl.classList.add('is-hovered-sync')
   }
 
   function undo() {
@@ -165,67 +147,17 @@ export const useEditorStore = defineStore('editor', () => {
     history.redo(manipulation.value)
   }
 
-  function getCssByOrigin(origin) {
-    if (!cssAst.value) return ''
-    const { generate } = useCssParser()
-    
-    const filteredAst = {
-      type: 'StyleSheet',
-      children: cssAst.value.children.filter(node => node.origin === origin)
-    }
-    
-    try {
-      return generate(filteredAst)
-    } catch (e) {
-      console.error(`Failed to generate CSS for origin: ${origin}`, e)
-      return ''
-    }
-  }
-
-  function getCssGroupedBySource(origin) {
-    if (!cssAst.value) return []
-    const { generate } = useCssParser()
-
-    const rules = cssAst.value.children.filter((node) => node.origin === origin)
-    const groups = {}
-
-    rules.forEach((rule) => {
-      const source = rule.sourceName || (origin === 'on_page' ? 'On Page' : 'style')
-      if (!groups[source]) groups[source] = []
-      groups[source].push(rule)
-    })
-
-    return Object.keys(groups).map((sourceName) => {
-      try {
-        const filteredAst = {
-          type: 'StyleSheet',
-          children: groups[sourceName],
-        }
-        return {
-          name: sourceName,
-          css: generate(filteredAst),
-        }
-      } catch (e) {
-        console.error(`Failed to generate CSS for source: ${sourceName}`, e)
-        return { name: sourceName, css: '' }
-      }
-    })
-  }
-
   return {
     ctx,
     selectNode,
     selectedNode,
     selectedNodeId,
-    selectedCssRuleNodeId,
     selectedElement,
-    hoveredNodeId,
     hoveredElement,
-    hoverSource,
+    hoveredNodeId,
     inspectMode,
     loadHTML,
     viewport,
-    cssAst,
     setViewport,
     selectParent,
     iframe,
@@ -240,8 +172,6 @@ export const useEditorStore = defineStore('editor', () => {
     deactivate,
     undo,
     redo,
-    getCssByOrigin,
-    getCssGroupedBySource,
-    refreshCssAst,
   }
 })
+

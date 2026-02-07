@@ -1,4 +1,5 @@
 import { parse, walk, generate } from 'css-tree'
+import { generateId } from '../utils/ids.js'
 
 // Pre-compiled regexes for performance (Static)
 const states = ['hover', 'active', 'focus', 'visited', 'focus-within', 'focus-visible', 'target']
@@ -91,6 +92,7 @@ export function useCssParser() {
         } else {
           // Try reading rules (necessary for <link> tags and some injected styles)
           try {
+            // Browsers throw SecurityError when accessing cssRules of cross-origin sheets without CORS
             const rules = sheet.cssRules || sheet.rules
             if (rules) {
               cssText = Array.from(rules)
@@ -98,7 +100,11 @@ export function useCssParser() {
                 .join('\n')
             }
           } catch (e) {
-            console.warn(`[useCssParser] Cannot read rules from ${sourceName} (${origin}). Likely CORS restriction.`, e)
+            // Only log once per sheet to avoid console spam during refreshes
+            if (!sheet._corsErrorLogged) {
+              console.warn(`[useCssParser] Style "${sourceName}" is CORS-protected. External rules cannot be inspected without 'crossorigin' attribute on the link tag.`, e.message)
+              sheet._corsErrorLogged = true
+            }
             return
           }
         }
@@ -149,9 +155,108 @@ export function useCssParser() {
     console.log(`AST Master extracted with ${masterAst.children.length} rules.`)
     console.timeEnd('extractCssAst')
 
-    // Convert master children back to css-tree List if it was one, or keep as array
-    // css-tree generate actually handles arrays too in some versions
-    return masterAst
+    // 5. Transform to Logic Tree
+    return transformToLogicTree(masterAst)
+  }
+
+  function transformToLogicTree(masterAst) {
+    const rootNodes = []
+    const locations = ['inline', 'on_page', 'internal', 'external']
+
+    // 1. Create Location Roots
+    const locationMap = {}
+    locations.forEach((loc) => {
+      const node = {
+        id: generateId(),
+        type: 'root',
+        label: loc.toUpperCase().replace('_', ' '),
+        metadata: { origin: loc },
+        children: [],
+      }
+      locationMap[loc] = node
+      rootNodes.push(node)
+    })
+
+    // 2. Group by Source within Location
+    masterAst.children.forEach((cssNode) => {
+      const origin = cssNode.origin || 'internal'
+      const sourceName = cssNode.sourceName || (origin === 'on_page' ? 'on-page' : 'style')
+
+      const locationNode = locationMap[origin]
+      let fileNode = locationNode.children.find((c) => c.type === 'file' && c.label === sourceName)
+
+      if (!fileNode) {
+        fileNode = {
+          id: generateId(),
+          type: 'file',
+          label: sourceName,
+          metadata: { origin, sourceName },
+          children: [],
+        }
+        locationNode.children.push(fileNode)
+      }
+
+      // 3. Recursive Transform
+      const logicNode = mapCssNodeToLogicNode(cssNode)
+      if (logicNode) {
+        fileNode.children.push(logicNode)
+      }
+    })
+
+    // Filter out empty location roots
+    return rootNodes.filter((rn) => rn.children.length > 0)
+  }
+
+  function mapCssNodeToLogicNode(node) {
+    if (!node) return null
+
+    const logicNode = {
+      id: generateId(),
+      type: '',
+      label: '',
+      value: '',
+      metadata: {
+        origin: node.origin,
+        line: node.loc?.start?.line,
+        astNode: node,
+      },
+      children: [],
+    }
+
+    if (node.type === 'Rule') {
+      logicNode.type = 'selector'
+      logicNode.label = generate(node.prelude)
+      logicNode.metadata.specificity = getSpecificity(logicNode.label)
+
+      // Add Declarations and Nested Rules
+      if (node.block && node.block.children) {
+        const children = node.block.children.toArray ? node.block.children.toArray() : node.block.children
+        children.forEach((child) => {
+          const childLogic = mapCssNodeToLogicNode(child)
+          if (childLogic) logicNode.children.push(childLogic)
+        })
+      }
+    } else if (node.type === 'Atrule') {
+      logicNode.type = 'at-rule'
+      const prelude = node.prelude ? generate(node.prelude) : ''
+      logicNode.label = `@${node.name} ${prelude}`.trim()
+
+      if (node.block && node.block.children) {
+        const children = node.block.children.toArray ? node.block.children.toArray() : node.block.children
+        children.forEach((child) => {
+          const childLogic = mapCssNodeToLogicNode(child)
+          if (childLogic) logicNode.children.push(childLogic)
+        })
+      }
+    } else if (node.type === 'Declaration') {
+      logicNode.type = 'declaration'
+      logicNode.label = node.property
+      logicNode.value = generate(node.value)
+    } else {
+      return null // Ignore other types for now
+    }
+
+    return logicNode
   }
 
   function isMediaActive(condition) {
@@ -233,16 +338,29 @@ export function useCssParser() {
         })
       }
 
-      // 2. Traversal with context stack
+      // 2. Logic Tree Traversal with context stack
       const stack = []
-      walk(ast, {
-        enter(node) {
-          if (node.type === 'Atrule' || node.type === 'Rule') {
-            stack.push(node)
-          }
-
-          if (node.type === 'Rule') {
-            const selector = generate(node.prelude)
+      
+      const traverseLogicNodes = (nodes) => {
+        nodes.forEach(logicNode => {
+          if (logicNode.type === 'at-rule') {
+            const name = logicNode.label.split(' ')[0].replace('@', '').toLowerCase()
+            const cond = logicNode.label.substring(logicNode.label.indexOf(' ') + 1)
+            
+            const contextItem = {
+              type: 'Atrule',
+              name: name,
+              prelude: cond,
+              wrapper: logicNode.label,
+              astNode: logicNode.metadata?.astNode,
+              logicNodeId: logicNode.id
+            }
+            
+            stack.push(contextItem)
+            if (logicNode.children) traverseLogicNodes(logicNode.children)
+            stack.pop()
+          } else if (logicNode.type === 'selector') {
+            const selector = logicNode.label
             if (!selector) return
 
             // Filter pseudo-states based on forceStatus
@@ -286,79 +404,56 @@ export function useCssParser() {
               'caption-side', 'pointer-events', 'speak', 'direction', 'writing-mode'
             ]
 
-            walk(node.block, {
-              visit: 'Declaration',
-              enter(decl) {
-                const propName = decl.property.toLowerCase()
-                const isDisabled = propName.startsWith('--disabled-')
-                const cleanProp = isDisabled ? propName.replace('--disabled-', '') : propName
+            if (logicNode.children) {
+              logicNode.children.forEach(d => {
+                if (d.type === 'declaration') {
+                  const propName = d.label.toLowerCase()
+                  const isDisabled = propName.startsWith('--disabled-')
+                  const cleanProp = isDisabled ? propName.replace('--disabled-', '') : propName
 
-                // Filter for inheritance if not on the target element
-                if (!isTarget) {
-                  const isInherited = inheritedProperties.includes(cleanProp)
-                  if (!isInherited) return
+                  if (!isTarget && !inheritedProperties.includes(cleanProp)) return
+
+                  declarations.push({
+                    id: d.id,
+                    prop: cleanProp,
+                    value: d.value,
+                    important: d.metadata?.astNode?.important || false,
+                    loc: logicNode.metadata?.line || '?',
+                    astNode: d.metadata?.astNode,
+                    disabled: isDisabled,
+                  })
                 }
-
-                const rawValue = generate(decl.value)
-                const declId = `decl-${decl.property}-${rawValue}-${isDisabled ? 'd' : 'e'}`
-
-                declarations.push({
-                  id: declId,
-                  prop: isDisabled ? decl.property.replace('--disabled-', '') : decl.property,
-                  value: rawValue,
-                  important: !!decl.important,
-                  loc: decl.loc ? `${decl.loc.start.line}` : null,
-                  astNode: decl,
-                  disabled: isDisabled,
-                })
-              },
-            })
+              })
+            }
 
             if (declarations.length === 0) return
 
-            const context = []
+            // Determine if rule is active (matching media/container)
             let active = true
-
-            stack.forEach((p) => {
-              if (p.type === 'Atrule') {
-                const name = p.name.toLowerCase()
-                const cond = p.prelude ? generate(p.prelude) : ''
-
-                context.push({
-                  type: 'Atrule',
-                  name: name,
-                  prelude: cond,
-                  wrapper: name === 'layer' ? `(layer ${cond})` : `@${name} ${cond}`,
-                  astNode: p,
-                })
-
-                if (name === 'media') active = active && targetWin.matchMedia(cond).matches
-                if (name === 'container') active = active && isContainerActive(cond, viewport)
-              }
+            stack.forEach(p => {
+              if (p.name === 'media') active = active && targetWin.matchMedia(p.prelude).matches
+              if (p.name === 'container') active = active && isContainerActive(p.prelude, viewport)
             })
 
             matched.push({
-              uid: `rule-${selector}-${node.loc?.start.line || 'nl'}-${Math.random()
-                .toString(36)
-                .substr(2, 5)}`,
-              selector,
-              declarations,
-              specificity: getSpecificity(selector),
-              context,
-              active,
-              origin: node.origin || 'internal',
-              sourceName: node.sourceName || 'style',
-              loc: node.loc ? node.loc.start.line : '?',
-              astNode: node,
+              uid: logicNode.id,
+              selector: selector,
+              declarations: declarations,
+              specificity: logicNode.metadata?.specificity || [0, 0, 0, 0],
+              context: [...stack],
+              active: active,
+              origin: logicNode.metadata?.origin,
+              sourceName: logicNode.metadata?.sourceName,
+              loc: logicNode.metadata?.line || '?',
+              astNode: logicNode.metadata?.astNode,
             })
+          } else if (logicNode.children) {
+            traverseLogicNodes(logicNode.children)
           }
-        },
-        leave(node) {
-          if (node.type === 'Atrule' || node.type === 'Rule') {
-            stack.pop()
-          }
-        },
-      })
+        })
+      }
+
+      traverseLogicNodes(ast) // Here 'ast' is the logicTree array
 
       if (matched.length > 0) {
         groups.push({
@@ -394,11 +489,54 @@ export function useCssParser() {
     return [0, ids, classes, tags]
   }
 
-  function syncAstToStyles(ast, targetDoc = document) {
-    if (!ast) return
+  function syncAstToStyles(logicTree, targetDoc = document) {
+    if (!logicTree) return
     console.time('syncAstToStyles')
     try {
-      const css = generate(ast)
+      const children = []
+
+      const syncLogicNodeToAst = (logicNode) => {
+        const astNode = logicNode.metadata?.astNode
+        if (!astNode) return null
+
+        // For containers (at-rules or rules), sync their children back to the AST block
+        if ((logicNode.type === 'at-rule' || logicNode.type === 'selector') && logicNode.children) {
+          const block = astNode.block
+          if (block && block.children) {
+            const childAstNodes = logicNode.children
+              .map(child => syncLogicNodeToAst(child))
+              .filter(Boolean)
+            
+            if (block.children.fromArray) {
+              block.children.fromArray(childAstNodes)
+            } else {
+              block.children = childAstNodes
+            }
+          }
+        }
+        return astNode
+      }
+
+      const collectTopRules = (nodes) => {
+        nodes.forEach(n => {
+          if (n.type === 'file') {
+             n.children.forEach(logicChild => {
+                const synced = syncLogicNodeToAst(logicChild)
+                if (synced) children.push(synced)
+             })
+          } else if (n.children) {
+            collectTopRules(n.children)
+          }
+        })
+      }
+      collectTopRules(toRaw(logicTree))
+
+      const masterAst = {
+        type: 'StyleSheet',
+        children: children
+      }
+
+      const css = generate(masterAst)
       console.log('--- syncAstToStyles --- | Length:', css.length)
 
       let styleEl = targetDoc.getElementById('live-inspector-styles')

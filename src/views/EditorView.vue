@@ -208,47 +208,6 @@ watch(
   },
 )
 
-const highlightRect = computed(() => {
-  const el = EditorStore.hoveredElement
-  if (!el || !EditorStore.iframe) return null
-
-  const rect = el.getBoundingClientRect()
-  const iframeRect = EditorStore.iframe.getBoundingClientRect()
-
-  return {
-    top: rect.top + iframeRect.top,
-    left: rect.left + iframeRect.left,
-    width: rect.width,
-    height: rect.height,
-  }
-})
-
-const selectionRect = computed(() => {
-  const el = EditorStore.selectedElement
-  if (!el || !EditorStore.iframe) return null
-
-  const rect = el.getBoundingClientRect()
-  const iframeRect = EditorStore.iframe.getBoundingClientRect()
-
-  return {
-    top: rect.top + iframeRect.top,
-    left: rect.left + iframeRect.left,
-    width: rect.width,
-    height: rect.height,
-  }
-})
-
-const highlightLabel = computed(() => {
-  const el = EditorStore.hoveredElement
-  if (!el) return ''
-  return el.tagName.toLowerCase() + (el.id ? '#' + el.id : '')
-})
-
-const selectionLabel = computed(() => {
-  const el = EditorStore.selectedElement
-  if (!el) return ''
-  return el.tagName.toLowerCase() + (el.id ? '#' + el.id : '')
-})
 
 // Viewport sync from Iframe
 watch(
@@ -335,7 +294,7 @@ watch(
         <ASTExplorer :ast="EditorStore.ctx.ast" :selectedNodeId="EditorStore.selectedNodeId" />
       </AsidePanel>
 
-      <AsidePanel class="w-[280px]" title="CSS Explorer" v-if="activeExplorer === 'css'">
+      <AsidePanel class="w-[450px]" title="CSS Explorer" v-if="activeExplorer === 'css'">
         <CssExplorer />
       </AsidePanel>
 
@@ -381,8 +340,8 @@ watch(
 
     <!-- Inspector Overlay Components -->
     
-    <HighlightOverlay :rect="highlightRect" :label="highlightLabel" />
-    <HighlightOverlay :rect="selectionRect" :label="selectionLabel" class="!border-blue-600 !bg-transparent !border-dashed" />
+    <HighlightOverlay mode="hover" />
+    <HighlightOverlay mode="selection" />
 
     <CssOutputModal :isOpen="isSaveModalOpen" @close="isSaveModalOpen = false" />
     <HtmlImportModal :isOpen="isImportModalOpen" @close="isImportModalOpen = false" @load="handleHtmlLoad" />

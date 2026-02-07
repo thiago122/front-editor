@@ -1,9 +1,10 @@
 <script setup>
-import { ref, computed } from 'vue'
-import { generate } from 'css-tree'
+import { computed } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
+import { useStyleStore } from '@/stores/StyleStore'
 
 const store = useEditorStore()
+const styleStore = useStyleStore()
 
 const props = defineProps({
   node: {
@@ -16,90 +17,94 @@ const props = defineProps({
   },
 })
 
-const isOpen = ref(props.node.type === 'Atrule')
-
 const hasChildren = computed(() => {
-  return childrenArray.value.length > 0
+  return props.node.children && props.node.children.length > 0
 })
 
-const displayName = computed(() => {
-  if (props.node.type === 'Rule') {
-    return generate(props.node.prelude)
-  }
-  if (props.node.type === 'Atrule') {
-    const prelude = props.node.prelude ? generate(props.node.prelude) : ''
-    return `@${props.node.name} ${prelude}`
-  }
-  return props.node.type
-})
-
-const icon = computed(() => {
-  if (props.node.type === 'Rule') return ''
-  if (props.node.type === 'Atrule') {
-    if (props.node.name === 'media') return '📱'
-    if (props.node.name === 'layer') return '📦'
-    if (props.node.name === 'keyframes') return '🎬'
-    return '⚙️'
-  }
-  return '🔹'
+const isExpanded = computed(() => {
+  return styleStore.isExpanded(props.node)
 })
 
 const isSelected = computed(() => {
-  return store.selectedCssRuleNodeId === props.node._nodeId
+  return styleStore.selectedCssRuleNodeId === props.node.id
 })
 
-const handleClick = () => {
-  store.selectedCssRuleNodeId = props.node._nodeId
-  if (hasChildren.value) {
-    isOpen.value = !isOpen.value
+const handleClick = (e) => {
+  if (props.node.type === 'root') return // Roots are static dividers
+
+  const isToggleClick = e.target.closest('.toggle-area')
+  
+  if (isToggleClick || props.node.type === 'file' || props.node.type === 'selector') {
+    if (hasChildren.value) {
+        styleStore.toggleNode(props.node.id)
+    }
+  }
+  
+  // Selection logic
+  if (props.node.type === 'selector' || props.node.type === 'at-rule') {
+    styleStore.selectedCssRuleNodeId = props.node.id
   }
 }
 
+const getStyles = computed(() => {
+  if (props.node.type === 'root') return 'bg-[#f0f0f0] border-y border-[#d1d1d1] font-bold text-[10px] text-gray-600 sticky top-0 z-10'
+  if (props.node.type === 'file') return 'bg-white font-medium text-gray-600'
+  if (props.node.type === 'selector') {
+      let base = 'text-blue-700 font-medium'
+      if (isExpanded.value && hasChildren.value) base += ' bg-blue-200'
+      return base
+  }
+  if (props.node.type === 'at-rule') return 'text-purple-700 font-bold'
+  if (props.node.type === 'declaration') return 'text-gray-600'
+  return ''
+})
 
-// Helper to get array of children from css-tree List or Array
-const childrenArray = computed(() => {
-  if (!props.node.block || !props.node.block.children) return []
-  const list = props.node.block.children
-  const arr = list.toArray ? list.toArray() : list
-  // Filter out Declarations (properties), keep only nested Rules or AtRules
-  return arr.filter(n => n.type !== 'Declaration')
+const getIcon = computed(() => {
+  if (props.node.type === 'root') {
+      const origin = props.node.metadata?.origin
+      if (origin === 'external') return '🔗'
+      if (origin === 'on_page' || origin === 'internal') return '📝'
+      return '🔹'
+  }
+  if (props.node.type === 'file') return '📄'
+  if (props.node.type === 'at-rule') {
+    const label = props.node.label.toLowerCase()
+    if (label.includes('@media')) return '📱'
+    if (label.includes('@layer')) return '📦'
+    if (label.includes('@keyframes')) return '🎬'
+    if (label.includes('@container')) return '🗄️'
+    return '⚙️'
+  }
+  return ''
 })
 </script>
 
 <template>
-  <div class="font-mono text-[11px] select-none text-[#202124]">
+  <div 
+    class="font-mono text-[11px] select-none text-[#202124] border-b border-gray-50/50"
+    :class="[getStyles, isSelected ? 'bg-blue-50/50 !border-blue-200' : (node.type !== 'root' ? 'hover:bg-gray-50' : '')]"
+    @click="handleClick"
+  >
     <div 
-      class="flex items-center gap-1.5 py-1 px-2 cursor-pointer overflow-hidden whitespace-nowrap border-l-2"
-      :class="isSelected ? 'bg-blue-100 border-blue-600' : 'hover:bg-blue-50 border-transparent'"
-      :style="{ paddingLeft: `${depth * 12 + 8}px` }"
-      @click.stop="handleClick"
+      class="flex items-center gap-1.5 py-1 px-2 cursor-pointer overflow-hidden whitespace-nowrap"
+      :style="{ paddingLeft: node.type === 'root' ? '8px' : (depth * 8) + 'px', height: '22px' }"
     >
-      <!-- Expander Arrow -->
-      <span v-if="hasChildren" 
-        class="text-gray-400 text-[8px] transform transition-transform"
-        :class="isOpen ? 'rotate-90' : ''">
-        ▶
-      </span>
-      <span v-else class="w-2"></span>
+      <!-- Toggle Arrow -->
+      <div v-if="hasChildren && node.type !== 'selector' && node.type !== 'root'" class="toggle-area w-4 h-4 flex items-center justify-center shrink-0 hover:bg-black/5 rounded">
+        <svg class="w-2.5 h-2.5 text-gray-500 transform transition-transform duration-200"
+            :class="isExpanded ? 'rotate-90' : ''"
+            fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+        </svg>
+      </div>
 
-      <!-- Icon -->
-      <span class="opacity-80 text-xs">{{ icon }}</span>
-
-      <!-- Label -->
-      <span class="truncate" :title="displayName"
-        :class="node.type === 'Rule' ? 'text-blue-700 font-medium' : 'text-purple-700 font-bold'">
-        {{ displayName }}
-      </span>
-    </div>
-
-    <!-- Recursive Children -->
-    <div v-if="isOpen && hasChildren">
-      <CssTreeItem 
-        v-for="(child, i) in childrenArray" 
-        :key="child._nodeId || i" 
-        :node="child" 
-        :depth="depth + 1" 
-      />
+      <!-- Icon (only if exists) -->
+      <span v-if="getIcon" class="shrink-0">{{ getIcon }}</span>
+      
+      <div class="flex items-baseline gap-1.5 truncate">
+        <span class="truncate" :class="{ 'uppercase tracking-wide': node.type === 'root' }" :title="node.label">{{ node.label }}</span>
+        <span v-if="node.value" class="text-gray-400 font-normal truncate">: {{ node.value }}</span>
+      </div>
     </div>
   </div>
 </template>

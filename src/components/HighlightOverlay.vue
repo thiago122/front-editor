@@ -1,22 +1,47 @@
 <script setup>
 import { computed } from 'vue'
+import { useEditorStore } from '@/stores/EditorStore'
 
 const props = defineProps({
-  rect: {
-    type: Object,
-    default: null,
-  },
-  label: {
+  mode: {
     type: String,
-    default: '',
+    default: 'hover', // 'hover' | 'selection'
   },
+})
+
+const EditorStore = useEditorStore()
+
+const rect = computed(() => {
+  const el = props.mode === 'hover' ? EditorStore.hoveredElement : EditorStore.selectedElement
+  if (!el || !EditorStore.iframe) return null
+
+  const rect = el.getBoundingClientRect()
+  const iframeRect = EditorStore.iframe.getBoundingClientRect()
+
+  return {
+    top: rect.top + iframeRect.top,
+    left: rect.left + iframeRect.left,
+    width: rect.width,
+    height: rect.height,
+  }
+})
+
+const label = computed(() => {
+  const el = props.mode === 'hover' ? EditorStore.hoveredElement : EditorStore.selectedElement
+  if (!el) return ''
+  return el.tagName.toLowerCase() + (el.id ? '#' + el.id : '')
 })
 </script>
 
 <template>
   <div
     v-if="rect"
-    class="pointer-events-none fixed z-[9999] border-2 border-blue-500 bg-blue-500/10 transition-all duration-75"
+    class="pointer-events-none fixed z-[9999] border-1 transition-all duration-75"
+    :class="
+      mode === 'hover'
+        ? 'border-blue-500 bg-blue-500/10'
+        : 'border-blue-600 border-dashed bg-transparent'
+    "
     :style="{
       top: rect.top + 'px',
       left: rect.left + 'px',
