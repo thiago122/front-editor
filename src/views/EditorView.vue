@@ -14,7 +14,7 @@ import { parseHTMLFragment } from '@/utils/parseHTMLFragment'
 import { useEditorStore } from '@/stores/EditorStore'
 
 import HistoryControls from '@/components/HistoryControls.vue'
-import InspectorPanel from '@/components/InspectorPanel.vue'
+import InspectorPanel from '@/components/InspectorCss/InspectorPanel.vue'
 import HighlightOverlay from '@/components/HighlightOverlay.vue'
 import ASTExplorer from '@/components/ASTExplorer.vue'
 import CssExplorer from '@/components/CssExplorer.vue'
@@ -75,35 +75,14 @@ const inputHTML = `
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="stylesheet" href="http://editor.test/assets/css/all.css" data-location="external" crossorigin="anonymous">
+
     <!-- 1. External Layer: Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" data-location="external" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" data-location="external" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" data-location="external" crossorigin="anonymous">
 
-    <!-- 2. Internal Layer: Simulating local styles -->
-    <style data-location="internal" id="theme.css">
-      .custom-card {
-        border-left: 5px solid #0d6efd;
-        transition: all 0.3s ease;
-      }
-      .custom-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important;
-      }
-    </style>
-
-    <style data-location="internal" id="utilities.css">
-      .text-gradient {
-        background: linear-gradient(45deg, #0d6efd, #6610f2);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-      }
-      .btn-custom {
-        border-radius: 50px;
-        padding: 0.5rem 2rem;
-      }
-    </style>
-
+    <!-- 2. Internal Layer: Bootstrap CSS -->
+    <link rel="stylesheet" href="http://editor.test/assets/css/all.css" data-location="internal" crossorigin="anonymous">
+    
     <!-- 3. On Page Layer: Styles specific to this page -->
     <style data-location="on_page">
       body {
@@ -121,6 +100,7 @@ const inputHTML = `
         border-radius: 4px;
       }
     </style>
+
   </head>
   <body>
     <div class="container">

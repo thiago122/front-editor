@@ -103,14 +103,13 @@ export const useEditorStore = defineStore('editor', () => {
       initEngine(newIframe.contentDocument)
 
       // Initialize CSS AST for the new iframe
-      newIframe.addEventListener('load', () => {
-        // Wait a small bit for external stylesheets to be parsed by the browser
-        setTimeout(() => {
-          styleStore.refreshCssAst(getIframeDoc())
-        }, 500)
+      newIframe.addEventListener('load', async () => {
+        // Refresh CSS AST (loads CSS internally)
+        await styleStore.refreshCssAst(getIframeDoc(), ['internal', 'external'])
       })
     }
   })
+
 
   // viewport sync
   function setViewport(width, height) {

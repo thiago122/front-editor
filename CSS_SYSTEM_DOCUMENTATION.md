@@ -55,17 +55,17 @@ A maior força do sistema é a ligação bidirecional entre os componentes:
 ---
 
 ## 🛠️ Workflows Comuns
-
-### Criar um Estado Hover
-1. Selecione o elemento.
-2. No Inspetor, clique no botão `:hover`.
-3. O sistema cria a regra `.seletor:hover {}` no arquivo selecionado.
-4. Adicione as propriedades desejadas.
-
-### Mudar uma Classe de Arquivo
-1. Se uma classe está em um arquivo externo (read-only), crie uma nova regra com o mesmo seletor no arquivo interno (`ON_PAGE`).
-2. O sistema aplicará ambas, e o Inspetor mostrará as duas abas para você escolher qual editar.
-
+...
 ### Limpar Atributos
 1. No cabeçalho do Inspetor, clique na aba do seletor indesejado.
 2. Clique no `✕` da aba para remover a classe/ID do elemento HTML.
+
+---
+
+## ⚠️ CORS e Folhas de Estilo Externas
+Ao carregar fontes (como Google Fonts) ou bibliotecas externas via `<link>`, o navegador pode restringir o acesso programático ao conteúdo do CSS por segurança (CORS).
+
+- **Sintoma**: Um aviso no console indicando que as regras não puderam ser lidas.
+- **Impacto**: O sistema ainda funcionará perfeitamente para todos os outros estilos, mas as regras desse arquivo específico não aparecerão no Explorer ou Inspetor.
+- **Solução**: Se você tiver controle sobre o HTML, adicione o atributo `crossorigin="anonymous"` na tag `<link>`. 
+  Exemplo: `<link href="..." rel="stylesheet" crossorigin="anonymous">`.

@@ -1,7 +1,9 @@
 <script setup>
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
+import { useStyleStore } from '@/stores/StyleStore'
 import { useCssParser } from '@/composables/useCssParser'
+import CssTreeItem from './CssTreeItem.vue'
 
 const styleStore = useStyleStore()
 const editorStore = useEditorStore()
@@ -12,7 +14,7 @@ const scrollTop = ref(0)
 const containerHeight = ref(400) 
 const ROW_HEIGHT = 22
 
-const addNewRule = () => {
+const addNewRule = async () => {
     const selector = window.prompt('Enter selector:', '.new-rule')
     if (!selector) return
 
@@ -64,7 +66,7 @@ const addNewRule = () => {
     
     const doc = document.querySelector('iframe')?.contentDocument
     syncAstToStyles(styleStore.cssAst, doc)
-    styleStore.refreshCssAst(doc)
+    await styleStore.refreshCssAst(doc)
     styleStore.setActiveRule(newLogicNode.id)
 }
 
@@ -89,15 +91,19 @@ onUnmounted(() => {
 })
 
 // Function to refresh the AST (re-parse)
-const refresh = () => {
+const refresh = async () => {
     const doc = document.querySelector('iframe')?.contentDocument
-    styleStore.refreshCssAst(doc)
+    await styleStore.refreshCssAst(doc)
 }
 
 /**
  * Builds a flat list of nodes that should be visible based on collapsedNodes state.
+ * Depends on astMutationKey to re-compute when AST is mutated (without deep reactivity overhead)
  */
 const visibleNodes = computed(() => {
+    // Depend on mutation key to trigger re-computation
+    styleStore.astMutationKey.value // eslint-disable-line no-unused-expressions
+    
     const flat = []
     const roots = styleStore.cssAst || []
     

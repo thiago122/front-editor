@@ -10,13 +10,18 @@ export const useStyleStore = defineStore('style', () => {
   const selectedCssRuleNodeId = ref(null) // ID of the selected CSS rule (Logic Tree Node ID)
   const activeRuleNodeId = ref(null) // ID of the rule currently being edited in the Inspector
   const toggledNodes = ref(new Set())
+  const astMutationKey = ref(0) // Lightweight trigger for AST mutations
 
   // --- ACTIONS ---
-  function setActiveRule(id) {
+  function notifyAstMutation() {
+    astMutationKey.value++
+  }
+
+  function setActiveRule(id, fromExplorer = false) {
     activeRuleNodeId.value = id
-    selectedCssRuleNodeId.value = id
+    selectedCssRuleNodeId.value = fromExplorer ? id : null
     // Ensure the node is visible in the explorer
-    if (id) {
+    if (id && fromExplorer) {
         expandToNode(id)
     }
   }
@@ -58,11 +63,12 @@ export const useStyleStore = defineStore('style', () => {
     return toggledNodes.value.has(node.id)
   }
 
-  function refreshCssAst(doc) {
+  async function refreshCssAst(doc, locations = ['internal', 'external']) {
     if (doc) {
       console.log('[StyleStore] Refreshing CSS AST...')
-      const ast = extractCssAst(doc)
+      const ast = await extractCssAst(doc, locations)
       cssAst.value = markRaw(ast)
+      notifyAstMutation()
     }
   }
 
@@ -99,10 +105,12 @@ export const useStyleStore = defineStore('style', () => {
     selectedCssRuleNodeId,
     activeRuleNodeId,
     toggledNodes,
+    astMutationKey,
     refreshCssAst,
     getCssGroupedBySource,
     toggleNode,
     isExpanded,
     setActiveRule,
+    notifyAstMutation,
   }
 })
