@@ -1,8 +1,9 @@
 import { toRaw } from 'vue'
+import { generate } from 'css-tree'
 
 /**
  * CssTreeSynchronizer
- * Synchronizes Logic Tree changes back to the original AST and groups rules by file
+ * Synchronizes Logic Tree changes back to the original AST and the DOM
  */
 export class CssTreeSynchronizer {
   /**
@@ -14,12 +15,79 @@ export class CssTreeSynchronizer {
   }
 
   /**
+   * Sync logic tree changes back to DOM styles
+   * @param {Document} targetDoc - The document to update
+   */
+  syncToDom(targetDoc = document) {
+    if (!this.logicTree) return
+    
+    console.time('syncAstToStyles')
+    
+    try {
+      this.collectRulesByFile()
+      this.updateStyleElements(targetDoc)
+    } catch (e) {
+      console.error('Failed to sync AST to styles:', e)
+    }
+    
+    console.timeEnd('syncAstToStyles')
+  }
+
+  /**
    * Collect and synchronize rules grouped by source file
    * @returns {Map} Map of file groups with synchronized AST nodes
    */
   collectRulesByFile() {
     this.collectNodesByFile(toRaw(this.logicTree))
     return this.fileGroups
+  }
+
+  /**
+   * Header method to update style elements in DOM based on file groups
+   * @param {Document} targetDoc
+   */
+  updateStyleElements(targetDoc) {
+    let totalRules = 0
+
+    this.fileGroups.forEach(({ origin, sourceName, rules }) => {
+      const fileAst = {
+        type: 'StyleSheet',
+        children: rules
+      }
+
+      const css = generate(fileAst)
+      totalRules += rules.length
+
+      const styleEl = this.findOrCreateStyleElement(targetDoc, origin, sourceName)
+      styleEl.textContent = css
+
+      console.log(`Updated ${origin}/${sourceName}: ${rules.length} rules, ${css.length} bytes`)
+    })
+
+    console.log(`--- syncAstToStyles --- | ${this.fileGroups.size} files, ${totalRules} total rules`)
+  }
+
+  /**
+   * Find existing style element or create new one
+   * @param {Document} targetDoc
+   * @param {string} origin
+   * @param {string} sourceName
+   */
+  findOrCreateStyleElement(targetDoc, origin, sourceName) {
+    // Try to find by ID (all styles now have unique IDs)
+    let styleEl = targetDoc.getElementById(sourceName)
+    
+    // Create if not found
+    if (!styleEl) {
+      styleEl = targetDoc.createElement('style')
+      styleEl.id = sourceName
+      styleEl.setAttribute('data-location', origin)
+      styleEl.setAttribute('data-captured', 'true')
+      targetDoc.head.appendChild(styleEl)
+      console.log(`Created new <style> for ${origin}/${sourceName}`)
+    }
+    
+    return styleEl
   }
 
   /**

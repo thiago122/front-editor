@@ -1,3 +1,4 @@
+import { parse } from 'css-tree'
 import { 
   PSEUDO_STATES,
   PSEUDO_ELEMENT_REGEX,
@@ -10,10 +11,19 @@ import {
  * Shared utilities for CSS parsing and manipulation
  */
 
+export function createAstNode(css, context) {
+  try {
+    const normalizedContext = context.toLowerCase()
+    const ast = parse(css, { context: normalizedContext })
+    return ast
+  } catch (e) {
+    console.error('Failed to create node from CSS:', css, 'context:', context, e)
+    return null
+  }
+}
+
 /**
- * Clean selector by removing pseudo-states and pseudo-elements
- * @param {string} selector - CSS selector to clean
- * @returns {string} Cleaned selector
+ * Clean selector for matching (remove pseudo-elements)
  */
 export function cleanSelectorForMatching(selector) {
   let cleaned = selector

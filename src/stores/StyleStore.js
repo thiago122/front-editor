@@ -1,12 +1,16 @@
 import { ref, markRaw } from 'vue'
 import { defineStore } from 'pinia'
-import { useCssParser } from '@/composables/useCssParser'
+import { CssAstService } from '@/composables/CssAstService'
+import { CssLogicTreeService } from '@/composables/CssLogicTreeService'
 
 export const useStyleStore = defineStore('style', () => {
-  const { extractCssAst } = useCssParser()
 
   // --- STATE ---
-  const cssAst = ref(null) // cache do AST do css-tree (Logic Tree)
+  // Master AST: raw css-tree object (low-level, not reactive for perf)
+  const masterAst = ref(null)
+  // Logic Tree: our high-level hierarchical structure (used by UI)
+  const cssAst = ref(null)
+
   const selectedCssRuleNodeId = ref(null) // ID of the selected CSS rule (Logic Tree Node ID)
   const activeRuleNodeId = ref(null) // ID of the rule currently being edited in the Inspector
   const toggledNodes = ref(new Set())
@@ -20,14 +24,12 @@ export const useStyleStore = defineStore('style', () => {
   function setActiveRule(id, fromExplorer = false) {
     activeRuleNodeId.value = id
     selectedCssRuleNodeId.value = fromExplorer ? id : null
-    // Ensure the node is visible in the explorer
     if (id && fromExplorer) {
-        expandToNode(id)
+      expandToNode(id)
     }
   }
 
   function expandToNode(id) {
-    // Basic implementation: if it's a rule, we need its parent (file) to be expanded
     const findParent = (nodes, targetId, parent = null) => {
       for (const node of nodes) {
         if (node.id === targetId) return parent
@@ -57,57 +59,39 @@ export const useStyleStore = defineStore('style', () => {
 
   function isExpanded(node) {
     if (!node) return false
-    if (node.type === 'root') return true // Divider is always "expanded" (shown)
-
-    // Everything else starts collapsed by default. Toggling expands it.
+    if (node.type === 'root') return true
     return toggledNodes.value.has(node.id)
   }
 
+  /**
+   * Full pipeline: Load CSS → Build Master AST → Build Logic Tree
+   * @param {Document} doc - Target document
+   * @param {string[]} locations - Locations to load
+   */
   async function refreshCssAst(doc, locations = ['internal', 'external']) {
-    if (doc) {
-      console.log('[StyleStore] Refreshing CSS AST...')
-      const ast = await extractCssAst(doc, locations)
-      cssAst.value = markRaw(ast)
-      notifyAstMutation()
-    }
-  }
+    if (!doc) return
 
-  function getCssGroupedBySource(origin) {
-    if (!cssAst.value) return []
-    const { generate } = useCssParser()
+    console.log('[StyleStore] Refreshing CSS AST...')
 
-    const rootNodes = cssAst.value.filter(node => node.metadata.origin === origin)
-    const results = []
+    // 1. Build Master AST
+    const rawMasterAst = await CssAstService.buildMasterAst(doc, locations)
+    masterAst.value = markRaw(rawMasterAst)
 
-    rootNodes.forEach(root => {
-      root.children.forEach(file => {
-        try {
-          const children = file.children.map(rule => rule.metadata.astNode).filter(Boolean)
-          const filteredAst = {
-            type: 'StyleSheet',
-            children: children,
-          }
-          results.push({
-            name: file.label || file.metadata.sourceName,
-            css: generate(filteredAst),
-          })
-        } catch (e) {
-          console.error(`Failed to generate CSS for source: ${file.label}`, e)
-        }
-      })
-    })
+    // 2. Build Logic Tree from Master AST
+    const logicTree = CssLogicTreeService.buildLogicTree(rawMasterAst)
+    cssAst.value = markRaw(logicTree)
 
-    return results
+    notifyAstMutation()
   }
 
   return {
+    masterAst,
     cssAst,
     selectedCssRuleNodeId,
     activeRuleNodeId,
     toggledNodes,
     astMutationKey,
     refreshCssAst,
-    getCssGroupedBySource,
     toggleNode,
     isExpanded,
     setActiveRule,

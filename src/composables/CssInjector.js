@@ -175,6 +175,73 @@ export class CssInjector {
   }
 
   /**
+   * Process on_page styles (inline <style> blocks)
+   * Assigns stable IDs to allow editing/referencing
+   */
+  processOnPageStyles() {
+    console.log('[CssInjector] Processing on_page styles...')
+    const styleElements = Array.from(this.targetDoc.querySelectorAll('style'))
+
+    // Filter out styles that are already managed (have data-location)
+    // We only want "raw" style tags that were part of the original HTML
+    const onPageStyles = styleElements.filter(el => !el.hasAttribute('data-location'))
+
+    if (onPageStyles.length === 0) {
+      console.log('[CssInjector] No new on_page styles found.')
+      return
+    }
+
+    console.log(`[CssInjector] Found ${onPageStyles.length} on_page style block(s).`)
+
+    // We need to determine if we already have an "on_page" (editable) style
+    // If we run this multiple times, we need to respect existing IDs
+    let hasEditable = !!this.targetDoc.getElementById('on_page')
+    
+    onPageStyles.forEach(el => {
+      // If element already has an ID, respect it, but tag it as on_page
+      if (el.id) {
+        if (!el.hasAttribute('data-location')) {
+           el.setAttribute('data-location', 'on_page')
+        }
+        if (el.id === 'on_page') hasEditable = true
+        return
+      }
+
+      // Assign ID
+      if (!hasEditable) {
+        // First one becomes the editable one
+        el.id = 'on_page'
+        el.setAttribute('data-location', 'on_page')
+        hasEditable = true
+        console.log('[CssInjector] Assigned ID "on_page" (editable)')
+      } else {
+        // Subsequent ones are read-only
+        const nextNum = this.getNextReadOnlyIndex()
+        el.id = `on_page_readonly-${nextNum}`
+        el.setAttribute('data-location', 'on_page')
+        el.setAttribute('data-readonly', 'true')
+        console.log(`[CssInjector] Assigned ID "${el.id}" (read-only)`)
+      }
+    })
+  }
+
+  /**
+   * Get next available index for read-only styles
+   */
+  getNextReadOnlyIndex() {
+    const existing = Array.from(this.targetDoc.querySelectorAll('style[id^="on_page_readonly-"]'))
+    if (existing.length === 0) return 2
+    
+    const numbers = existing
+      .map(el => {
+        const match = el.id.match(/^on_page_readonly-(\d+)$/)
+        return match ? parseInt(match[1], 10) : 0
+      })
+    
+    return Math.max(...numbers, 1) + 1
+  }
+
+  /**
    * Report failures to user via alert
    */
   reportFailures() {

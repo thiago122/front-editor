@@ -2,12 +2,11 @@
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
 import { useStyleStore } from '@/stores/StyleStore'
-import { useCssParser } from '@/composables/useCssParser'
+import { CssLogicTreeService } from '@/composables/CssLogicTreeService'
 import CssTreeItem from './CssTreeItem.vue'
 
 const styleStore = useStyleStore()
 const editorStore = useEditorStore()
-const { syncAstToStyles, generateId, createNode, getSpecificity } = useCssParser()
 
 const containerRef = ref(null)
 const scrollTop = ref(0)
@@ -18,56 +17,32 @@ const addNewRule = async () => {
     const selector = window.prompt('Enter selector:', '.new-rule')
     if (!selector) return
 
-    const ruleNode = createNode(`${selector} {}`, 'Rule')
-    if (!ruleNode && styleStore.cssAst) {
-        alert('Invalid selector')
-        return
-    }
+    if (!styleStore.cssAst) return
 
-    // Default to the first non-external source
-    let targetRoot = styleStore.cssAst.find(n => n.metadata.origin !== 'external')
-    if (!targetRoot) {
-        targetRoot = {
-            id: generateId(),
-            type: 'root',
-            label: 'ON_PAGE',
-            metadata: { origin: 'on_page' },
-            children: []
-        }
-        styleStore.cssAst.push(targetRoot)
-    }
-
-    let targetFile = targetRoot.children[0]
-    if (!targetFile) {
-        targetFile = {
-            id: generateId(),
-            type: 'file',
-            label: 'style',
-            metadata: { origin: targetRoot.metadata.origin, sourceName: 'style' },
-            children: []
-        }
-        targetRoot.children.push(targetFile)
-    }
-
-    const newLogicNode = {
-        id: generateId(),
-        type: 'selector',
-        label: selector,
-        metadata: {
-            origin: targetFile.metadata.origin,
-            sourceName: targetFile.metadata.sourceName,
-            astNode: ruleNode,
-            specificity: getSpecificity(selector)
-        },
-        children: []
-    }
-
-    targetFile.children.unshift(newLogicNode)
+    // Default to 'on_page' if no other origin found, or find first acceptable one
+    let targetOrigin = 'on_page'
+    let targetSource = 'style'
     
-    const doc = document.querySelector('iframe')?.contentDocument
-    syncAstToStyles(styleStore.cssAst, doc)
-    await styleStore.refreshCssAst(doc)
-    styleStore.setActiveRule(newLogicNode.id)
+    // Try to find first internal non-external root
+    const targetRoot = styleStore.cssAst.find(n => n.metadata.origin !== 'external')
+    if (targetRoot) {
+        targetOrigin = targetRoot.metadata.origin
+        // Try to find a file
+        if (targetRoot.children.length > 0) {
+            targetSource = targetRoot.children[0].label
+        }
+    }
+
+    const newLogicNode = CssLogicTreeService.addRule(styleStore.cssAst, selector, targetOrigin, targetSource)
+
+    if (newLogicNode) {
+        const doc = document.querySelector('iframe')?.contentDocument
+        CssLogicTreeService.syncToDOM(styleStore.cssAst, doc)
+        await styleStore.refreshCssAst(doc)
+        styleStore.setActiveRule(newLogicNode.id)
+    } else {
+        alert('Invalid selector or failed to create rule')
+    }
 }
 
 const handleScroll = (e) => {

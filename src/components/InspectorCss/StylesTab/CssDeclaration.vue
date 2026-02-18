@@ -48,7 +48,7 @@
 </template>
 
 <script setup>
-import { useCssParser } from '@/composables/useCssParser'
+import { isColorValue } from '@/composables/cssUtils'
 
 const props = defineProps({
   decl: {
@@ -63,5 +63,5 @@ const props = defineProps({
 
 defineEmits(['toggle', 'update', 'delete', 'focus-value'])
 
-const { isColor } = useCssParser()
+const isColor = isColorValue
 </script>

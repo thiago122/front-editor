@@ -52,8 +52,10 @@ import { ref, watch, computed, toRaw, nextTick, markRaw } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
 import { useStyleStore } from '@/stores/StyleStore'
 
-// Composables
-import { useCssParser } from '@/composables/useCssParser'
+// Services
+import { CssAstService } from '@/composables/CssAstService'
+import { CssLogicTreeService } from '@/composables/CssLogicTreeService'
+import { getSpecificity } from '@/composables/cssUtils'
 
 // Constants
 import { SELECTORS, ATTRIBUTE_TYPES, PROPERTY_PREFIXES, DOM_SELECTORS, DEFAULT_VALUES, AST_NODE_TYPES } from '@/utils/cssConstants'
@@ -80,8 +82,7 @@ import RuleCreationModal from './RuleCreationModal.vue'
 
 const editorStore = useEditorStore()
 const styleStore = useStyleStore()
-const { getMatchedRules, syncAstToStyles, createNode, getSpecificity, generateId } =
-  useCssParser()
+
 
 // ============================================
 // STATE & REFS
@@ -131,8 +132,7 @@ const inlineStyleStrategy = computed(() =>
 
 const astRuleStrategy = createAstRuleStrategy(
   styleStore,
-  createNode,
-  syncAstToStyles,
+  (logicTree, doc) => CssLogicTreeService.syncToDOM(logicTree, doc),
   activeDoc,
   updateRules,
   ruleRefs
@@ -159,14 +159,12 @@ function getStrategy(rule) {
  */
 function addNewRule(overrideSelector = null) {
 
-  if (!selectedElement.value || !store.cssAst) return
+  if (!selectedElement.value || !styleStore.cssAst) return
 
   // For internal usage (like pseudo classes), we try to find a valid source to append to.
   // We can default to 'on_page'/'style' or try to find where the active rule is.
   
-  // Re-implementing a simple version for internal needs (pseudo-classes)
   const selector = overrideSelector
-  const logicTree = toRaw(styleStore.cssAst)
   
   // Default to on_page/style if we don't have a context
   let origin = 'on_page'
@@ -178,39 +176,15 @@ function addNewRule(overrideSelector = null) {
       sourceName = activeInspectorRule.value.sourceName || 'style'
   }
 
-  const ruleNode = createNode(`${selector} {}`, 'Rule')
-  
-  let root = logicTree.find(n => n.metadata.origin === origin)
-  if (!root) {
-      // fallback create root...
-       root = { id: generateId(), type: 'root', label: origin.toUpperCase(), metadata: { origin }, children: [] }
-       styleStore.cssAst.push(root)
-  }
-  
-  let fileNode = root.children.find(n => n.label === sourceName)
-  if (!fileNode) {
-       fileNode = { id: generateId(), type: 'file', label: sourceName, metadata: { origin, sourceName }, children: [] }
-       root.children.push(fileNode)
-  }
+  const manager = new CssLogicTreeService()
+  const newLogicNode = CssLogicTreeService.addRule(toRaw(styleStore.cssAst), selector, origin, sourceName)
 
-  const newLogicNode = {
-      id: generateId(),
-      type: 'selector',
-      label: selector,
-      metadata: {
-          origin,
-          sourceName,
-          astNode: ruleNode,
-          specificity: getSpecificity(selector)
-      },
-      children: []
+  if (newLogicNode) {
+    CssLogicTreeService.syncToDOM(styleStore.cssAst, activeDoc.value)
+    styleStore.refreshCssAst(activeDoc.value)
+    styleStore.setActiveRule(newLogicNode.id)
+    updateRules()
   }
-
-  fileNode.children.unshift(newLogicNode)
-  syncAstToStyles(styleStore.cssAst, activeDoc.value)
-  styleStore.refreshCssAst(activeDoc.value)
-  styleStore.setActiveRule(newLogicNode.id)
-  updateRules()
 }
 /**
  * Focuses the value input field after a property name is edited
@@ -423,11 +397,11 @@ function updateRules() {
     classes: selectedElement.value.className
   })
   
-  const groups = getMatchedRules(
+  const groups = CssLogicTreeService.getMatchedRules(
     selectedElement.value,
     toRaw(cssAst.value),
     viewport.value,
-    {}, // Empty forceStatus
+    {},
   )
   
   console.log('📊 Grupos retornados:', groups.length)
@@ -543,7 +517,7 @@ function updateSelector(rule, newSelector) {
   if (rule.selector === 'element.style' || !rule.astNode) return
   rule.selector = newSelector
 
-  const newPrelude = createNode(newSelector, 'SelectorList')
+  const newPrelude = CssAstService.createNode(newSelector, 'SelectorList')
   if (newPrelude) {
     const node = toRaw(rule.astNode)
     node.prelude = newPrelude
@@ -555,7 +529,7 @@ function updateSelector(rule, newSelector) {
       logicNode.metadata.specificity = getSpecificity(newSelector)
     }
 
-    syncAstToStyles(styleStore.cssAst)
+    CssLogicTreeService.syncToDOM(styleStore.cssAst)
     styleStore.refreshCssAst(activeDoc.value)
     updateRules()
   }

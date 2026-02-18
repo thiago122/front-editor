@@ -36,7 +36,7 @@
 import { ref, watch, computed, toRaw, nextTick } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
 import { useStyleStore } from '@/stores/StyleStore'
-import { useCssParser } from '@/composables/useCssParser'
+import { CssLogicTreeService } from '@/composables/CssLogicTreeService'
 
 const props = defineProps({
   initialSelector: {
@@ -49,7 +49,8 @@ const emit = defineEmits(['rule-added', 'cancel'])
 
 const store = useEditorStore()
 const styleStore = useStyleStore()
-const { createNode, syncAstToStyles, getSpecificity, generateId } = useCssParser()
+
+
 
 const activeDoc = computed(() => store.selectedElement?.ownerDocument || document)
 const selectedElement = computed(() => store.selectedElement)
@@ -157,9 +158,6 @@ const createRule = () => {
   console.log('🚀 === createRule INICIADA ===')
   
   const selectorInput = customSelector.value.trim()
-  console.log('📝 selectorInput:', selectorInput)
-  console.log('🎯 selectedElement:', selectedElement.value)
-  console.log('🌳 styleStore.cssAst exists:', !!styleStore.cssAst)
   
   if (!selectedElement.value || !styleStore.cssAst) {
     console.warn('⚠️ ABORTADO: selectedElement ou cssAst não existe')
@@ -180,127 +178,36 @@ const createRule = () => {
     return
   }
 
-  console.log('📂 selectedSource:', selectedSource.value)
+  const origin = selectedSource.value?.origin || 'on_page'
+  const sourceName = selectedSource.value?.name || (origin === 'on_page' ? 'style' : 'styles.css')
 
-  const ruleNode = createNode(`${selector} {}`, 'Rule')
-  console.log('🔨 createNode retornou:', ruleNode)
-  
-  if (ruleNode) {
-    console.log('✅ Rule Node criado com sucesso!')
-    const origin = selectedSource.value?.origin || 'on_page'
-    const sourceName = selectedSource.value?.name || (origin === 'on_page' ? 'style' : 'styles.css')
-    
-    console.log('📍 origin:', origin)
-    console.log('📄 sourceName:', sourceName)
+  // Use LogicTreeManager
+  // Use toRaw for passing raw AST to manager
+  const newLogicNode = CssLogicTreeService.addRule(toRaw(styleStore.cssAst), selector, origin, sourceName)
 
-    // Find the file node in the Logic Tree to append to
-    // Use toRaw for performance (no deep reactivity overhead)
-    const logicTree = toRaw(styleStore.cssAst)
-    console.log('🌲 logicTree (raw):', logicTree)
-    
-    let root = logicTree.find(n => n.metadata.origin === origin)
-    console.log('🔍 root encontrado:', root)
-    
-    if (!root) {
-       console.log('⚙️ Root NÃO encontrado, criando novo root para origin:', origin)
-       root = {
-           id: generateId(),
-           type: 'root',
-           label: origin.toUpperCase(),
-           metadata: { origin },
-           children: []
-       }
-       styleStore.cssAst.push(root)
-       console.log('✅ Novo root criado e adicionado ao cssAst')
-    }
-
-    let fileNode = root.children.find(n => n.label === sourceName)
-    console.log('🔍 fileNode encontrado:', fileNode)
-    
-    if (!fileNode) {
-       console.log('⚙️ FileNode NÃO encontrado, criando novo file para sourceName:', sourceName)
-       fileNode = {
-           id: generateId(),
-           type: 'file',
-           label: sourceName,
-           metadata: { origin, sourceName },
-           children: []
-       }
-       root.children.push(fileNode)
-       console.log('✅ Novo fileNode criado e adicionado ao root')
-    }
-
-    // Create the Logic Node for the new rule
-    const newLogicNode = {
-        id: generateId(),
-        type: 'selector',
-        label: selector,
-        metadata: {
-            origin,
-            sourceName,
-            astNode: ruleNode,
-            specificity: getSpecificity(selector)
-        },
-        children: []
-    }
-    
-    console.log('🆕 newLogicNode criado:', newLogicNode)
-    console.log('📊 Especificidade:', newLogicNode.metadata.specificity)
-
-    // Add to Logic Tree
-    fileNode.children.push(newLogicNode)
-    console.log('✅ newLogicNode adicionado ao fileNode.children')
-    console.log('📦 fileNode.children agora tem', fileNode.children.length, 'regras')
+  if (newLogicNode) {
+    console.log('✅ newLogicNode criado via CssLogicTreeService:', newLogicNode)
 
     // Sync and Refresh
-    console.log('🔄 Iniciando syncAstToStyles...')
-    syncAstToStyles(styleStore.cssAst, activeDoc.value)
-    console.log('✅ syncAstToStyles concluído')
-    
-    // Notify CssExplorer of the mutation (lightweight reactivity trigger)
+    CssLogicTreeService.syncToDOM(styleStore.cssAst, activeDoc.value)
     styleStore.notifyAstMutation()
-    console.log('✅ CssExplorer notificado da mutação')
     
-    // Set the newly created rule as active (but NOT in Explorer mode)
-    console.log('✅ Ativando regra com ID:', newLogicNode.id)
+    // Set the newly created rule as active
     styleStore.setActiveRule(newLogicNode.id, false)
-    console.log('✅ setActiveRule executado')
     
     // Clear input
     customSelector.value = ''
-    console.log('🧹 Input limpo')
 
     // Apply to element FIRST (synchronous DOM update)
-    console.log('🎨 Aplicando seletor ao elemento...')
-    console.log('📍 Elemento ANTES:', {
-      tag: selectedElement.value.tagName,
-      id: selectedElement.value.id,
-      classes: selectedElement.value.className,
-      selector: selector
-    })
-    
     applyRuleToElement(selector)
     
-    console.log('📍 Elemento DEPOIS:', {
-      tag: selectedElement.value.tagName,
-      id: selectedElement.value.id,
-      classes: selectedElement.value.className
-    })
-    console.log('✅ Seletor aplicado ao DOM')
-
     // Emit AFTER class is applied (nextTick ensures DOM is updated)
     nextTick(() => {
-      console.log('📢 Emitindo rule-added para atualizar Inspector')
-      console.log('📍 Elemento NO EMIT:', {
-        tag: selectedElement.value.tagName,
-        id: selectedElement.value.id,
-        classes: selectedElement.value.className
-      })
       emit('rule-added', newLogicNode)
       console.log('🎉 === createRule CONCLUÍDA COM SUCESSO ===')
     })
   } else {
-    console.error('❌ FALHA: createNode retornou null/undefined para selector:', selector)
+    console.error('❌ FALHA: LogicTreeManager não conseguiu criar a regra para:', selector)
   }
 }
 </script>

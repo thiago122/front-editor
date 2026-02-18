@@ -85,25 +85,9 @@ export class CssAstBuilder {
     if (owner.getAttribute('data-location')) {
       origin = owner.getAttribute('data-location').toLowerCase()
     } 
-    // Otherwise, it's an on_page style
+    // Otherwise, it's an on_page style (legacy/fallback)
     else if (owner.tagName === 'STYLE') {
       origin = 'on_page'
-    }
-
-    // Handle on_page styles: first is editable, others are read-only
-    if (origin === 'on_page' && !sourceName) {
-      const hasOnPage = this.targetDoc.getElementById('on_page')
-      
-      if (!hasOnPage) {
-        // First inline <style> → editable
-        sourceName = 'on_page'
-        owner.id = 'on_page'
-      } else {
-        // Subsequent inline <style> → read-only
-        sourceName = this.generateReadOnlyId()
-        owner.id = sourceName
-        owner.setAttribute('data-readonly', 'true')
-      }
     }
 
     // Fallback: ensure sourceName is never null
@@ -113,43 +97,6 @@ export class CssAstBuilder {
 
     return { origin, sourceName }
   }
-
-  /**
-   * Generate unique ID for read-only on_page styles
-   * @returns {string} Unique ID (e.g., 'on_page_readonly-2', 'on_page_readonly-3', etc.)
-   */
-  generateReadOnlyId() {
-    const existingReadOnly = Array.from(
-      this.targetDoc.querySelectorAll('style[id^="on_page_readonly"]')
-    )
-    
-    const nextNum = existingReadOnly.length + 2  // Start at 2
-    return `on_page_readonly-${nextNum}`
-  }
-
-  /**
-   * Generate unique ID for on_page styles (DEPRECATED - kept for reference)
-   * @returns {string} Unique ID (e.g., 'on_page', 'on_page-2', etc.)
-   */
-  generateOnPageId() {
-    const existingOnPageStyles = Array.from(this.targetDoc.querySelectorAll('style[id^="on_page"]'))
-    
-    if (existingOnPageStyles.length === 0) {
-      return 'on_page'
-    }
-    
-    // Find next available number
-    const numbers = existingOnPageStyles
-      .map(el => {
-        const match = el.id.match(/^on_page-(\d+)$/)
-        return match ? parseInt(match[1], 10) : 1
-      })
-      .filter(n => !isNaN(n))
-    
-    const maxNumber = numbers.length > 0 ? Math.max(...numbers) : 1
-    return `on_page-${maxNumber + 1}`
-  }
-
 
   /**
    * Extract CSS text from stylesheet

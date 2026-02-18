@@ -6,11 +6,11 @@
 import { toRaw } from 'vue'
 import { safeAppend } from '@/utils/astHelpers'
 import { focusLastProperty } from '@/utils/focusHelpers'
+import { CssAstService } from '@/composables/CssAstService'
 
 /**
  * Creates the AST rule strategy
  * @param {Object} styleStore - The Pinia style store
- * @param {Function} createNodeFn - Function to create AST nodes
  * @param {Function} syncAstToStylesFn - Function to sync AST to DOM
  * @param {Document} activeDoc - The active document
  * @param {Function} updateRulesFn - Callback to refresh the inspector UI
@@ -19,7 +19,6 @@ import { focusLastProperty } from '@/utils/focusHelpers'
  */
 export function createAstRuleStrategy(
   styleStore,
-  createNodeFn,
   syncAstToStylesFn,
   activeDoc,
   updateRulesFn,
@@ -41,7 +40,7 @@ export function createAstRuleStrategy(
       const countBefore = children.toArray ? children.toArray().length : children.length
       console.log('AstStrategy: Decls before:', countBefore)
 
-      const newDeclNode = createNodeFn('property: value', 'declaration')
+      const newDeclNode = CssAstService.createNode('property: value', 'declaration')
       if (newDeclNode) {
         safeAppend(children, newDeclNode, false)
         syncAstToStylesFn(styleStore.cssAst, activeDoc)
