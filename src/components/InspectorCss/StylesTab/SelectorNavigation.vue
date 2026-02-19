@@ -92,7 +92,7 @@ const emit = defineEmits(['remove-attribute', 'toggle-pseudo', 'create-rule'])
 // Direct store access but with confirmation for creation
 function selectRule(attr) {
   if (attr.uid) {
-    styleStore.setActiveRule(attr.uid)
+    styleStore.selectRule(attr.uid)
   } else if (!attr.isUsed) {
     // No rule found (Red badge)
     // Suggest creating a new rule for this class/id

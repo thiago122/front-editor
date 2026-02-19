@@ -1,6 +1,9 @@
 import { RuleMatcher } from './RuleMatcher.js'
 import { InlineStyleParser } from './InlineStyleParser.js'
 
+// Tags at which DOM upward traversal stops — elements above these are non-styleable context
+const DOM_TRAVERSAL_STOP_TAGS = ['BODY', 'HTML']
+
 /**
  * CssRuleExtractor Class
  * Orchestrates the process of finding matched CSS rules for an element and its ancestors.
@@ -94,10 +97,11 @@ export class CssRuleExtractor {
   }
 
   /**
-   * Check if DOM traversal should stop
+   * Check if DOM traversal should stop.
+   * We stop at BODY and HTML — styles above those are not element-specific.
    * @private
    */
   shouldStopTraversal(element) {
-    return element.tagName === 'BODY' || element.tagName === 'HTML'
+    return DOM_TRAVERSAL_STOP_TAGS.includes(element.tagName)
   }
 }

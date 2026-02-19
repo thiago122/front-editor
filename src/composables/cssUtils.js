@@ -1,5 +1,4 @@
-import { parse } from 'css-tree'
-import { 
+import {
   PSEUDO_STATES,
   PSEUDO_ELEMENT_REGEX,
   INHERITED_PROPERTIES,
@@ -8,20 +7,10 @@ import {
 
 /**
  * CSS Utility Functions
- * Shared utilities for CSS parsing and manipulation
+ * Shared utilities for CSS parsing and manipulation.
+ *
+ * NOTE: To create/parse AST nodes, use CssAstService.createNode().
  */
-
-export function createAstNode(css, context) {
-  try {
-    const normalizedContext = context.toLowerCase()
-    const ast = parse(css, { context: normalizedContext })
-    return ast
-  } catch (e) {
-    console.error('Failed to create node from CSS:', css, 'context:', context, e)
-    return null
-  }
-}
-
 /**
  * Clean selector for matching (remove pseudo-elements)
  */

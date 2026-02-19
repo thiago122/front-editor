@@ -21,12 +21,10 @@ const hasChildren = computed(() => {
   return props.node.children && props.node.children.length > 0
 })
 
-const isExpanded = computed(() => {
-  return styleStore.isExpanded(props.node)
-})
+const isExpanded = computed(() => props.node.isExpanded ?? false)
 
 const isSelected = computed(() => {
-  return styleStore.selectedCssRuleNodeId === props.node.id
+  return styleStore.selectedRuleId === props.node.id
 })
 
 const handleClick = (e) => {
@@ -36,13 +34,13 @@ const handleClick = (e) => {
   
   if (isToggleClick || props.node.type === 'file' || props.node.type === 'selector') {
     if (hasChildren.value) {
-        styleStore.toggleNode(props.node.id)
+      props.node.onToggle?.()
     }
   }
-  
-  // Selection logic
+
+  // Selection: clicking a rule node selects it in Explorer + Inspector
   if (props.node.type === 'selector' || props.node.type === 'at-rule') {
-    styleStore.selectedCssRuleNodeId = props.node.id
+    styleStore.selectRule(props.node.id)
   }
 }
 

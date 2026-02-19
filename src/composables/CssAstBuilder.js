@@ -10,7 +10,7 @@ export class CssAstBuilder {
     this.cssContentMap = cssContentMap
     this.targetWin = targetDoc.defaultView || window
     this.nodeCounter = 0
-    this.masterAst = {
+    this.cssParserAst = {
       type: 'StyleSheet',
       loc: null,
       children: []
@@ -26,10 +26,10 @@ export class CssAstBuilder {
     
     this.processAllStyleSheets()
     
-    console.log(`AST built with ${this.masterAst.children.length} rules.`)
+    console.log(`AST built with ${this.cssParserAst.children.length} rules.`)
     console.timeEnd('buildCssAst')
     
-    return this.masterAst
+    return this.cssParserAst
   }
 
   /**
@@ -153,9 +153,9 @@ export class CssAstBuilder {
     // Mark as captured
     if (owner) owner.dataset.captured = 'true'
 
-    // Merge into master AST
-    const children = sheetAst.children.toArray?.() || sheetAst.children
-    children.forEach(child => this.masterAst.children.push(child))
+    // Merge into cssParserAst
+    const children = sheetAst.children.toArray?.() || Array.from(sheetAst.children)
+    children.forEach(child => this.cssParserAst.children.push(child))
   }
 
   /**

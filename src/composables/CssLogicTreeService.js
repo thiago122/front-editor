@@ -133,4 +133,47 @@ export class CssLogicTreeService {
     }
     return fileNode
   }
+
+  /**
+   * Find the direct parent of a node with the given id in the Logic Tree.
+   * Returns the parent node, or null if the node is at the root level or not found.
+   * @param {Array} logicTree - The Logic Tree
+   * @param {string} targetId - The id of the node to find the parent of
+   * @returns {Object|null}
+   */
+  static findParent(logicTree, targetId) {
+    const search = (nodes, parent) => {
+      for (const node of nodes) {
+        if (node.id === targetId) return parent
+        if (node.children) {
+          const found = search(node.children, node)
+          if (found !== undefined) return found
+        }
+      }
+      return undefined
+    }
+    return search(logicTree, null) ?? null
+  }
+
+  /**
+   * Find all ancestors of a node with the given id, from outermost to innermost.
+   * For example, for "root > file > @media > selector", returns [root, file, @media].
+   * Returns an empty array if the node is not found or has no ancestors.
+   * @param {Array} logicTree - The Logic Tree
+   * @param {string} targetId - The id of the node to find ancestors for
+   * @returns {Object[]} Array of ancestor nodes (outermost first)
+   */
+  static findAncestors(logicTree, targetId) {
+    const search = (nodes, path) => {
+      for (const node of nodes) {
+        if (node.id === targetId) return path
+        if (node.children) {
+          const found = search(node.children, [...path, node])
+          if (found) return found
+        }
+      }
+      return null
+    }
+    return search(logicTree, []) ?? []
+  }
 }

@@ -65,13 +65,13 @@ watch(() => props.initialSelector, (val) => {
 
 // --- Active CSS Source Selection ---
 const availableSources = computed(() => {
-  if (!styleStore.cssAst) return [{ origin: 'on_page', name: 'style' }]
+  if (!styleStore.cssLogicTree) return [{ origin: 'on_page', name: 'style' }]
   const sources = []
   
   // Always ensure on_page style exists for new rules
   sources.push({ origin: 'on_page', name: 'style' })
 
-  styleStore.cssAst.forEach(root => {
+  styleStore.cssLogicTree.forEach(root => {
     if (root.metadata.origin === 'external') return // Cannot add rules to external
     root.children.forEach(file => {
       if (root.metadata.origin === 'on_page' && file.label === 'style') return // Already added
@@ -159,8 +159,8 @@ const createRule = () => {
   
   const selectorInput = customSelector.value.trim()
   
-  if (!selectedElement.value || !styleStore.cssAst) {
-    console.warn('⚠️ ABORTADO: selectedElement ou cssAst não existe')
+  if (!selectedElement.value || !styleStore.cssLogicTree) {
+    console.warn('⚠️ ABORTADO: selectedElement ou cssLogicTree não existe')
     return
   }
 
@@ -183,17 +183,17 @@ const createRule = () => {
 
   // Use LogicTreeManager
   // Use toRaw for passing raw AST to manager
-  const newLogicNode = CssLogicTreeService.addRule(toRaw(styleStore.cssAst), selector, origin, sourceName)
+  const newLogicNode = CssLogicTreeService.addRule(toRaw(styleStore.cssLogicTree), selector, origin, sourceName)
 
   if (newLogicNode) {
     console.log('✅ newLogicNode criado via CssLogicTreeService:', newLogicNode)
 
     // Sync and Refresh
-    CssLogicTreeService.syncToDOM(styleStore.cssAst, activeDoc.value)
+    CssLogicTreeService.syncToDOM(styleStore.cssLogicTree, activeDoc.value)
     styleStore.notifyAstMutation()
     
     // Set the newly created rule as active
-    styleStore.setActiveRule(newLogicNode.id, false)
+    styleStore.selectRule(newLogicNode.id)
     
     // Clear input
     customSelector.value = ''
@@ -211,3 +211,4 @@ const createRule = () => {
   }
 }
 </script>
+

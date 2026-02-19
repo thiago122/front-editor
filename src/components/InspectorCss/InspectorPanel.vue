@@ -21,7 +21,7 @@
       <StylesTab 
         v-if="activeTab === 'Styles'"
         :groups="ruleGroups"
-        :activeRuleId="styleStore.activeRuleNodeId"
+        :activeRuleId="styleStore.selectedRuleId"
         :selectorNav="selectorNav"
         :hasPseudo="hasPseudo"
         @remove-attribute="removeSelectorFromElementAttribute"
@@ -132,7 +132,6 @@ const inlineStyleStrategy = computed(() =>
 
 const astRuleStrategy = createAstRuleStrategy(
   styleStore,
-  (logicTree, doc) => CssLogicTreeService.syncToDOM(logicTree, doc),
   activeDoc,
   updateRules,
   ruleRefs
@@ -159,7 +158,7 @@ function getStrategy(rule) {
  */
 function addNewRule(overrideSelector = null) {
 
-  if (!selectedElement.value || !styleStore.cssAst) return
+  if (!selectedElement.value || !styleStore.cssLogicTree) return
 
   // For internal usage (like pseudo classes), we try to find a valid source to append to.
   // We can default to 'on_page'/'style' or try to find where the active rule is.
@@ -177,12 +176,12 @@ function addNewRule(overrideSelector = null) {
   }
 
   const manager = new CssLogicTreeService()
-  const newLogicNode = CssLogicTreeService.addRule(toRaw(styleStore.cssAst), selector, origin, sourceName)
+  const newLogicNode = CssLogicTreeService.addRule(toRaw(styleStore.cssLogicTree), selector, origin, sourceName)
 
   if (newLogicNode) {
-    CssLogicTreeService.syncToDOM(styleStore.cssAst, activeDoc.value)
+    CssLogicTreeService.syncToDOM(styleStore.cssLogicTree, activeDoc.value)
     styleStore.refreshCssAst(activeDoc.value)
-    styleStore.setActiveRule(newLogicNode.id)
+    styleStore.selectRule(newLogicNode.id)
     updateRules()
   }
 }
@@ -224,7 +223,7 @@ const focusValue = (rule, decl, e) => {
 // ============================================
 
 const selectedElement = computed(() => editorStore.selectedElement)
-const cssAst = computed(() => styleStore.cssAst)
+const cssLogicTree = computed(() => styleStore.cssLogicTree)
 const viewport = computed(() => editorStore.viewport)
 
 /**
@@ -304,10 +303,10 @@ const selectorNav = computed(() => {
 // Actually we use activeInspectorRule inside hasPseudo
 
 const activeInspectorRule = computed(() => {
-  if (!styleStore.activeRuleNodeId) return null
+  if (!styleStore.selectedRuleId) return null
   // Search in all groups (including inherited for viewing)
   for (const group of ruleGroups.value) {
-    const found = group.rules.find(r => r.uid === styleStore.activeRuleNodeId)
+    const found = group.rules.find(r => r.uid === styleStore.selectedRuleId)
     if (found) return found
   }
   return null
@@ -334,11 +333,11 @@ const setRuleRef = (el, rule) => {
  */
 function updateRules() {
   // Handle Explicit CSS Rule Selection (From Explorer)
-  if (styleStore.selectedCssRuleNodeId) {
-      console.log('Explicit CSS Rule Mode:', styleStore.selectedCssRuleNodeId)
+  if (styleStore.selectedRuleId) {
+      console.log('Explicit CSS Rule Mode:', styleStore.selectedRuleId)
       
-      const ast = toRaw(cssAst.value)
-      const targetNode = findCssNode(ast, styleStore.selectedCssRuleNodeId)
+      const ast = toRaw(cssLogicTree.value)
+      const targetNode = findCssNode(ast, styleStore.selectedRuleId)
       
       if (targetNode && targetNode.type === 'selector') {
           // Format as Inspector Rule
@@ -381,7 +380,7 @@ function updateRules() {
       }
   }
 
-  if (!selectedElement.value || !cssAst.value) {
+  if (!selectedElement.value || !cssLogicTree.value) {
     rules.value = []
     ruleGroups.value = []
     return
@@ -399,7 +398,7 @@ function updateRules() {
   
   const groups = CssLogicTreeService.getMatchedRules(
     selectedElement.value,
-    toRaw(cssAst.value),
+    toRaw(cssLogicTree.value),
     viewport.value,
     {},
   )
@@ -418,14 +417,13 @@ function updateRules() {
   const targetGroup = groups.find((g) => g.isTarget)
   rules.value = targetGroup ? targetGroup.rules : []
 
-  // AUTO-SELECT first rule if none active or current one lost
+  // AUTO-SELECT: always select the first rule of the target element.
+  // We deliberately do NOT preserve the previous selection across element changes —
+  // it adds complexity for little benefit. Fresh element = fresh selection.
   if (targetGroup && targetGroup.rules.length > 0) {
-    const currentActive = targetGroup.rules.find(r => r.uid === styleStore.activeRuleNodeId)
-    if (!currentActive) {
-      styleStore.setActiveRule(targetGroup.rules[0].uid)
-    }
-  } else if (!targetGroup) {
-      styleStore.setActiveRule(null)
+    styleStore.selectRule(targetGroup.rules[0].uid)
+  } else {
+    styleStore.selectRule(null)
   }
 
   // Calculate Winners (Global across all rules for override strikes)
@@ -523,13 +521,13 @@ function updateSelector(rule, newSelector) {
     node.prelude = newPrelude
     
     // Also update the logic node label if we can find it
-    const logicNode = findCssNode(toRaw(styleStore.cssAst), rule.uid)
+    const logicNode = findCssNode(toRaw(styleStore.cssLogicTree), rule.uid)
     if (logicNode) {
       logicNode.label = newSelector
       logicNode.metadata.specificity = getSpecificity(newSelector)
     }
 
-    CssLogicTreeService.syncToDOM(styleStore.cssAst)
+    CssLogicTreeService.syncToDOM(styleStore.cssLogicTree)
     styleStore.refreshCssAst(activeDoc.value)
     updateRules()
   }
@@ -580,7 +578,7 @@ function removeSelectorFromElementAttribute(attr) {
  */
 function updateAtRule(rule, contextItem, newCond) {
   if (!contextItem || !contextItem.astNode) return
-  const ast = toRaw(store.cssAst)
+  const ast = toRaw(store.cssLogicTree)
   const node = toRaw(contextItem.astNode)
 
   if (node.type === 'Atrule') {
@@ -603,9 +601,9 @@ function updateAtRule(rule, contextItem, newCond) {
  */
 function wrapInAtRule(rule, type) {
   console.log('wrapInAtRule clicked', { ruleSelector: rule.selector, type })
-  if (!rule.astNode || !styleStore.cssAst) return
+  if (!rule.astNode || !styleStore.cssLogicTree) return
   
-  const logicTree = toRaw(styleStore.cssAst)
+  const logicTree = toRaw(styleStore.cssLogicTree)
   
   const parentLogicNode = findParentOfLogicNode(logicTree, rule.uid)
   if (!parentLogicNode) {
@@ -644,7 +642,7 @@ function wrapInAtRule(rule, type) {
     // Replace in parent
     parentLogicNode.children.splice(idx, 1, atRuleLogicNode)
 
-    syncAstToStyles(styleStore.cssAst, activeDoc.value)
+    syncAstToStyles(styleStore.cssLogicTree, activeDoc.value)
     styleStore.refreshCssAst(activeDoc.value)
     updateRules()
   }
@@ -698,7 +696,7 @@ watch(
     if (newEl) {
       observer.observe(newEl, { attributes: true, attributeFilter: ['style', 'class', 'id'] })
       // Always reset to element.style or first rule when element changes
-      styleStore.activeRuleNodeId = null 
+      styleStore.selectRule(null)
       updateRules()
     }
   },
@@ -712,13 +710,13 @@ watch(
  */
 function deleteRule(rule) {
   console.log('=== deleteRule START ===', rule.selector)
-  if (!styleStore.cssAst || !rule.uid) return
+  if (!styleStore.cssLogicTree || !rule.uid) return
   if (rule.selector === 'element.style') return
 
-  const logicTree = toRaw(styleStore.cssAst)
+  const logicTree = toRaw(styleStore.cssLogicTree)
   
   if (findAndRemoveFromLogicTree(logicTree, rule.uid)) {
-    syncAstToStyles(styleStore.cssAst, activeDoc.value)
+    syncAstToStyles(styleStore.cssLogicTree, activeDoc.value)
     styleStore.refreshCssAst(activeDoc.value)
     updateRules()
     console.log('Rule deleted from Logic Tree')
@@ -753,13 +751,13 @@ const handlePseudoToggle = (state) => {
   const existing = targetGroup?.rules.find(r => r.selector === targetSelector)
   
   if (existing) {
-    styleStore.setActiveRule(existing.uid)
+    styleStore.selectRule(existing.uid)
   } else {
     addNewRule(targetSelector)
   }
 }
 
-watch([cssAst, viewport], updateRules)
+watch([cssLogicTree, viewport], updateRules)
 </script>
 
 <style scoped>
@@ -775,3 +773,4 @@ watch([cssAst, viewport], updateRules)
   background: transparent;
 }
 </style>
+

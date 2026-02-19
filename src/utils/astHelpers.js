@@ -39,6 +39,42 @@ export function safeAppend(list, data, prepend = false) {
 }
 
 /**
+ * Safely removes a node from a css-tree list or plain array.
+ * Handles both the css-tree List (linked-list with .head/.next) and Array types.
+ * Use this whenever you need to remove a declaration / rule from an AST block.
+ * @param {Object|Array} list - The list to remove from
+ * @param {Object} node - The exact AST node object to remove
+ * @returns {boolean} True if the node was found and removed
+ */
+export function safeRemove(list, node) {
+  if (!list || !node) return false
+  try {
+    if (list.head !== undefined) {
+      // css-tree List (linked-list)
+      let item = list.head
+      while (item) {
+        if (item.data === node) {
+          list.remove(item)
+          return true
+        }
+        item = item.next
+      }
+    } else if (Array.isArray(list)) {
+      const idx = list.indexOf(node)
+      if (idx !== -1) {
+        list.splice(idx, 1)
+        return true
+      }
+    } else {
+      console.warn('Unknown list type in safeRemove:', list)
+    }
+  } catch (e) {
+    console.error('Error in safeRemove:', e)
+  }
+  return false
+}
+
+/**
  * Recursively finds a CSS node by ID in the logic tree
  * @param {Array} nodes - Array of logic tree nodes to search
  * @param {string} targetId - The ID to search for

@@ -5,66 +5,63 @@ import { CssLogicTreeService } from '@/composables/CssLogicTreeService'
 
 export const useStyleStore = defineStore('style', () => {
 
-  // --- STATE ---
-  // Master AST: raw css-tree object (low-level, not reactive for perf)
-  const masterAst = ref(null)
-  // Logic Tree: our high-level hierarchical structure (used by UI)
-  const cssAst = ref(null)
+  // ============================================
+  // STATE
+  // ============================================
 
-  const selectedCssRuleNodeId = ref(null) // ID of the selected CSS rule (Logic Tree Node ID)
-  const activeRuleNodeId = ref(null) // ID of the rule currently being edited in the Inspector
-  const toggledNodes = ref(new Set())
-  const astMutationKey = ref(0) // Lightweight trigger for AST mutations
+  // cssParserAst: raw css-tree object (LOW-LEVEL — do not use in UI)
+  const cssParserAst = ref(null)
 
-  // --- ACTIONS ---
+  // cssLogicTree: our high-level hierarchical tree (HIGH-LEVEL — use in UI)
+  const cssLogicTree = ref(null)
+
+  /**
+   * selectedRuleId: the ID of the currently selected CSS rule.
+   *
+   * Single source of truth for rule selection — shared between the Inspector
+   * and the Explorer. Selecting a rule in either panel reflects in the other.
+   *
+   * - Inspector reads it to know which rule to display/edit.
+   * - Explorer reads it to know which tree node to highlight.
+   * - Components call selectRule() to change it.
+   *
+   * Distinct from tree expansion (toggledNodes in CssExplorer): expanding a
+   * node in the Explorer does NOT select it, just like clicking "+" in Windows
+   * Explorer expands a folder without opening it.
+   */
+  const selectedRuleId = ref(null)
+
+  /**
+   * astMutationKey is a lightweight reactivity trigger for the Logic Tree.
+   *
+   * Because cssLogicTree is stored as markRaw (to avoid Vue making it deeply
+   * reactive — which would be very expensive for large ASTs), Vue cannot
+   * detect mutations inside it automatically. So whenever we mutate the tree
+   * (add/remove/update nodes), we manually call notifyAstMutation() to
+   * increment this counter. Components that need to react to tree changes
+   * should watch astMutationKey instead of cssLogicTree directly.
+   */
+  const astMutationKey = ref(0)
+
+
+  // ============================================
+  // ACTIONS
+  // ============================================
+
   function notifyAstMutation() {
     astMutationKey.value++
   }
 
-  function setActiveRule(id, fromExplorer = false) {
-    activeRuleNodeId.value = id
-    selectedCssRuleNodeId.value = fromExplorer ? id : null
-    if (id && fromExplorer) {
-      expandToNode(id)
-    }
-  }
-
-  function expandToNode(id) {
-    const findParent = (nodes, targetId, parent = null) => {
-      for (const node of nodes) {
-        if (node.id === targetId) return parent
-        if (node.children) {
-          const found = findParent(node.children, targetId, node)
-          if (found) return found
-        }
-      }
-      return null
-    }
-
-    const parent = findParent(cssAst.value || [], id)
-    if (parent && !isExpanded(parent)) {
-      toggleNode(parent.id)
-    }
-  }
-
-  function toggleNode(id) {
-    const next = new Set(toggledNodes.value)
-    if (next.has(id)) {
-      next.delete(id)
-    } else {
-      next.add(id)
-    }
-    toggledNodes.value = next
-  }
-
-  function isExpanded(node) {
-    if (!node) return false
-    if (node.type === 'root') return true
-    return toggledNodes.value.has(node.id)
+  /**
+   * Select a CSS rule — updates the Inspector and the Explorer simultaneously.
+   * @param {string|null} id - Logic Tree node ID of the rule to select
+   */
+  function selectRule(id) {
+    selectedRuleId.value = id
   }
 
   /**
-   * Full pipeline: Load CSS → Build Master AST → Build Logic Tree
+   * Full pipeline: Load CSS → Build cssParserAst → Build cssLogicTree
    * @param {Document} doc - Target document
    * @param {string[]} locations - Locations to load
    */
@@ -73,28 +70,24 @@ export const useStyleStore = defineStore('style', () => {
 
     console.log('[StyleStore] Refreshing CSS AST...')
 
-    // 1. Build Master AST
-    const rawMasterAst = await CssAstService.buildMasterAst(doc, locations)
-    masterAst.value = markRaw(rawMasterAst)
+    // 1. Build raw parser AST (css-tree)
+    const rawParserAst = await CssAstService.buildMasterAst(doc, locations)
+    cssParserAst.value = markRaw(rawParserAst)
 
-    // 2. Build Logic Tree from Master AST
-    const logicTree = CssLogicTreeService.buildLogicTree(rawMasterAst)
-    cssAst.value = markRaw(logicTree)
+    // 2. Transform into Logic Tree (our high-level structure)
+    const logicTree = CssLogicTreeService.buildLogicTree(rawParserAst)
+    cssLogicTree.value = markRaw(logicTree)
 
     notifyAstMutation()
   }
 
   return {
-    masterAst,
-    cssAst,
-    selectedCssRuleNodeId,
-    activeRuleNodeId,
-    toggledNodes,
+    cssParserAst,
+    cssLogicTree,
+    selectedRuleId,
     astMutationKey,
     refreshCssAst,
-    toggleNode,
-    isExpanded,
-    setActiveRule,
+    selectRule,
     notifyAstMutation,
   }
 })

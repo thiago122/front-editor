@@ -59,31 +59,36 @@ export class CssExplorerTreeBuilder {
 
       const locationNode = locationMap[origin]
       
-      // Safety check: skip if origin is not recognized
       if (!locationNode) {
         console.warn(`[CssExplorerTreeBuilder] Unknown origin: ${origin}`)
         return
       }
       
-      let fileNode = locationNode.children.find(c => c.type === 'file' && c.label === sourceName)
-
-      if (!fileNode) {
-        fileNode = {
-          id: generateId(),
-          type: 'file',
-          label: sourceName,
-          metadata: { origin, sourceName },
-          children: []
-        }
-        locationNode.children.push(fileNode)
-      }
-
-      // Transform CSS node to logic node
+      const fileNode = this._findOrCreateFileNode(locationNode, origin, sourceName)
       const logicNode = this.mapCssNodeToLogicNode(cssNode)
       if (logicNode) {
         fileNode.children.push(logicNode)
       }
     })
+  }
+
+  /**
+   * Find an existing file node within a location node, or create and attach a new one.
+   * @private
+   */
+  _findOrCreateFileNode(locationNode, origin, sourceName) {
+    let fileNode = locationNode.children.find(c => c.type === 'file' && c.label === sourceName)
+    if (!fileNode) {
+      fileNode = {
+        id: generateId(),
+        type: 'file',
+        label: sourceName,
+        metadata: { origin, sourceName },
+        children: []
+      }
+      locationNode.children.push(fileNode)
+    }
+    return fileNode
   }
 
   /**

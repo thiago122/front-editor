@@ -1,17 +1,19 @@
 /**
  * AST Rule Strategy
- * Handles CSS property operations for AST-based rules
+ * Handles CSS property operations for AST-based rules.
+ * Uses CssLogicTreeService.syncToDOM directly — no callback needed.
  */
 
 import { toRaw } from 'vue'
-import { safeAppend } from '@/utils/astHelpers'
+import { safeAppend, safeRemove } from '@/utils/astHelpers'
 import { focusLastProperty } from '@/utils/focusHelpers'
 import { CssAstService } from '@/composables/CssAstService'
+import { CssLogicTreeService } from '@/composables/CssLogicTreeService'
+import { validateStrategy } from './CssRuleStrategy'
 
 /**
  * Creates the AST rule strategy
  * @param {Object} styleStore - The Pinia style store
- * @param {Function} syncAstToStylesFn - Function to sync AST to DOM
  * @param {Document} activeDoc - The active document
  * @param {Function} updateRulesFn - Callback to refresh the inspector UI
  * @param {Object} ruleRefs - Vue refs map for auto-focus
@@ -19,16 +21,11 @@ import { CssAstService } from '@/composables/CssAstService'
  */
 export function createAstRuleStrategy(
   styleStore,
-  syncAstToStylesFn,
   activeDoc,
   updateRulesFn,
   ruleRefs
 ) {
-  return {
-    /**
-     * Adds a new property to an AST rule
-     * @param {Object} rule - The rule to add the property to
-     */
+  const strategy = {
     addProperty(rule) {
       if (!rule.astNode || !rule.astNode.block) {
         console.error('AstStrategy: Cannot add property - missing astNode or block')
@@ -37,33 +34,20 @@ export function createAstRuleStrategy(
 
       const block = toRaw(rule.astNode.block)
       const children = block.children
-      const countBefore = children.toArray ? children.toArray().length : children.length
-      console.log('AstStrategy: Decls before:', countBefore)
 
       const newDeclNode = CssAstService.createNode('property: value', 'declaration')
       if (newDeclNode) {
         safeAppend(children, newDeclNode, false)
-        syncAstToStylesFn(styleStore.cssAst, activeDoc)
+        CssLogicTreeService.syncToDOM(styleStore.cssLogicTree, activeDoc)
         updateRulesFn()
 
-        // Auto-focus the newly added property
         if (ruleRefs) {
           const el = ruleRefs.value[rule.uid]
-          if (el) {
-            focusLastProperty(el)
-          }
+          if (el) focusLastProperty(el)
         }
-
-        console.log('AST sync and rules update called')
       }
     },
 
-    /**
-     * Updates a property name or value in an AST rule
-     * @param {Object} decl - The declaration object
-     * @param {string} field - 'prop' or 'value'
-     * @param {string} newValue - The new value
-     */
     updateProperty(decl, field, newValue) {
       if (!decl.astNode) {
         console.error('AstStrategy: Cannot update property - missing astNode')
@@ -71,7 +55,7 @@ export function createAstRuleStrategy(
       }
 
       const node = toRaw(decl.astNode)
-      
+
       if (field === 'prop') {
         const wasDisabled = node.property.startsWith('--disabled-')
         node.property = wasDisabled ? '--disabled-' + newValue : newValue
@@ -79,71 +63,35 @@ export function createAstRuleStrategy(
         node.value = { type: 'Raw', value: newValue }
       }
 
-      syncAstToStylesFn(styleStore.cssAst, activeDoc)
+      CssLogicTreeService.syncToDOM(styleStore.cssLogicTree, activeDoc)
       styleStore.refreshCssAst(activeDoc)
       updateRulesFn()
     },
 
-    /**
-     * Deletes a property from an AST rule
-     * @param {Object} rule - The rule containing the property
-     * @param {Object} decl - The declaration to delete
-     */
     deleteProperty(rule, decl) {
-      if (!styleStore.cssAst || !rule.astNode || !decl.astNode) {
+      if (!styleStore.cssLogicTree || !rule.astNode || !decl.astNode) {
         console.error('AstStrategy: Cannot delete property - missing AST nodes')
         return
       }
 
-      const ast = toRaw(styleStore.cssAst)
-      const ruleNode = toRaw(rule.astNode)
-      const declNode = toRaw(decl.astNode)
+      const list = toRaw(rule.astNode).block?.children
+      const removed = safeRemove(list, toRaw(decl.astNode))
 
-      if (ruleNode.block && ruleNode.block.children) {
-        const list = ruleNode.block.children
-
-        // Find and remove the declaration node from the list
-        if (list.head) {
-          // css-tree List type
-          let item = list.head
-          while (item) {
-            if (item.data === declNode) {
-              list.remove(item)
-              console.log('✓ Declaration removed from AST')
-              syncAstToStylesFn(ast, activeDoc)
-              updateRulesFn()
-              return
-            }
-            item = item.next
-          }
-        } else if (Array.isArray(list)) {
-          // Array type
-          const idx = list.indexOf(declNode)
-          if (idx !== -1) {
-            list.splice(idx, 1)
-            console.log('✓ Declaration removed from Array AST')
-            syncAstToStylesFn(ast, activeDoc)
-            updateRulesFn()
-            return
-          }
-        }
+      if (removed) {
+        CssLogicTreeService.syncToDOM(toRaw(styleStore.cssLogicTree), activeDoc)
+        updateRulesFn()
+      } else {
+        console.error('AstStrategy: Failed to remove declaration from AST')
       }
-
-      console.error('Failed to remove declaration from AST')
     },
 
-    /**
-     * Toggles a property between enabled and disabled states
-     * @param {Object} rule - The rule containing the property
-     * @param {Object} decl - The declaration to toggle
-     */
     toggleProperty(rule, decl) {
       if (!decl.astNode || !rule.astNode) {
         console.error('AstStrategy: Cannot toggle property - missing AST nodes')
         return
       }
 
-      const ast = toRaw(styleStore.cssAst)
+      const ast = toRaw(styleStore.cssLogicTree)
       const declNode = toRaw(decl.astNode)
 
       if (decl.disabled) {
@@ -154,7 +102,10 @@ export function createAstRuleStrategy(
         declNode.property = declNode.property.replace('--disabled-', '')
       }
 
-      syncAstToStylesFn(ast, activeDoc)
+      CssLogicTreeService.syncToDOM(ast, activeDoc)
     }
   }
+
+  validateStrategy(strategy, 'astRuleStrategy')
+  return strategy
 }
