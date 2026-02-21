@@ -128,3 +128,47 @@ export function findAndRemoveFromLogicTree(nodes, targetId) {
   }
   return false
 }
+
+/**
+ * Marks declarations as `overridden` based on CSS specificity and !important.
+ * Rules:
+ *   1. An !important declaration beats any non-important one for the same property.
+ *   2. Between two !important declarations, the one that appears first (highest
+ *      specificity, as guaranteed by sortRulesBySpecificity) wins.
+ *   3. Among non-important declarations, the first encountered wins.
+ *   4. Disabled declarations never win and are never marked as winners.
+ *
+ * Mutates groups in place.
+ * @param {Array} groups - Ordered array of rule groups (target first, then inherited)
+ */
+export function calculateOverrides(groups) {
+  // Map<prop, { ruleUid, important }>
+  const winners = new Map()
+  const flatRules = groups.flatMap(g => g.rules)
+
+  flatRules.forEach(rule => {
+    if (!rule.active) return
+    rule.declarations.forEach(decl => {
+      if (decl.disabled) return
+      const curr = winners.get(decl.prop)
+      if (!curr) {
+        // First occurrence always wins initially
+        winners.set(decl.prop, { ruleUid: rule.uid, important: decl.important })
+      } else if (decl.important && !curr.important) {
+        // !important beats non-important regardless of specificity
+        winners.set(decl.prop, { ruleUid: rule.uid, important: true })
+      }
+      // Two !important: first one (higher specificity) already won — do nothing.
+      // Non-important vs non-important: first one already won — do nothing.
+    })
+  })
+
+  groups.forEach(group => {
+    group.rules.forEach(rule => {
+      rule.declarations.forEach(decl => {
+        const winner = winners.get(decl.prop)
+        decl.overridden = !!winner && winner.ruleUid !== rule.uid
+      })
+    })
+  })
+}

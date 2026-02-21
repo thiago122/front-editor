@@ -1,7 +1,7 @@
 <template>
-  <div class="flex items-start gap-2 group/item relative min-h-[20px]">
+  <div class="flex items-start group/item relative">
     
-    <div class="flex-1 flex flex-wrap items-baseline gap-x-1.5 transition-all"
+    <div class="flex-1 flex flex-wrap items-center  gap-x-1 transition-all"
       :class="{ 'opacity-30 line-through grayscale': decl.overridden || decl.disabled }">
       
       <input 
@@ -9,18 +9,20 @@
         type="checkbox" 
         :checked="!decl.overridden && !decl.disabled"
         @change.stop="$emit('toggle', decl)"
-        class="w-3.5 h-3.5 cursor-pointer accent-blue-600 rounded" 
+        class="w-3 h-3 cursor-pointer accent-blue-600 rounded" 
       />
+      <span>
+        <span 
+          class="text-rose-500 prop-name outline-none" 
+          :class="[editable ? 'cursor-text hover:bg-gray-50' : '']" 
+          :contenteditable="editable"
+          @blur="(e) => $emit('update', decl, 'prop', e.target.innerText)"
+          @keydown.enter.prevent="(e) => $emit('focus-value', decl, e)"
+        >{{ decl.prop }}</span>
+        
+        <span>:</span>
+      </span>
 
-      <span 
-        class="text-rose-700 font-bold prop-name outline-none" 
-        :class="[editable ? 'cursor-text hover:bg-gray-50 px-0.5 rounded' : '']" 
-        :contenteditable="editable"
-        @blur="(e) => $emit('update', decl, 'prop', e.target.innerText)"
-        @keydown.enter.prevent="(e) => $emit('focus-value', decl, e)"
-      >{{ decl.prop }}</span>
-      
-      <span class="text-gray-300">:</span>
       
       <div class="flex items-center gap-1 min-w-0">
         <span v-if="isColor(decl.value)"
@@ -28,7 +30,7 @@
           :style="{ backgroundColor: decl.value }"></span>
         
         <span 
-          class="text-indigo-900 font-medium prop-value outline-none px-1 rounded break-all transition-colors"
+          class=" prop-value outline-none  break-all transition-colors"
           :class="[editable ? 'cursor-text hover:bg-blue-50' : '']"
           :contenteditable="editable"
           @blur="(e) => $emit('update', decl, 'value', e.target.innerText)"

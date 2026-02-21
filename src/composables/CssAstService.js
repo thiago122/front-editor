@@ -27,12 +27,14 @@ export class CssAstService {
     const loader = new CssLoader(doc)
     const cssContentMap = await loader.loadCssFiles(locations)
 
-    // 2. Inject internal CSS files as <style> tags (replaces <link>)
+    // 2. Inject CSS files as <style> tags (replaces <link>)
+    
     const injector = new CssInjector(doc, cssContentMap)
     await injector.inject(['internal'])
     injector.processOnPageStyles()
 
     // 3. Build Master AST from all stylesheets
+    // // TODO: acho que não precisamos do cssContentMap
     const builder = new CssAstBuilder(doc, cssContentMap)
     return builder.build()
   }

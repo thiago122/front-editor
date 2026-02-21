@@ -197,6 +197,9 @@ export class RuleMatcher {
       if (contextItem.name === 'media') {
         active = active && this.targetWin.matchMedia(contextItem.prelude).matches
       }
+      if (contextItem.name === 'supports') {
+        active = active && this.isSupportsActive(contextItem.prelude)
+      }
       if (contextItem.name === 'container') {
         active = active && this.isContainerActive(contextItem.prelude)
       }
@@ -216,5 +219,21 @@ export class RuleMatcher {
       return match ? this.viewport.width >= Number(match[1]) : true
     }
     return true
+  }
+
+  /**
+   * Evaluate a @supports condition using CSS.supports()
+   * @param {string} condition - The @supports condition string
+   * @returns {boolean}
+   * @private
+   */
+  isSupportsActive(condition) {
+    if (!condition) return true
+    try {
+      return CSS.supports(condition)
+    } catch (e) {
+      // Unknown or complex condition — treat as active to avoid hiding rules
+      return true
+    }
   }
 }

@@ -1,9 +1,9 @@
 <template>
   <div class="inspector-header bg-[#f3f3f3] border-b border-[#d1d1d1] shrink-0">
-    <div class="flex items-center px-1 min-h-[35px] py-1">
+    <div class="flex items-center">
       <div class="flex border-r border-[#d1d1d1] pr-1 mr-1">
         <button 
-          v-for="tab in ['Styles', 'Computed']" 
+          v-for="tab in ['Styles', 'Computed','+ new selector']" 
           :key="tab" 
           @click="$emit('update:activeTab', tab)" 
           :class="[

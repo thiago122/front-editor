@@ -22,13 +22,7 @@ export class CssAstBuilder {
    * @returns {Object} Master AST object
    */
   build() {
-    console.time('buildCssAst')
-    
     this.processAllStyleSheets()
-    
-    console.log(`AST built with ${this.cssParserAst.children.length} rules.`)
-    console.timeEnd('buildCssAst')
-    
     return this.cssParserAst
   }
 
@@ -47,19 +41,12 @@ export class CssAstBuilder {
   processStyleSheet(sheet) {
     try {
       const owner = sheet.ownerNode
-      if (!owner || this.shouldIgnoreSheet(owner)) {
-        return
-      }
+      if (!owner || this.shouldIgnoreSheet(owner)) return
 
       const { origin, sourceName } = this.detectOrigin(owner)
       const cssText = this.extractCssText(sheet, owner, sourceName)
-      
-      if (!cssText.trim()) {
-        return
-      }
+      if (!cssText.trim()) return
 
-      console.log(`[CssAstBuilder] Processing ${sourceName} [${origin}] (${cssText.length} bytes)`)
-      
       this.parseAndMerge(cssText, origin, sourceName, owner)
     } catch (e) {
       console.warn('[CssAstBuilder] Skip sheet due to error:', e)

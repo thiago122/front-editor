@@ -20,17 +20,12 @@ export class CssTreeSynchronizer {
    */
   syncToDom(targetDoc = document) {
     if (!this.logicTree) return
-    
-    console.time('syncAstToStyles')
-    
     try {
       this.collectRulesByFile()
       this.updateStyleElements(targetDoc)
     } catch (e) {
       console.error('Failed to sync AST to styles:', e)
     }
-    
-    console.timeEnd('syncAstToStyles')
   }
 
   /**
@@ -47,24 +42,12 @@ export class CssTreeSynchronizer {
    * @param {Document} targetDoc
    */
   updateStyleElements(targetDoc) {
-    let totalRules = 0
-
     this.fileGroups.forEach(({ origin, sourceName, rules }) => {
-      const fileAst = {
-        type: 'StyleSheet',
-        children: rules
-      }
-
+      const fileAst = { type: 'StyleSheet', children: rules }
       const css = generate(fileAst)
-      totalRules += rules.length
-
       const styleEl = this.findOrCreateStyleElement(targetDoc, origin, sourceName)
       styleEl.textContent = css
-
-      console.log(`Updated ${origin}/${sourceName}: ${rules.length} rules, ${css.length} bytes`)
     })
-
-    console.log(`--- syncAstToStyles --- | ${this.fileGroups.size} files, ${totalRules} total rules`)
   }
 
   /**

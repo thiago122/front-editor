@@ -20,12 +20,15 @@ export class CssExplorerTreeBuilder {
     const rootNodes = []
     const locationMap = {}
 
+
+   console.log('[locationMap]') 
+   console.log(locationMap) 
     // 1. Create location root nodes
     this.createLocationNodes(locationMap, rootNodes)
-
+ console.log(locationMap) 
     // 2. Process all CSS rules and organize by location/source
     this.processRules(locationMap)
-
+ console.log(locationMap) 
     // 3. Filter out empty location roots
     return rootNodes.filter(rn => rn.children.length > 0)
   }

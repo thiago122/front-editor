@@ -14,26 +14,15 @@ export class CssInjector {
    * @param {string[]} locations - Array of location types (e.g., ['internal', 'external'])
    */
   async inject(locations) {
-    console.log('[CssInjector] Starting injection...', { locations })
-    
     const selectors = this.buildSelectors(locations)
-    
-    if (selectors.length === 0) {
-      console.log('[CssInjector] No locations specified')
-      return
-    }
-    
+    if (selectors.length === 0) return
+
     const selector = selectors.join(', ')
     const elements = this.targetDoc.querySelectorAll(selector)
-    console.log(`[CssInjector] Found ${elements.length} element(s) to process`, elements)
-    
     for (const element of elements) {
       await this.processLink(element)
     }
-    
     this.reportFailures()
-    
-    console.log('[CssInjector] Injection complete')
   }
 
   /**
@@ -50,31 +39,19 @@ export class CssInjector {
    * @param {HTMLLinkElement} linkElement - Link element to process
    */
   async processLink(linkElement) {
-    // Skip if already processed
-    if (!linkElement.parentNode) {
-      console.log(`[CssInjector] Skipping already processed element`)
-      return
-    }
-    
-    // Only process <link> elements
+    if (!linkElement.parentNode) return
     if (linkElement.tagName !== 'LINK') {
       console.warn(`[CssInjector] Unexpected element type: ${linkElement.tagName}`)
       return
     }
-    
+
     const href = linkElement.href
-    console.log(`[CssInjector] Processing <link>: ${href}`)
-    
     try {
       const cssText = await this.fetchCssContent(href)
       const uniqueId = this.generateUniqueId(href)
       const location = linkElement.getAttribute('data-location') || 'unknown'
-      
       const styleElement = this.createStyleElement(cssText, location, href, uniqueId)
       this.replaceLink(linkElement, styleElement)
-      
-      const filename = new URL(href).pathname.split('/').pop() || 'style.css'
-      console.log(`✅ Injected ${location} CSS: ${filename} (${cssText.length} bytes)`)
     } catch (error) {
       this.handleError(href, error)
     }
@@ -86,24 +63,14 @@ export class CssInjector {
    * @returns {Promise<string>} CSS text content
    */
   async fetchCssContent(href) {
-    // Use pre-fetched content if available
     if (this.cssContentMap.has(href)) {
-      const cssText = this.cssContentMap.get(href)
-      console.log(`[CssInjector] Using pre-fetched content (${cssText.length} bytes)`)
-      return cssText
+      return this.cssContentMap.get(href)
     }
-    
-    // Fallback: fetch if not pre-loaded
-    console.log(`[CssInjector] Fetching ${href}...`)
     const response = await fetch(href)
-    
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`)
     }
-    
-    const cssText = await response.text()
-    console.log(`[CssInjector] Fetched ${cssText.length} bytes`)
-    return cssText
+    return response.text()
   }
 
   /**
@@ -179,48 +146,26 @@ export class CssInjector {
    * Assigns stable IDs to allow editing/referencing
    */
   processOnPageStyles() {
-    console.log('[CssInjector] Processing on_page styles...')
     const styleElements = Array.from(this.targetDoc.querySelectorAll('style'))
-
-    // Filter out styles that are already managed (have data-location)
-    // We only want "raw" style tags that were part of the original HTML
     const onPageStyles = styleElements.filter(el => !el.hasAttribute('data-location'))
+    if (onPageStyles.length === 0) return
 
-    if (onPageStyles.length === 0) {
-      console.log('[CssInjector] No new on_page styles found.')
-      return
-    }
-
-    console.log(`[CssInjector] Found ${onPageStyles.length} on_page style block(s).`)
-
-    // We need to determine if we already have an "on_page" (editable) style
-    // If we run this multiple times, we need to respect existing IDs
     let hasEditable = !!this.targetDoc.getElementById('on_page')
-    
     onPageStyles.forEach(el => {
-      // If element already has an ID, respect it, but tag it as on_page
       if (el.id) {
-        if (!el.hasAttribute('data-location')) {
-           el.setAttribute('data-location', 'on_page')
-        }
+        if (!el.hasAttribute('data-location')) el.setAttribute('data-location', 'on_page')
         if (el.id === 'on_page') hasEditable = true
         return
       }
-
-      // Assign ID
       if (!hasEditable) {
-        // First one becomes the editable one
         el.id = 'on_page'
         el.setAttribute('data-location', 'on_page')
         hasEditable = true
-        console.log('[CssInjector] Assigned ID "on_page" (editable)')
       } else {
-        // Subsequent ones are read-only
         const nextNum = this.getNextReadOnlyIndex()
         el.id = `on_page_readonly-${nextNum}`
         el.setAttribute('data-location', 'on_page')
         el.setAttribute('data-readonly', 'true')
-        console.log(`[CssInjector] Assigned ID "${el.id}" (read-only)`)
       }
     })
   }

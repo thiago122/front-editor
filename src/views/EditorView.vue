@@ -57,7 +57,7 @@ const handleHtmlLoad = (newHtml) => {
   input.value = newHtml
 }
 
-onMounted(async () => {
+const loadExternalTestPage = async () =>{
   try {
     const response = await fetch('http://editor.test/assets/site-teste.html')
     if (response.ok) {
@@ -66,7 +66,11 @@ onMounted(async () => {
     }
   } catch (e) {
     console.error('Failed to fetch remote HTML:', e)
-  }
+  }  
+}
+
+onMounted(async () => {
+  // await loadExternalTestPage()
 })
 
 const inputHTML = `
@@ -76,10 +80,10 @@ const inputHTML = `
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <!-- 1. External Layer: Bootstrap CSS -->
+    <!-- 1. External Layer: Bootstrap CSS 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" data-location="external" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" data-location="external" crossorigin="anonymous">
-
+-->
     <!-- 2. Internal Layer: Bootstrap CSS -->
     <link rel="stylesheet" href="http://editor.test/assets/css/all.css" data-location="internal" crossorigin="anonymous">
     
@@ -113,7 +117,7 @@ const inputHTML = `
                 Export Test (Bootstrap)
               </h2>
               
-              <p class="card-text text-muted mb-4">
+              <p class="card-text text-muted mb-4 class-1 class-2 class-3">
                 Este template usa <strong>Bootstrap 5</strong> para validar a extração de CSS por camadas:
               </p>
 
@@ -131,7 +135,7 @@ const inputHTML = `
                     <i class="fas fa-file-code text-primary me-2"></i>
                     <strong>Internal</strong>
                   </div>
-                  <span class="badge bg-primary layer-tag">.custom-card styles</span>
+                  <span class="badge bg-primary layer-tag" id="meu-id">.custom-card styles</span>
                 </div>
 
                 <div class="list-group-item d-flex justify-content-between align-items-center">

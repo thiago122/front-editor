@@ -68,8 +68,6 @@ export const useStyleStore = defineStore('style', () => {
   async function refreshCssAst(doc, locations = ['internal', 'external']) {
     if (!doc) return
 
-    console.log('[StyleStore] Refreshing CSS AST...')
-
     // 1. Build raw parser AST (css-tree)
     const rawParserAst = await CssAstService.buildMasterAst(doc, locations)
     cssParserAst.value = markRaw(rawParserAst)
