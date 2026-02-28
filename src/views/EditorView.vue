@@ -80,10 +80,10 @@ const inputHTML = `
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <!-- 1. External Layer: Bootstrap CSS 
+    <!-- 1. External Layer: Bootstrap CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" data-location="external" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" data-location="external" crossorigin="anonymous">
--->
+
     <!-- 2. Internal Layer: Bootstrap CSS -->
     <link rel="stylesheet" href="http://editor.test/assets/css/all.css" data-location="internal" crossorigin="anonymous">
     
@@ -103,6 +103,13 @@ const inputHTML = `
         padding: 0.2rem 0.5rem;
         border-radius: 4px;
       }
+    </style>
+
+    <style data-location="on_page">
+      body {
+        font-family: 'Roboto', sans-serif;
+      }
+      
     </style>
 
   </head>

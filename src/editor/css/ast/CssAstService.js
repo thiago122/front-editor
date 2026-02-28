@@ -1,6 +1,6 @@
 import { parse, generate } from 'css-tree'
-import { CssLoader } from './CssLoader.js'
-import { CssInjector } from './CssInjector.js'
+import { CssLoader } from '../loader/CssLoader.js'
+import { CssInjector } from '../loader/CssInjector.js'
 import { CssAstBuilder } from './CssAstBuilder.js'
 
 /**

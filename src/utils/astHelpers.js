@@ -4,15 +4,25 @@
  */
 
 /**
- * Safely appends data to various list types (AST lists, arrays, etc)
- * Handles different list implementations from css-tree library
- * @param {Object|Array} list - The list to append to
- * @param {*} data - Data to append
- * @param {boolean} prepend - If true, prepend instead of append
+ * Safely appends (or inserts at a given index) data into various list types.
+ * Handles both css-tree List and standard Array.
+ *
+ * @param {Object|Array} list    - The list to insert into
+ * @param {*}            data    - Data to insert
+ * @param {boolean}      prepend - If true and no index, prepend instead of append
+ * @param {number}       index   - If >= 0, insert at this position (arrays only;
+ *                                 css-tree Lists fall back to append)
  */
-export function safeAppend(list, data, prepend = false) {
+export function safeAppend(list, data, prepend = false, index = -1) {
   if (!list) return
   try {
+    if (Array.isArray(list)) {
+      if (index >= 0) list.splice(index, 0, data)
+      else if (prepend) list.unshift(data)
+      else list.push(data)
+      return
+    }
+
     // css-tree List type with createItem
     if (list.prepend && list.append) {
       if (prepend) list.prepend(list.createItem(data))
@@ -20,16 +30,12 @@ export function safeAppend(list, data, prepend = false) {
       return
     }
 
-    // css-tree List type with Data methods
+    // css-tree List with Data methods
     if (list.prependData && list.appendData) {
       if (prepend) list.prependData(data)
       else list.appendData(data)
     } else if (list.insertData) {
       list.insertData(data)
-    } else if (Array.isArray(list)) {
-      // Standard array
-      if (prepend) list.unshift(data)
-      else list.push(data)
     } else {
       console.warn('Unknown list type in safeAppend:', list)
     }
@@ -37,6 +43,7 @@ export function safeAppend(list, data, prepend = false) {
     console.error('Error in safeAppend:', e)
   }
 }
+
 
 /**
  * Safely removes a node from a css-tree list or plain array.
@@ -128,6 +135,29 @@ export function findAndRemoveFromLogicTree(nodes, targetId) {
   }
   return false
 }
+
+/**
+ * Removes a node from the logic tree by ID and returns it.
+ * Unlike findAndRemoveFromLogicTree, the node is NOT discarded —
+ * it can be re-inserted elsewhere (e.g. for move operations).
+ * @param {Array} nodes - Array of logic tree nodes
+ * @param {string} targetId - The ID of the node to extract
+ * @returns {Object|null} The extracted node, or null if not found
+ */
+export function extractFromLogicTree(nodes, targetId) {
+  for (let i = 0; i < nodes.length; i++) {
+    if (nodes[i].id === targetId) {
+      const [node] = nodes.splice(i, 1)
+      return node
+    }
+    if (nodes[i].children) {
+      const found = extractFromLogicTree(nodes[i].children, targetId)
+      if (found) return found
+    }
+  }
+  return null
+}
+
 
 /**
  * Marks declarations as `overridden` based on CSS specificity and !important.

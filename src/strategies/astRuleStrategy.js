@@ -12,7 +12,7 @@
 import { toRaw } from 'vue'
 import { safeAppend, safeRemove } from '@/utils/astHelpers'
 import { focusLastProperty } from '@/utils/focusHelpers'
-import { CssAstService } from '@/composables/CssAstService'
+import { CssAstService } from '@/editor/css/ast/CssAstService'
 import { validateStrategy } from './CssRuleStrategy'
 
 /**

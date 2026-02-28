@@ -1,91 +1,138 @@
-import { ref, markRaw } from 'vue'
+import { ref, markRaw, toRaw } from 'vue'
 import { defineStore } from 'pinia'
-import { CssAstService } from '@/composables/CssAstService'
-import { CssLogicTreeService } from '@/composables/CssLogicTreeService'
+import { CssAstService } from '@/editor/css/ast/CssAstService'
+import { CssLogicTreeService } from '@/editor/css/tree/CssLogicTreeService'
+import { calculateOverrides, findCssNode } from '@/utils/astHelpers'
+
+// ─── Internal helper ──────────────────────────────────────────────────────────
+
+function buildInspectorRule(selectorNode) {
+  const declarations = []
+  selectorNode.children?.forEach(d => {
+    if (d.type !== 'declaration') return
+    const propName = d.label.toLowerCase()
+    const isDisabled = propName.startsWith('--disabled-')
+    declarations.push({
+      id: d.id,
+      prop: isDisabled ? propName.replace('--disabled-', '') : propName,
+      value: d.value,
+      important: d.metadata?.astNode?.important || false,
+      disabled: isDisabled,
+      overridden: false,
+      astNode: d.metadata?.astNode,
+    })
+  })
+  return {
+    uid: selectorNode.id,
+    selector: selectorNode.label,
+    declarations,
+    origin: selectorNode.metadata?.origin,
+    sourceName: selectorNode.metadata?.sourceName,
+    specificity: selectorNode.metadata?.specificity || [0, 0, 0, 0],
+    context: [],
+    active: true,
+    loc: selectorNode.metadata?.line || '?',
+    astNode: selectorNode.metadata?.astNode,
+  }
+}
+
+// ─── Store ────────────────────────────────────────────────────────────────────
 
 export const useStyleStore = defineStore('style', () => {
 
-  // ============================================
-  // STATE
-  // ============================================
+  // ── State ──────────────────────────────────────────────────────────────────
 
-  // cssParserAst: raw css-tree object (LOW-LEVEL — do not use in UI)
-  const cssParserAst = ref(null)
-
-  // cssLogicTree: our high-level hierarchical tree (HIGH-LEVEL — use in UI)
+  /** Logic Tree — single source of truth. Watch `astMutationKey` for changes. */
   const cssLogicTree = ref(null)
 
-  /**
-   * selectedRuleId: the ID of the currently selected CSS rule.
-   *
-   * Single source of truth for rule selection — shared between the Inspector
-   * and the Explorer. Selecting a rule in either panel reflects in the other.
-   *
-   * - Inspector reads it to know which rule to display/edit.
-   * - Explorer reads it to know which tree node to highlight.
-   * - Components call selectRule() to change it.
-   *
-   * Distinct from tree expansion (toggledNodes in CssExplorer): expanding a
-   * node in the Explorer does NOT select it, just like clicking "+" in Windows
-   * Explorer expands a folder without opening it.
-   */
+  /** ID of the selected CSS rule. Shared between Inspector and Explorer. */
   const selectedRuleId = ref(null)
 
-  /**
-   * astMutationKey is a lightweight reactivity trigger for the Logic Tree.
-   *
-   * Because cssLogicTree is stored as markRaw (to avoid Vue making it deeply
-   * reactive — which would be very expensive for large ASTs), Vue cannot
-   * detect mutations inside it automatically. So whenever we mutate the tree
-   * (add/remove/update nodes), we manually call notifyAstMutation() to
-   * increment this counter. Components that need to react to tree changes
-   * should watch astMutationKey instead of cssLogicTree directly.
-   */
+  /** Increment this after any Logic Tree mutation to trigger Vue reactivity. */
   const astMutationKey = ref(0)
 
+  /** CSS rule groups shown in the Inspector. Updated by updateInspectorRules(). */
+  const ruleGroups = ref([])
 
-  // ============================================
-  // ACTIONS
-  // ============================================
+  // ── Actions ────────────────────────────────────────────────────────────────
 
-  function notifyAstMutation() {
+  function notifyTreeMutation() {
     astMutationKey.value++
   }
 
-  /**
-   * Select a CSS rule — updates the Inspector and the Explorer simultaneously.
-   * @param {string|null} id - Logic Tree node ID of the rule to select
-   */
+  /** Select a rule — syncs Inspector and Explorer simultaneously. */
   function selectRule(id) {
     selectedRuleId.value = id
   }
 
   /**
-   * Full pipeline: Load CSS → Build cssParserAst → Build cssLogicTree
-   * @param {Document} doc - Target document
-   * @param {string[]} locations - Locations to load
+   * Sync the Logic Tree to the DOM and notify Vue.
+   * Call after every CssLogicTreeService mutation.
+   * @param {Document} doc - The target document (usually iframe.contentDocument)
    */
-  async function refreshCssAst(doc, locations = ['internal', 'external']) {
-    if (!doc) return
-
-    // 1. Build raw parser AST (css-tree)
-    const rawParserAst = await CssAstService.buildMasterAst(doc, locations)
-    cssParserAst.value = markRaw(rawParserAst)
-
-    // 2. Transform into Logic Tree (our high-level structure)
-    const logicTree = CssLogicTreeService.buildLogicTree(rawParserAst)
-    cssLogicTree.value = markRaw(logicTree)
-
-    notifyAstMutation()
+  function applyMutation(doc) {
+    CssLogicTreeService.syncToDOM(cssLogicTree.value, doc)
+    notifyTreeMutation()
   }
 
+  /**
+   * Parse CSS from the document and rebuild the Logic Tree from scratch.
+   * Only call on init or when stylesheet structure changes.
+   * For edits, use applyMutation() instead.
+   */
+  async function rebuildLogicTree(doc, locations = ['internal', 'external']) {
+    if (!doc) return
+    const masterAst = await CssAstService.buildMasterAst(doc, locations)
+    cssLogicTree.value = markRaw(CssLogicTreeService.buildLogicTree(masterAst))
+    notifyTreeMutation()
+  }
+
+  /**
+   * Recalculate which CSS rules to show in the Inspector.
+   * Called by InspectorPanel whenever the selected element, tree, or viewport changes.
+   *
+   * @param {HTMLElement|null} element
+   * @param {{width: number, height: number}} viewport - Iframe dimensions in px
+   * @param {string|null} ruleId - currently selected rule ID
+   */
+  function updateInspectorRules(element, viewport, ruleId) {
+    const logicTree = toRaw(cssLogicTree.value)
+
+    // Explorer mode: only when NO element is selected and user clicked a rule in the CSS Explorer.
+    // When an element IS selected, we always use the matched rules — even if selectedRuleId is set.
+    if (!element && ruleId) {
+      const node = findCssNode(logicTree, ruleId)
+      if (node && node.type === 'selector') {
+        ruleGroups.value = [{ isTarget: true, tagName: 'Selected Rule', rules: [buildInspectorRule(node)] }]
+        return
+      }
+    }
+
+    // Element mode
+    if (!element || !logicTree) {
+      ruleGroups.value = []
+      return
+    }
+
+    const groups = CssLogicTreeService.getMatchedRules(element, logicTree, toRaw(viewport), {})
+    calculateOverrides(groups)
+    ruleGroups.value = groups
+
+    const target = groups.find(g => g.isTarget)
+    selectRule(target?.rules[0]?.uid ?? null)
+  }
+
+  // ── Exports ────────────────────────────────────────────────────────────────
+
   return {
-    cssParserAst,
     cssLogicTree,
     selectedRuleId,
     astMutationKey,
-    refreshCssAst,
+    ruleGroups,
+    notifyTreeMutation,
     selectRule,
-    notifyAstMutation,
+    applyMutation,
+    rebuildLogicTree,
+    updateInspectorRules,
   }
 })

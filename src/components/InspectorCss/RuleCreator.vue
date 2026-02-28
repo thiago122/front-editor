@@ -1,14 +1,14 @@
 <template>
   <div class="p-2 border-b border-gray-300">
-    <label class="text-red-500 text-[12px] cursor-pointer mb-1" @click="showForm = !showForm">Selector +</label>
+    <label class="text-[12px] font-semibold text-gray-600 cursor-pointer mb-1" @click="showForm = !showForm">Selector +</label>
     <div v-if="showForm">
       <div class="flex items-center mb-2">
-        <input 
-          v-model="customSelector" 
-          @keydown.enter="createRule" 
+        <input
+          v-model="customSelector"
+          @keydown.enter="createRule"
           type="text"
           placeholder="Ex: .meu-card:hover"
-          class="bg-white border border-[#d1d1d1] px-1 py-0.5 text-[11px] outline-none focus:border-blue-500 block w-full" 
+          class="bg-white border border-[#d1d1d1] px-1 py-0.5 text-[11px] outline-none focus:border-blue-500 block w-full"
         />
       </div>
       <div class="flex items-center mb-2 gap-2">
@@ -31,28 +31,21 @@
 </template>
 
 <script setup>
-import { ref, watch, computed, toRaw, nextTick } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
 import { useStyleStore } from '@/stores/StyleStore'
-import { CssLogicTreeService } from '@/composables/CssLogicTreeService'
+import { createRule as createCssRule } from '@/editor/css/actions/cssRuleActions'
 
-const props = defineProps({ initialSelector: { type: String, default: '' } })
-
-
-const emit = defineEmits(['rule-added', 'cancel'])
-
-const store = useEditorStore()
+const editorStore = useEditorStore()
 const styleStore = useStyleStore()
-
-const activeDoc = computed(() => store.selectedElement?.ownerDocument || document)
-const selectedElement = computed(() => store.selectedElement)
 
 const customSelector = ref('')
 const selectedSource = ref(null)
 const showForm = ref(false)
 
-watch(() => props?.initialSelector, val => { if (val) customSelector.value = val }, { immediate: true })
+const selectedElement = computed(() => editorStore.selectedElement)
 
+// Available sources: all non-external files in the Logic Tree
 const availableSources = computed(() => {
   if (!styleStore.cssLogicTree) return [{ origin: 'on_page', name: 'style' }]
   const sources = [{ origin: 'on_page', name: 'style' }]
@@ -79,11 +72,11 @@ watch(availableSources, sources => {
 }, { immediate: true })
 
 /**
- * Applies simple selectors (.class, #id) to the selected element.
- * Ignores complex selectors (descendant, pseudo-classes, etc.).
+ * Apply simple selectors (.class, #id) to the selected element automatically.
+ * Ignores complex selectors (descendant, pseudo-classes, etc.)
  */
 function applyRuleToElement(selector) {
-  if (!selectedElement.value || !store.selectedNodeId || !store.manipulation) return
+  if (!selectedElement.value || !editorStore.selectedNodeId || !editorStore.manipulation) return
 
   const clean = selector
     .replace(/:hover|:active|:focus|:visited|:focus-within|:focus-visible|:target/g, '')
@@ -99,19 +92,17 @@ function applyRuleToElement(selector) {
   if (classes.length > 0) {
     const current = selectedElement.value.className.split(' ').filter(c => c.trim())
     const merged = [...new Set([...current, ...classes])].join(' ')
-    store.manipulation.setAttribute(store.selectedNodeId, 'class', merged)
+    editorStore.manipulation.setAttribute(editorStore.selectedNodeId, 'class', merged)
   }
   if (id) {
-    store.manipulation.setAttribute(store.selectedNodeId, 'id', id)
+    editorStore.manipulation.setAttribute(editorStore.selectedNodeId, 'id', id)
   }
 }
 
 function createRule() {
-  const selectorInput = customSelector.value.trim()
-
   if (!selectedElement.value || !styleStore.cssLogicTree) return
 
-  const selector = selectorInput ||
+  const selector = customSelector.value.trim() ||
     selectedElement.value.tagName.toLowerCase() +
     (selectedElement.value.id ? '#' + selectedElement.value.id : '')
 
@@ -121,17 +112,14 @@ function createRule() {
   }
 
   const origin = selectedSource.value?.origin || 'on_page'
-  const sourceName = selectedSource.value?.name || (origin === 'on_page' ? 'style' : 'styles.css')
+  const sourceName = selectedSource.value?.name || 'style'
 
-  const newLogicNode = CssLogicTreeService.addRule(toRaw(styleStore.cssLogicTree), selector, origin, sourceName)
+  // createCssRule handles applyMutation + selectRule internally
+  const newNode = createCssRule(selector, origin, sourceName)
 
-  if (newLogicNode) {
-    CssLogicTreeService.syncToDOM(styleStore.cssLogicTree, activeDoc.value)
-    styleStore.refreshCssAst(activeDoc.value)
-    styleStore.selectRule(newLogicNode.id)
+  if (newNode) {
     customSelector.value = ''
     applyRuleToElement(selector)
-    nextTick(() => emit('rule-added', newLogicNode))
   }
 }
 </script>

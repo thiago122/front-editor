@@ -2,7 +2,7 @@
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
 import { useStyleStore } from '@/stores/StyleStore'
-import { CssLogicTreeService } from '@/composables/CssLogicTreeService'
+import { CssLogicTreeService } from '@/editor/css/tree/CssLogicTreeService'
 import CssTreeItem from './CssTreeItem.vue'
 
 const styleStore = useStyleStore()
@@ -97,12 +97,12 @@ const addNewRule = async () => {
     }
   }
 
-  const newLogicNode = CssLogicTreeService.addRule(styleStore.cssLogicTree, selector, targetOrigin, targetSource)
+  const newLogicNode = CssLogicTreeService.createRule(styleStore.cssLogicTree, selector, targetOrigin, targetSource)
 
   if (newLogicNode) {
     const doc = document.querySelector('iframe')?.contentDocument
     CssLogicTreeService.syncToDOM(styleStore.cssLogicTree, doc)
-    await styleStore.refreshCssAst(doc)
+    styleStore.notifyTreeMutation()
     styleStore.selectRule(newLogicNode.id)
   } else {
     alert('Invalid selector or failed to create rule')
@@ -111,7 +111,7 @@ const addNewRule = async () => {
 
 const refresh = async () => {
   const doc = document.querySelector('iframe')?.contentDocument
-  await styleStore.refreshCssAst(doc)
+  await styleStore.rebuildLogicTree(doc)
 }
 
 // ============================================

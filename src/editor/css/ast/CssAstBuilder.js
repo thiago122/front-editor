@@ -158,7 +158,7 @@ export class CssAstBuilder {
         node.origin = origin
         node.sourceName = sourceName
         node._nodeId = nextId()
-        node.readonly = isReadOnly  // ✅ Mark as read-only
+        node.readonly = isReadOnly
       }
     })
 
@@ -169,7 +169,7 @@ export class CssAstBuilder {
         node.origin = origin
         node.sourceName = sourceName
         node._nodeId = nextId()
-        node.readonly = isReadOnly  // ✅ Mark as read-only
+        node.readonly = isReadOnly
       }
     })
   }

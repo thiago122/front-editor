@@ -1,7 +1,7 @@
 import { parse, walk, generate } from 'css-tree'
-import { generateId } from '../utils/ids.js'
-import { normalizePropertyName } from './cssUtils.js'
-import { SPECIFICITY_INLINE } from './cssConstants.js'
+import { generateId } from '../../../utils/ids.js'
+import { normalizePropertyName } from '../shared/cssUtils.js'
+import { SPECIFICITY_INLINE } from '../shared/cssConstants.js'
 
 /**
  * InlineStyleParser Class

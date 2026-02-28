@@ -1,6 +1,6 @@
 <template>
   <div class="mb-4 last:mb-0">
-    <div 
+    <div
       class="flex items-center gap-2 px-3 py-1.5 bg-gray-50 text-gray-500 text-[10px] border-y border-gray-100 sticky top-0 z-[1] cursor-pointer"
       @click="isExpanded = !isExpanded">
       <svg class="w-2.5 h-2.5 transition-transform duration-200"
@@ -14,9 +14,8 @@
 
     <div v-show="isExpanded" class="space-y-4 px-3 pt-3">
       <div v-for="(rule, i) in group.rules" :key="rule.uid || i">
-        <CssRule 
-          :ref="(el) => inspector.setRuleRef(el, rule)"
-          :rule="rule" 
+        <CssRule
+          :rule="rule"
           :editable="false"
         />
       </div>
@@ -25,18 +24,19 @@
 </template>
 
 <script setup>
-import { ref, watch, inject } from 'vue'
+import { ref, watch } from 'vue'
+import { useStyleStore } from '@/stores/StyleStore'
 import CssRule from './CssRule.vue'
 
 const props = defineProps({
   group: { type: Object, required: true },
-  activeRuleId: { type: String, default: null },
 })
 
-const inspector = inject('inspector')
+const styleStore = useStyleStore()
 const isExpanded = ref(false)
 
-watch(() => props.activeRuleId, (newId) => {
+// Auto-expand when the active rule belongs to this group
+watch(() => styleStore.selectedRuleId, (newId) => {
   if (newId && props.group.rules.some(r => r.uid === newId)) {
     isExpanded.value = true
   }

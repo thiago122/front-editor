@@ -105,7 +105,7 @@ export const useEditorStore = defineStore('editor', () => {
       // Initialize CSS AST for the new iframe
       newIframe.addEventListener('load', async () => {
         // Refresh CSS AST (loads CSS internally)
-        await styleStore.refreshCssAst(getIframeDoc(), ['internal', 'external'])
+        await styleStore.rebuildLogicTree(getIframeDoc(), ['internal', 'external'])
       })
     }
   })
