@@ -2,6 +2,8 @@ import { toRaw } from 'vue'
 import { CssAstService } from '../ast/CssAstService.js'
 import { safeAppend, safeRemove } from '@/utils/astHelpers'
 import { findCssNode } from './_logicTreeHelpers.js'
+import { generateId } from '@/utils/ids.js'
+import { generate } from 'css-tree'
 
 /**
  * CssDeclarationService
@@ -33,11 +35,26 @@ export class CssDeclarationService {
       return false
     }
 
-    const declStr    = (prop && val) ? `${prop}: ${val}` : 'property: value'
+    const declStr     = (prop && val) ? `${prop}: ${val}` : 'property: value'
     const newDeclNode = CssAstService.createNode(declStr, 'declaration')
     if (!newDeclNode) return false
 
+    // 1. Adiciona ao AST css-tree
     safeAppend(toRaw(rule.astNode.block).children, newDeclNode, false)
+
+    // 2. Cria o nó correspondente na Logic Tree para que syncToDOM não perca o nó novo
+    if (rule.logicNode) {
+      const logicDecl = {
+        id:       generateId(),
+        type:     'declaration',
+        label:    newDeclNode.property,
+        value:    generate(newDeclNode.value),
+        metadata: { astNode: newDeclNode },
+        children: [],
+      }
+      rule.logicNode.children.push(logicDecl)
+    }
+
     return true
   }
 
@@ -61,8 +78,15 @@ export class CssDeclarationService {
     if (field === 'prop') {
       const wasDisabled = node.property.startsWith('--disabled-')
       node.property = wasDisabled ? '--disabled-' + newValue : newValue
+      // Sincroniza o nó da Logic Tree (usado por _extractDeclarations para reconstruir o inspector)
+      if (decl.logicNode) decl.logicNode.label = wasDisabled ? '--disabled-' + newValue : newValue
     } else if (field === 'value') {
-      node.value = { type: 'Raw', value: newValue }
+      const isImportant = /\s*!important\s*$/i.test(newValue)
+      const cleanValue  = newValue.replace(/\s*!important\s*$/i, '').trim()
+      node.value    = { type: 'Raw', value: cleanValue }
+      node.important = isImportant
+      // Sincroniza o nó da Logic Tree
+      if (decl.logicNode) decl.logicNode.value = cleanValue
     }
     return true
   }
@@ -107,8 +131,14 @@ export class CssDeclarationService {
     const node = toRaw(decl.astNode)
     if (decl.disabled) {
       if (!node.property.startsWith('--disabled-')) node.property = '--disabled-' + node.property
+      // Sincroniza o nó da Logic Tree para que _extractDeclarations leia disabled: true na próxima reconstrução
+      if (decl.logicNode && !decl.logicNode.label.startsWith('--disabled-')) {
+        decl.logicNode.label = '--disabled-' + decl.logicNode.label
+      }
     } else {
       node.property = node.property.replace('--disabled-', '')
+      // Sincroniza o nó da Logic Tree (remove o prefixo)
+      if (decl.logicNode) decl.logicNode.label = decl.logicNode.label.replace('--disabled-', '')
     }
     return true
   }

@@ -4,7 +4,7 @@
 import { computed, ref } from 'vue'
 import ASTNode from './ASTNode.vue'
 
-const showTextNodes = ref(true)
+const showTextNodes = ref(false)
 const showCommentNodes = ref(false)
 
 const props = defineProps({

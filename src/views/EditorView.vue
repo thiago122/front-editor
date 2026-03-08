@@ -57,20 +57,48 @@ const handleHtmlLoad = (newHtml) => {
   input.value = newHtml
 }
 
-const loadExternalTestPage = async () =>{
+const TEST_PAGE_URL = 'http://editor.test/assets/teste-2'
+
+/**
+ * Resolve URLs relativas nos atributos href/src do HTML para absolutas.
+ * URLs já absolutas passam sem alteração (new URL() garante isso).
+ */
+function resolveRelativeUrls(html, pageUrl) {
+  // new URL('.', pageUrl) extrai o diretório corretamente:
+  // 'http://editor.test/assets/teste-2/index.html' → 'http://editor.test/assets/teste-2/'
+  // 'http://editor.test/assets/teste-2/'           → 'http://editor.test/assets/teste-2/'
+  const baseUrl = new URL('.', pageUrl).href
+
+  const resolve = (match, pre, url, post) => {
+    try {
+      return pre + new URL(url, baseUrl).href + post
+    } catch {
+      return match // se a URL for inválida, deixa como está
+    }
+  }
+
+  return html
+    .replace(/(<link\b[^>]*\shref=")([^"]+)(")/gi, resolve)
+    .replace(/(<script\b[^>]*\ssrc=")([^"]+)(")/gi, resolve)
+    .replace(/(<img\b[^>]*\ssrc=")([^"]+)(")/gi, resolve)
+}
+
+const loadExternalTestPage = async () => {
   try {
-    const response = await fetch('http://editor.test/assets/site-teste.html')
+    const response = await fetch(TEST_PAGE_URL)
     if (response.ok) {
       const html = await response.text()
-      input.value = html
+      // response.url é a URL final após redirects do servidor
+      input.value = resolveRelativeUrls(html, response.url)
     }
   } catch (e) {
     console.error('Failed to fetch remote HTML:', e)
-  }  
+  }
 }
 
+
 onMounted(async () => {
-  // await loadExternalTestPage()
+  await loadExternalTestPage()
 })
 
 const inputHTML = `
@@ -85,7 +113,7 @@ const inputHTML = `
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" data-location="external" crossorigin="anonymous">
 
     <!-- 2. Internal Layer: Bootstrap CSS -->
-    <link rel="stylesheet" href="http://editor.test/assets/css/all.css" data-location="internal" crossorigin="anonymous">
+    <link rel="stylesheet" href="http://editor.test/assets/teste-1/css/all.css" data-location="internal" crossorigin="anonymous">
     
     <!-- 3. On Page Layer: Styles specific to this page -->
     <style data-location="on_page">

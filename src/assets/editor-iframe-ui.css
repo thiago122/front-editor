@@ -1,6 +1,6 @@
 [data-selected] {
-  outline: 1px solid #3b82f6;
-  background-color: rgba(59, 130, 246, 0.1);
+  /* outline: 1px solid #3b82f6;
+  background-color: rgba(59, 130, 246, 0.1); */
 }
 
 #__ast-overlay__ {
@@ -12,7 +12,7 @@
   box-sizing: border-box;
 }
 
-[data-node-id].is-hovered-sync {
+[data-node-id][data-editor-hovered] {
   background-color: rgba(255, 165, 0, 0.2) !important; /* Laranja suave */
   outline: 1px solid orange !important;
 }

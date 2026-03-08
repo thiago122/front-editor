@@ -23,7 +23,7 @@
       <template v-if="activeTab === 'Styles'">
         <AttributeManager />
 
-        <SelectorNavigation />
+        <PseudoStateTabBar />
 
         <div class="overflow-y-auto no-scrollbar">
           <TargetRuleGroup v-if="targetGroup" :group="targetGroup" />
@@ -51,7 +51,7 @@ import ComputedTab from './ComputedTab/ComputedTab.vue'
 import RuleCreator from '@/components/InspectorCss/RuleCreator.vue'
 import InspectorEmptyState from '@/components/InspectorCss/InspectorEmptyState.vue'
 import AttributeManager from '@/components/InspectorCss/StylesTab/AttributeManager.vue'
-import SelectorNavigation from '@/components/InspectorCss/StylesTab/SelectorNavigation.vue'
+import PseudoStateTabBar from '@/components/InspectorCss/StylesTab/PseudoStateTabBar.vue'
 import TargetRuleGroup from '@/components/InspectorCss/StylesTab/TargetRuleGroup.vue'
 import InheritedRuleGroup from '@/components/InspectorCss/StylesTab/InheritedRuleGroup.vue'
 
@@ -82,6 +82,7 @@ function refresh() {
 watch(() => editorStore.selectedElement, refresh)
 watch(() => styleStore.astMutationKey, refresh)
 watch(() => editorStore.viewport, refresh)
+watch(() => styleStore.activePseudoTab, refresh)
 
 // ── MutationObserver ──────────────────────────────────────────────────────────
 // Watches class/id/style on the selected element directly in the DOM.

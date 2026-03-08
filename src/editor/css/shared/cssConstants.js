@@ -29,8 +29,28 @@ export const CSS_LOCATIONS = ['external', 'internal', 'on_page', 'inline']
  * Common CSS pseudo-class states
  */
 export const PSEUDO_STATES = [
-  'hover', 'active', 'focus', 'visited', 
-  'focus-within', 'focus-visible', 'target'
+  'hover', 'active', 'focus', 'visited',
+  'focus-within', 'focus-visible', 'target', 'checked'
+]
+
+/**
+ * Tabs shown in the Inspector Styles panel for pseudo-state / pseudo-element editing
+ */
+export const PSEUDO_STATE_TABS = [
+  { id: 'default',       label: 'Default',        group: 'default', state: null,            pseudoEl: null            },
+  // States
+  { id: 'hover',         label: ':hover',          group: 'state',   state: 'hover',         pseudoEl: null            },
+  { id: 'focus',         label: ':focus',          group: 'state',   state: 'focus',         pseudoEl: null            },
+  { id: 'focus-visible', label: ':focus-visible',  group: 'state',   state: 'focus-visible', pseudoEl: null            },
+  { id: 'focus-within',  label: ':focus-within',   group: 'state',   state: 'focus-within',  pseudoEl: null            },
+  { id: 'active',        label: ':active',         group: 'state',   state: 'active',        pseudoEl: null            },
+  { id: 'checked',       label: ':checked',        group: 'state',   state: 'checked',       pseudoEl: null            },
+  { id: 'visited',       label: ':visited',        group: 'state',   state: 'visited',       pseudoEl: null            },
+  { id: 'target',        label: ':target',         group: 'state',   state: 'target',        pseudoEl: null            },
+  // Pseudo-elements
+  { id: 'before',        label: '::before',        group: 'element', state: null,            pseudoEl: '::before'      },
+  { id: 'after',         label: '::after',         group: 'element', state: null,            pseudoEl: '::after'       },
+  { id: 'placeholder',   label: '::placeholder',   group: 'element', state: null,            pseudoEl: '::placeholder' },
 ]
 
 /**
@@ -45,7 +65,8 @@ export const STATE_REGEXES = PSEUDO_STATES.reduce((acc, state) => {
  * Regex for matching CSS pseudo-elements
  */
 export const PSEUDO_ELEMENT_REGEX =
-  /::?(after|before|first-letter|first-line|selection|backdrop|marker|placeholder|file-selector-button)/g
+  // All :: pseudo-elements (incl. vendor prefix and functional ones with parentheses)
+  /::[\w-]+(?:\([^)]*\))?|::?(before|after|first-letter|first-line)/g
 
 // ============================================================================
 // CSS PROPERTIES

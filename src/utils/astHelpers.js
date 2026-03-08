@@ -172,29 +172,41 @@ export function extractFromLogicTree(nodes, targetId) {
  * @param {Array} groups - Ordered array of rule groups (target first, then inherited)
  */
 export function calculateOverrides(groups) {
-  // Map<prop, { ruleUid, important }>
-  const winners = new Map()
   const flatRules = groups.flatMap(g => g.rules)
 
+  // Regras de pseudo-elementos (::selection, ::before, etc.) aplicam-se a contextos
+  // completamente diferentes de regras normais — nunca competem entre si.
+  // Ex: ::selection { color } NÃO sobrescreve body { color }.
+  // Agrupamos por pseudoSubSection e calculamos os vencedores independentemente.
+  const rulesByContext = new Map()
   flatRules.forEach(rule => {
-    if (!rule.active) return
-    rule.declarations.forEach(decl => {
-      if (decl.disabled) return
-      const curr = winners.get(decl.prop)
-      if (!curr) {
-        // First occurrence always wins initially
-        winners.set(decl.prop, { ruleUid: rule.uid, important: decl.important })
-      } else if (decl.important && !curr.important) {
-        // !important beats non-important regardless of specificity
-        winners.set(decl.prop, { ruleUid: rule.uid, important: true })
-      }
-      // Two !important: first one (higher specificity) already won — do nothing.
-      // Non-important vs non-important: first one already won — do nothing.
-    })
+    const ctx = rule.pseudoSubSection ?? '__default__'
+    if (!rulesByContext.has(ctx)) rulesByContext.set(ctx, [])
+    rulesByContext.get(ctx).push(rule)
   })
 
-  groups.forEach(group => {
-    group.rules.forEach(rule => {
+  rulesByContext.forEach(rules => {
+    // Map<prop, { ruleUid, important }>
+    const winners = new Map()
+
+    rules.forEach(rule => {
+      if (!rule.active) return
+      rule.declarations.forEach(decl => {
+        if (decl.disabled) return
+        const curr = winners.get(decl.prop)
+        if (!curr) {
+          // Primeira ocorrência sempre vence inicialmente
+          winners.set(decl.prop, { ruleUid: rule.uid, important: decl.important })
+        } else if (decl.important && !curr.important) {
+          // !important bate qualquer não-important independente de especificidade
+          winners.set(decl.prop, { ruleUid: rule.uid, important: true })
+        }
+        // Dois !important: o primeiro (maior especificidade) já venceu.
+        // Dois não-important: o primeiro já venceu.
+      })
+    })
+
+    rules.forEach(rule => {
       rule.declarations.forEach(decl => {
         const winner = winners.get(decl.prop)
         decl.overridden = !!winner && winner.ruleUid !== rule.uid

@@ -54,10 +54,18 @@ export const useStyleStore = defineStore('style', () => {
   /** CSS rule groups shown in the Inspector. Updated by updateInspectorRules(). */
   const ruleGroups = ref([])
 
+  /** Active pseudo-state/element tab in the Inspector Styles panel. */
+  const activePseudoTab = ref({ id: 'default', state: null, pseudoEl: null })
+
   // ── Actions ────────────────────────────────────────────────────────────────
 
   function notifyTreeMutation() {
     astMutationKey.value++
+  }
+
+  /** Switch the active pseudo-state/element tab and refresh inspector rules. */
+  function setActivePseudoTab(tab) {
+    activePseudoTab.value = tab
   }
 
   /** Select a rule — syncs Inspector and Explorer simultaneously. */
@@ -114,7 +122,9 @@ export const useStyleStore = defineStore('style', () => {
       return
     }
 
-    const groups = CssLogicTreeService.getMatchedRules(element, logicTree, toRaw(viewport), {})
+    const tab    = toRaw(activePseudoTab.value)
+    const forceStatus = tab.state ? { [tab.state]: true } : {}
+    const groups = CssLogicTreeService.getMatchedRules(element, logicTree, toRaw(viewport), forceStatus, tab)
     calculateOverrides(groups)
     ruleGroups.value = groups
 
@@ -129,8 +139,10 @@ export const useStyleStore = defineStore('style', () => {
     selectedRuleId,
     astMutationKey,
     ruleGroups,
+    activePseudoTab,
     notifyTreeMutation,
     selectRule,
+    setActivePseudoTab,
     applyMutation,
     rebuildLogicTree,
     updateInspectorRules,

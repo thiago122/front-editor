@@ -1,5 +1,7 @@
 <template>
   <div ref="ruleEl" class="rule">
+    
+    <div class="rule__selector-line">origin:{{ originLabel }}</div>
 
     <!-- Context (At-Rules) -->
     <div v-if="rule.context && rule.context.length" class="rule__context">
@@ -17,7 +19,9 @@
     <!-- Rule Header -->
     <div class="rule__header">
       <div class="rule__header-left">
-        <div class="rule__selector-line">
+        
+        
+
           <span
             :class="['rule__selector', !editable ? 'rule__selector--readonly' : '']"
             :contenteditable="rule.selector !== 'element.style' && editable"
@@ -25,14 +29,10 @@
             @keydown.enter.prevent="(e) => e.target.blur()"
           >{{ rule.selector }}</span>
           <span class="rule__brace">{</span>
-        </div>
+        
       </div>
 
-      <!-- Origin Badge -->
-      <div class="rule__origin">
-        <span class="rule__origin-label">origin:</span>
-        <span>{{ originLabel }}</span>
-      </div>
+      
     </div>
 
     <!-- Property List -->
@@ -79,8 +79,10 @@ const ruleEl = ref(null)
 
 const originLabel = computed(() => {
   if (props.rule.selector === 'element.style') return 'inline'
-  const map = { external: 'external', on_page: 'header', inline: 'inline' }
-  return map[props.rule.origin] ?? (props.rule.sourceName || 'style')
+  if (props.rule.origin === 'on_page') return 'on-page'
+  if (props.rule.origin === 'inline')  return 'inline'
+  // external / internal → exibe o nome real do arquivo (ex: assets_teste-2__styles.css)
+  return props.rule.sourceName || props.rule.origin || 'style'
 })
 
 function onAddDeclaration() {
@@ -112,37 +114,34 @@ function onAddDeclaration() {
   flex-wrap: wrap;
   align-items: center;
   gap: 4px;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 .rule__at-rule {
   display: flex;
   align-items: center;
   gap: 4px;
   background: #f3f4f6;
-  padding: 2px 6px;
+  padding: 3px 6px;
   border-radius: 4px;
-  color: #4b5563;
-  font-size: 9px;
+  color: #000000;
+  font-size: 11px;
+  border: 1px solid #eb61f5;
+  line-height: 1;
 }
 .rule__at-rule-name { opacity: 0.6; }
 .rule__at-rule-prelude { cursor: text; }
 .rule__at-rule-prelude:hover { text-decoration: underline; }
 
 /* Header */
-.rule__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-}
+.rule__header {}
 .rule__header-left {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
+    display: flex;
+    align-items: center;
 }
 .rule__selector-line {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+    font-size: 11px;
+    margin-bottom: 4px;
+    color: blue;
 }
 .rule__selector {
   font-size: 13px;
@@ -171,7 +170,6 @@ function onAddDeclaration() {
 
 /* Declarations */
 .rule__declarations {
-  padding-left: 7px;
   line-height: 1;
   position: relative;
 }

@@ -178,7 +178,7 @@ function onSelect() {
   font-family: 'JetBrains Mono', 'Fira Code', 'Roboto Mono', 'Source Code Pro', monospace;
 }
 
-[data-ast-node-id].is-hovered-sync:not(.bg-blue-100) {
+[data-ast-node-id][data-editor-hovered]:not(.bg-blue-100) {
   background-color: #fff7ed !important; /* bg-orange-50 */
   border-radius: 2px;
 }

@@ -19,6 +19,7 @@ export class CssExplorerTreeBuilder {
   build() {
     const rootNodes = []
     const locationMap = {}
+    this._sourceOrderCounter = 0   // contador global: cada Rule recebe um índice único
 
     this.createLocationNodes(locationMap, rootNodes)
     this.processRules(locationMap)
@@ -99,9 +100,12 @@ export class CssExplorerTreeBuilder {
       label: '',
       value: '',
       metadata: {
-        origin: node.origin,
-        line: node.loc?.start?.line,
-        astNode: node
+        origin:      node.origin,
+        sourceName:  node.sourceName,  // necessário para o inspector exibir o nome do arquivo
+        line:        node.loc?.start?.line,
+        // Índice global de aparição no CSS (para desempate de especificidade igual, como no Chrome)
+        sourceOrder: node.type === 'Rule' ? this._sourceOrderCounter++ : undefined,
+        astNode:     node
       },
       children: []
     }

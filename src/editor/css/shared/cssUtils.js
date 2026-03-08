@@ -25,7 +25,15 @@ export function cleanSelectorForMatching(selector) {
   
   // Remove pseudo-elements
   cleaned = cleaned.replace(PSEUDO_ELEMENT_REGEX, '')
-  
+
+  // Remove empty parts left behind after stripping pseudo-elements
+  // e.g. "*, ::before, ::after" → "*, , " → "*"
+  cleaned = cleaned
+    .split(',')
+    .map(s => s.trim())
+    .filter(s => s.length > 0)
+    .join(', ')
+
   return cleaned
 }
 

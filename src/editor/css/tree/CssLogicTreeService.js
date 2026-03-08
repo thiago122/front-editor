@@ -62,8 +62,8 @@ export class CssLogicTreeService {
    * @param {Object}  forceStatus - Pseudo-states forced on (e.g. { hover: true })
    * @returns {Array} Rule groups
    */
-  static getMatchedRules(el, logicTree, viewport, forceStatus = {}) {
-    return new CssInspectorMatcher(el, logicTree, viewport, forceStatus).find()
+  static getMatchedRules(el, logicTree, viewport, forceStatus = {}, pseudoTab = null) {
+    return new CssInspectorMatcher(el, logicTree, viewport, forceStatus, pseudoTab).find()
   }
 
   /**

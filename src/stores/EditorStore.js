@@ -117,25 +117,21 @@ export const useEditorStore = defineStore('editor', () => {
   }
   function handleHover({ id, source }) {
     hoveredNodeId.value = id
-    
-    // 1. Limpa o hover anterior em ambos os documentos
-    const oldHovered = document.querySelectorAll('.is-hovered-sync')
-    const iframeDoc = getIframeDoc()
-    const oldIframeHovered = iframeDoc?.querySelectorAll('.is-hovered-sync')
 
-    ;[...oldHovered, ...(oldIframeHovered || [])].forEach((el) => {
-      el.classList.remove('is-hovered-sync')
-    })
+    // 1. Limpa o hover anterior em ambos os documentos
+    const iframeDoc = getIframeDoc()
+    document.querySelectorAll('[data-editor-hovered]').forEach(el => el.removeAttribute('data-editor-hovered'))
+    iframeDoc?.querySelectorAll('[data-editor-hovered]').forEach(el => el.removeAttribute('data-editor-hovered'))
 
     if (!id) return
 
     // 2. Aplica o novo hover no Explorer (DOM Principal)
     const astEl = document.querySelector(`[data-ast-node-id="${id}"]`)
-    if (astEl) astEl.classList.add('is-hovered-sync')
+    if (astEl) astEl.setAttribute('data-editor-hovered', '')
 
     // 3. Aplica o novo hover no Preview (Iframe)
     const previewEl = iframeDoc?.querySelector(`[data-node-id="${id}"]`)
-    if (previewEl) previewEl.classList.add('is-hovered-sync')
+    if (previewEl) previewEl.setAttribute('data-editor-hovered', '')
   }
 
   function undo() {

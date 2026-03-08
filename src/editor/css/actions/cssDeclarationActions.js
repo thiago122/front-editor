@@ -8,10 +8,12 @@
  *   import { toggleDeclaration, updateDeclaration, deleteDeclaration } from '@/editor/css/actions/cssDeclarationActions'
  */
 
+import { toRaw } from 'vue'
 import { useStyleStore } from '@/stores/StyleStore'
 import { useEditorStore } from '@/stores/EditorStore'
 import { CssLogicTreeService } from '@/editor/css/tree/CssLogicTreeService'
 import { createInlineStyleStrategy } from '@/strategies/inlineStyleStrategy'
+import { findAndRemoveFromLogicTree } from '@/utils/astHelpers'
 
 const INLINE = 'element.style'
 
@@ -62,7 +64,17 @@ export function deleteDeclaration(rule, decl) {
   if (inline) {
     inline.deleteProperty(decl)
   } else {
+    // 1. Remove from the AST (keeps the css-tree linked-list in sync for DOM output)
     CssLogicTreeService.deleteDeclaration(rule, decl)
+
+    // 2. Remove from the Logic Tree so updateInspectorRules doesn't re-build
+    //    this declaration on the next refresh.
+    const logicTree = toRaw(useStyleStore().cssLogicTree)
+    if (decl.id && logicTree) {
+      findAndRemoveFromLogicTree(logicTree, decl.id)
+    }
+
+    // 3. Sync AST → DOM and trigger Vue refresh
     useStyleStore().applyMutation(useEditorStore().getIframeDoc())
   }
 }

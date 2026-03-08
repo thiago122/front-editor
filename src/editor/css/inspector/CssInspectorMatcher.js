@@ -1,9 +1,13 @@
 import { InlineStyleParser } from './InlineStyleParser.js'
-import { PSEUDO_STATES, STATE_REGEXES } from '../shared/cssConstants.js'
-import { cleanSelectorForMatching, isInheritedProperty, normalizePropertyName } from '../shared/cssUtils.js'
+import { PSEUDO_STATES, STATE_REGEXES, PSEUDO_STATE_TABS } from '../shared/cssConstants.js'
+import { cleanSelectorForMatching, isInheritedProperty, normalizePropertyName, getSpecificity } from '../shared/cssUtils.js'
 
 // Tags where DOM upward traversal stops — elements above these are non-styleable context
 const DOM_TRAVERSAL_STOP_TAGS = ['BODY', 'HTML']
+
+// Pseudo-elements that have a dedicated tab in the Inspector.
+// Others (::backdrop, ::selection, etc.) fall through to the Default tab as sub-sections.
+const TAB_PSEUDO_ELEMENTS = new Set(['::before', '::after', '::placeholder'])
 
 /**
  * CssInspectorMatcher
@@ -29,11 +33,12 @@ export class CssInspectorMatcher {
    * @param {object}  viewport    - Current viewport dimensions { width, height }
    * @param {object}  forceStatus - Pseudo-states forced on (e.g. { hover: true })
    */
-  constructor(targetEl, logicTree, viewport, forceStatus = {}) {
+  constructor(targetEl, logicTree, viewport, forceStatus = {}, pseudoTab = null) {
     this.targetEl    = targetEl
     this.logicTree   = logicTree
     this.viewport    = viewport
     this.forceStatus = forceStatus
+    this.pseudoTab   = pseudoTab ?? { id: 'default', state: null, pseudoEl: null }
 
     // The window of the document that contains the element (usually the iframe's window)
     this.targetWin = targetEl?.ownerDocument?.defaultView || window
@@ -78,9 +83,12 @@ export class CssInspectorMatcher {
     const isTarget = currentEl === this.targetEl
     const rules = []
 
-    // a) Inline styles — highest specificity, always shown for the target
-    const inlineRule = this._inlineParser.parse(currentEl, isTarget)
-    if (inlineRule) rules.push(inlineRule)
+    // a) Inline styles — only shown in Default tab (no state, no pseudo-element)
+    const isDefaultContext = this.pseudoTab.state === null && this.pseudoTab.pseudoEl === null
+    if (isDefaultContext) {
+      const inlineRule = this._inlineParser.parse(currentEl, isTarget)
+      if (inlineRule) rules.push(inlineRule)
+    }
 
     // b) Stylesheet rules that match this element
     const stylesheetRules = this._findMatchingRules(currentEl, isTarget)
@@ -110,8 +118,10 @@ export class CssInspectorMatcher {
     const ctx = {
       currentEl,
       isTarget,
-      matched:     [],
-      atRuleStack: [],  // e.g. [{ name:'media', prelude:'(min-width:768px)', … }]
+      matched:       [],
+      atRuleStack:   [],
+      activeState:   this.pseudoTab.state,
+      activePseudoEl:this.pseudoTab.pseudoEl,
     }
 
     this._traverseLogicNodes(this.logicTree, ctx)
@@ -184,25 +194,128 @@ export class CssInspectorMatcher {
     const selector = node.label
     if (!selector) return
 
-    // Does this selector actually match the element?
+    // 1. Pseudo-state gate: block dynamic states unless forced on
+    if (!this._pseudoStateAllowed(selector, ctx)) return
+
+    // 2. Tab context gate: only include rules that belong to the active tab
+    if (!this._selectorMatchesTabContext(selector, ctx)) return
+
+    // 3. DOM match: does the selector actually match this element?
     if (!this._selectorMatchesElement(selector, ctx)) return
 
     // Extract declarations (skip non-inherited props for ancestor elements)
     const declarations = this._extractDeclarations(node, ctx)
-    if (declarations.length === 0) return
+    // Regras vazias são puladas para ancestors (herdar nada não faz sentido),
+    // mas são MOSTRADAS para o elemento-alvo (ex: rule recém criada, ainda sem declarações).
+    if (declarations.length === 0 && !ctx.isTarget) return
+
+    // For comma-separated selector lists, use specificity of the matched part
+    const specificity = selector.includes(',')
+      ? this._getMatchedPartSpecificity(selector, ctx)
+      : (node.metadata?.specificity || [0, 0, 0, 0])
+
+    // Compute pseudoSubSection:
+    // - State tabs (e.g. :hover): tag the pseudo-el part (e.g. :hover::before → sub-section)
+    // - Default tab, pure pseudo-el (cleanSelector empty): tag it (e.g. ::backdrop {})
+    // - Default tab, real element selector (cleanSelector not empty): no sub-section
+    const cleanSel = cleanSelectorForMatching(selector)
+    const pseudoSubSection = ctx.activeState !== null
+      ? this._extractPseudoElement(selector)
+      : !cleanSel ? this._extractPseudoElement(selector) : null
 
     ctx.matched.push({
-      uid:         node.id,
+      uid:            node.id,
       selector,
       declarations,
-      specificity: node.metadata?.specificity || [0, 0, 0, 0],
-      context:     [...ctx.atRuleStack],          // snapshot of current at-rule stack
-      active:      this._isAtRuleStackActive(ctx), // is every wrapping @media/@supports active?
-      origin:      node.metadata?.origin,
-      sourceName:  node.metadata?.sourceName,
-      loc:         node.metadata?.line || '?',
-      astNode:     node.metadata?.astNode,
+      specificity,
+      pseudoSubSection,
+      context:        [...ctx.atRuleStack],
+      active:         this._isAtRuleStackActive(ctx),
+      origin:         node.metadata?.origin,
+      sourceName:     node.metadata?.sourceName,
+      loc:            node.metadata?.line || '?',
+      sourceOrder:    node.metadata?.sourceOrder ?? 0,
+      astNode:        node.metadata?.astNode,
+      logicNode:      node,
     })
+  }
+
+  /**
+   * Gate 2: Does this selector belong to the currently active pseudo tab?
+   *
+   * Tab       | activeState | activePseudoEl | Allowed selectors
+   * ----------|-------------|----------------|--------------------------------------------
+   * Default   | null        | null           | no dynamic state, any pseudo-el (via *)
+   * :hover    | 'hover'     | null           | must contain :hover (any pseudo-el → sub-section)
+   * ::before  | null        | '::before'     | must contain ::before, no dynamic state
+   * @private
+   */
+  _selectorMatchesTabContext(selector, ctx) {
+    const { activeState, activePseudoEl } = ctx
+    const hasDynamicState = PSEUDO_STATES.some(s => STATE_REGEXES[s].test(selector))
+
+    if (activeState === null && activePseudoEl === null) {
+      // Default tab: no dynamic states allowed.
+      if (hasDynamicState) return false
+
+      // If the cleaned selector is empty (pure pseudo-element, e.g. "::before {}")
+      // only show it when it does NOT have a dedicated tab (::backdrop, ::selection, etc.)
+      const cleanSel = cleanSelectorForMatching(selector)
+      if (!cleanSel) {
+        const pseudoEl = this._extractPseudoElement(selector)
+        return pseudoEl !== null && !TAB_PSEUDO_ELEMENTS.has(pseudoEl)
+      }
+
+      // Has a real element part — always show in Default.
+      return true
+    }
+
+    if (activeState !== null) {
+      // State tab: only include selectors that explicitly carry that state.
+      return STATE_REGEXES[activeState]?.test(selector) ?? false
+    }
+
+    if (activePseudoEl !== null) {
+      // Pseudo-element tab: only selectors targeting that pseudo-el, without a dynamic state.
+      return selector.includes(activePseudoEl) && !hasDynamicState
+    }
+
+    return false
+  }
+
+  /**
+   * Extract the pseudo-element from a selector, if any.
+   * Used to tag rules for sub-section rendering in state tabs.
+   * @private
+   */
+  _extractPseudoElement(selector) {
+    // Dedicated tabs take priority
+    if (/::before/.test(selector))       return '::before'
+    if (/::after/.test(selector))        return '::after'
+    if (/::placeholder/.test(selector))  return '::placeholder'
+
+    // Generic: extract the first double-colon pseudo-element found
+    // Covers ::backdrop, ::selection, ::-webkit-scrollbar, ::scroll-marker, etc.
+    const match = selector.match(/::([\w-]+)/)
+    return match ? `::${match[1]}` : null
+  }
+
+  /**
+   * For a comma-separated selector list, find the part that matched the
+   * current element and return its specificity.
+   * This mirrors the CSS cascade: specificity comes from the part that matched.
+   * @private
+   */
+  _getMatchedPartSpecificity(selector, ctx) {
+    const parts = selector.split(',')
+    for (const part of parts) {
+      const cleaned = cleanSelectorForMatching(part.trim())
+      if (!cleaned) continue
+      try {
+        if (ctx.currentEl.matches(cleaned)) return getSpecificity(part.trim())
+      } catch { continue }
+    }
+    return [0, 0, 0, 0]
   }
 
   /**
@@ -215,16 +328,25 @@ export class CssInspectorMatcher {
    * @private
    */
   _selectorMatchesElement(selector, ctx) {
-    // Skip pseudo-state rules unless the state is forced on in the Inspector
-    if (!this._pseudoStateAllowed(selector, ctx)) return false
-
-    // Strip pseudo-states / pseudo-elements so element.matches() works correctly
     const cleanSelector = cleanSelectorForMatching(selector)
+
+    if (!cleanSelector) {
+      // Pure pseudo-element selector (no real element part after cleaning)
+      if (ctx.activePseudoEl !== null) {
+        // In a dedicated pseudo-el tab — match for the target
+        return ctx.isTarget
+      }
+      if (ctx.activePseudoEl === null && ctx.activeState === null) {
+        // Default tab — only for pseudo-els WITHOUT a dedicated tab (::backdrop etc.)
+        const pseudoEl = this._extractPseudoElement(selector)
+        return ctx.isTarget && pseudoEl !== null && !TAB_PSEUDO_ELEMENTS.has(pseudoEl)
+      }
+      return false
+    }
 
     try {
       return ctx.currentEl.matches(cleanSelector)
     } catch {
-      // Invalid selector (e.g. custom pseudo-class) — safe to ignore
       return false
     }
   }
@@ -280,6 +402,7 @@ export class CssInspectorMatcher {
         // Use the declaration's own line first, fall back to the rule's line
         loc:       d.metadata?.line ?? node.metadata?.line ?? '?',
         astNode:   d.metadata?.astNode,
+        logicNode: d,
         disabled,
       })
     })
@@ -398,7 +521,43 @@ export class CssInspectorMatcher {
           return b.specificity[i] - a.specificity[i]
         }
       }
-      return 0
+      // Desempate: declarada mais tarde no CSS → aparece acima (comportamento do Chrome)
+      return (b.sourceOrder ?? 0) - (a.sourceOrder ?? 0)
     })
+  }
+
+  // ─── Available tabs scan ────────────────────────────────────────────────────
+
+  /**
+   * Walk the Logic Tree and return the Set of pseudo-tab IDs that have at
+   * least one matching rule for the target element.
+   * Used by PseudoStateTabBar to dim tabs with no content.
+   */
+  computeAvailableTabs() {
+    const available = new Set(['default'])
+
+    const check = (nodes) => {
+      for (const node of nodes) {
+        if (node.type === 'selector') {
+          const sel = node.label
+          const base = cleanSelectorForMatching(sel)
+
+          let domMatches = false
+          try { domMatches = !base || this.targetEl.matches(base) } catch {}
+
+          if (domMatches) {
+            for (const tab of PSEUDO_STATE_TABS) {
+              if (tab.id === 'default') continue
+              if (tab.state  && STATE_REGEXES[tab.state]?.test(sel)) available.add(tab.id)
+              if (tab.pseudoEl && sel.includes(tab.pseudoEl))         available.add(tab.id)
+            }
+          }
+        }
+        if (node.children) check(node.children)
+      }
+    }
+
+    check(this.logicTree ?? [])
+    return available
   }
 }

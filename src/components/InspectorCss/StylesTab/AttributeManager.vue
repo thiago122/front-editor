@@ -53,18 +53,57 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
+import { useStyleStore } from '@/stores/StyleStore'
 
-const props = defineProps({
-  attributes: { type: Array, default: () => [] },
-  activeRuleId: { type: String, default: null },
-})
-
-const store = useEditorStore()
+const editorStore = useEditorStore()
+const styleStore  = useStyleStore()
 const showAttributtes = ref(false)
 
+/** Classes e IDs do elemento selecionado, com flag `isUsed` */
+const attributes = computed(() => {
+  const el = editorStore.selectedElement
+  if (!el) return []
+
+  const result = []
+
+  // Verifica se alguma rule existente usa esse seletor
+  const allRules = styleStore.ruleGroups.flatMap(g => g.rules)
+
+  // Classes
+  const classes = (el.className?.trim() || '').split(/\s+/).filter(Boolean)
+  classes.forEach(cls => {
+    const selector = '.' + cls
+    const matchingRule = allRules.find(r => r.selector === selector || r.selector.includes(selector))
+    result.push({
+      type:  'class',
+      label: selector,
+      value: cls,
+      isUsed: !!matchingRule,
+      uid:   matchingRule?.uid ?? null,
+    })
+  })
+
+  // ID
+  if (el.id) {
+    const selector = '#' + el.id
+    const matchingRule = allRules.find(r => r.selector === selector || r.selector.includes(selector))
+    result.push({
+      type:  'id',
+      label: selector,
+      value: el.id,
+      isUsed: !!matchingRule,
+      uid:   matchingRule?.uid ?? null,
+    })
+  }
+
+  return result
+})
+
+const activeRuleId = computed(() => styleStore.selectedRuleId)
+
 const cssBasicAttributes = computed(() => ({
-  classes: props.attributes.filter(r => r.type === 'class'),
-  id: props.attributes.filter(r => r.type === 'id'),
+  classes: attributes.value.filter(r => r.type === 'class'),
+  id:      attributes.value.filter(r => r.type === 'id'),
 }))
 
 /**
@@ -72,16 +111,16 @@ const cssBasicAttributes = computed(() => ({
  * MutationObserver in InspectorPanel will fire updateRules automatically.
  */
 function removeAttr(attr) {
-  if (!store.selectedNodeId || !store.manipulation || !store.selectedElement) return
+  if (!editorStore.selectedNodeId || !editorStore.manipulation || !editorStore.selectedElement) return
 
   if (attr.type === 'class') {
-    const newClasses = store.selectedElement.className
+    const newClasses = editorStore.selectedElement.className
       .split(' ')
       .filter(c => c.trim() && c !== attr.value)
       .join(' ')
-    store.manipulation.setAttribute(store.selectedNodeId, 'class', newClasses)
+    editorStore.manipulation.setAttribute(editorStore.selectedNodeId, 'class', newClasses)
   } else if (attr.type === 'id') {
-    store.manipulation.setAttribute(store.selectedNodeId, 'id', '')
+    editorStore.manipulation.setAttribute(editorStore.selectedNodeId, 'id', '')
   }
 }
 </script>

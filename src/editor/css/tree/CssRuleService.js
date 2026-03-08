@@ -41,7 +41,14 @@ export class CssRuleService {
       id: generateId(),
       type: 'selector',
       label: selector,
-      metadata: { origin, sourceName, astNode, specificity: getSpecificity(selector) },
+      metadata: {
+        origin,
+        sourceName,
+        astNode,
+        specificity: getSpecificity(selector),
+        // Nova rule fica no final do arquivo → sourceOrder maior que todas as existentes
+        sourceOrder: CssRuleService._nextSourceOrder(logicTree),
+      },
       children: [],
     }
 
@@ -220,5 +227,23 @@ export class CssRuleService {
     }
     search(logicTree)
     return results
+  }
+
+  /**
+   * Encontra o maior sourceOrder existente na Logic Tree e retorna max + 1.
+   * Garante que regras criadas no editor sempre apareçam como as mais recentes
+   * no inspector (override correto para mesma especificidade).
+   * @private
+   */
+  static _nextSourceOrder(logicTree) {
+    let max = 0
+    const search = (nodes) => {
+      for (const n of nodes) {
+        if (n.metadata?.sourceOrder != null) max = Math.max(max, n.metadata.sourceOrder)
+        if (n.children) search(n.children)
+      }
+    }
+    search(logicTree)
+    return max + 1
   }
 }
