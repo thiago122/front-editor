@@ -7,14 +7,18 @@
 
 
 ## 🟡 Média prioridade
-- [ ] @container named — containers nomeados são parcialmente implementados
-- [ ] :has(), :is(), :where(), :not() complexo — seletores modernos podem falhar no element.matches() em algumas situações
-- [ ] @keyframes / @font-face — regras fora do fluxo normal de selectors
-- [ ] @layer — cascade layers afetam a orden de prioridade; não há suport
-- [ ] **Color picker** — ao clicar no swatch de cor abre um picker inline (como no Chrome)
-- [ ] **CSS Variables — valor resolvido** — mostrar o valor final de `var(--color-primary)` ao passar o mouse
 - [ ] **Autocomplete de propriedades** — sugestões ao digitar o nome da propriedade
 - [ ] **Autocomplete de valores** — sugestões contextuais ao digitar o valor (`display: f` → `flex`, `flow-root`…)
+- [ ] @container named — containers nomeados são parcialmente implementados
+- [ ] @keyframes / @font-face — regras fora do fluxo normal de selectors
+- [ ] @layer — cascade layers afetam a orden de prioridade; não há suport
+
+
+
+- [ ] :has(), :is(), :where(), :not() complexo — seletores modernos podem falhar no element.matches() em algumas situações
+- [ ] **Color picker** — ao clicar no swatch de cor abre um picker inline (como no Chrome)
+- [ ] **CSS Variables — valor resolvido** — mostrar o valor final de `var(--color-primary)` ao passar o mouse
+
 - [ ] **User agent stylesheet** — exibir as regras padrão do browser (como o Chrome faz em cinza)
 - [ ] **Filtro/busca de propriedades** — campo de busca no painel para filtrar declarations por nome
 - [ ] **Link para a fonte** — mostrar `styles.css:42` como link clicável levando à linha no arquivo

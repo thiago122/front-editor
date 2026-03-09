@@ -75,7 +75,13 @@ export const useEditorStore = defineStore('editor', () => {
     inspectMode.value = true
   }
 
+  // Desativa o modo inspect — mantém o elemento selecionado (comportamento Chrome)
   function deactivate() {
+    inspectMode.value = false
+  }
+
+  // Limpa tudo (ex: ao trocar de página ou fechar o inspetor)
+  function clearSelection() {
     inspectMode.value = false
     selectedElement.value = null
     selectedNodeId.value = null
@@ -83,11 +89,8 @@ export const useEditorStore = defineStore('editor', () => {
 
   function selectParent() {
     const parent = manipulation.value.getParent(selectedNodeId.value)
-
     if (parent) {
-      // Atualiza a seleção para o ID do pai
-      selectedNodeId.value = parent.nodeId
-      console.log('Subiu para o pai:', parent.tag)
+      selectNode(parent.nodeId) // selectNode atualiza nodeId + selectedElement juntos
     }
   }
 
@@ -165,6 +168,7 @@ export const useEditorStore = defineStore('editor', () => {
     getParent,
     activate,
     deactivate,
+    clearSelection,
     undo,
     redo,
   }

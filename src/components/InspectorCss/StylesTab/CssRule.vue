@@ -1,27 +1,49 @@
 <template>
   <div ref="ruleEl" class="rule">
-    
-    <div class="rule__selector-line">origin:{{ originLabel }}</div>
 
-    <!-- Context (At-Rules) -->
-    <div v-if="rule.context && rule.context.length" class="rule__context">
-      <div v-for="(ctx, idx) in rule.context" :key="idx" class="rule__at-rule">
-        <span class="rule__at-rule-name">@{{ ctx.name }}</span>
-        <span
-          class="rule__at-rule-prelude"
-          contenteditable="true"
-          @blur="(e) => updateAtRule(ctx, e.target.innerText)"
-          @keydown.enter.prevent="(e) => e.target.blur()"
-        >{{ ctx.prelude }}</span>
+    <!-- At-Rules hierárquicas: cada nível indenta o próximo -->
+    <template v-if="rule.context && rule.context.length">
+      <div
+        v-for="(ctx, idx) in rule.context"
+        :key="idx"
+      >
+        <!-- @layer: exibe como badge de categoria -->
+        <template v-if="ctx.name === 'layer'">
+          <div 
+            class="rule__layer-badge-container" 
+            :style="{ paddingLeft: (idx + 1) * INDENT_SIZE + 'px' }"
+          >
+            <span class="rule__layer-badge">@layer</span>
+            <span class="rule__layer-name">{{ ctx.prelude }}</span>
+          </div>
+        </template>
+        <!-- @media, @container, @supports, etc. -->
+        <template v-else>
+          <div 
+            :class="['rule__at-rule-row', ctx.name === 'layer' ? 'rule__at-rule-row--layer' : '']" 
+            :style="{ paddingLeft: (idx + 1) * INDENT_SIZE + 'px' }"
+          >
+            <span class="rule__at-rule-name">@{{ ctx.name }}</span>
+              <span
+              class="rule__at-rule-prelude"
+              :contenteditable="editable ? 'true' : 'false'"
+              @blur="(e) => updateAtRule(ctx, e.target.innerText)"
+              @keydown.enter.prevent="(e) => e.target.blur()"
+            >{{ ctx.prelude }}</span>
+          </div>
+          
+        </template>
       </div>
-    </div>
+    </template>
 
-    <!-- Rule Header -->
-    <div class="rule__header">
-      <div class="rule__header-left">
-        
-        
-
+    <!-- Bloco do selector: indentado pela quantidade de at-rules -->
+    <div
+      class="rule__body"
+      :style="{ paddingLeft: indentPx }"
+    >
+      <!-- Rule Header -->
+      <div class="rule__header">
+        <div class="rule__header-left">
           <span
             :class="['rule__selector', !editable ? 'rule__selector--readonly' : '']"
             :contenteditable="rule.selector !== 'element.style' && editable"
@@ -29,24 +51,22 @@
             @keydown.enter.prevent="(e) => e.target.blur()"
           >{{ rule.selector }}</span>
           <span class="rule__brace">{</span>
-        
+        </div>
       </div>
 
-      
-    </div>
+      <!-- Property List -->
+      <div class="rule__declarations">
+        <CssDeclaration
+          v-for="decl in rule.declarations"
+          :key="decl.id || decl.prop"
+          :rule="rule"
+          :decl="decl"
+          :editable="editable"
+        />
+      </div>
 
-    <!-- Property List -->
-    <div class="rule__declarations">
-      <CssDeclaration
-        v-for="decl in rule.declarations"
-        :key="decl.id || decl.prop"
-        :rule="rule"
-        :decl="decl"
-        :editable="editable"
-      />
+      <div class="rule__brace-close">}</div>
     </div>
-
-    <div class="rule__brace-close">}</div>
 
     <!-- Rule Action Footer -->
     <div v-if="editable" class="rule__footer">
@@ -60,6 +80,7 @@
         Prop
       </button>
     </div>
+
   </div>
 </template>
 
@@ -75,6 +96,8 @@ const props = defineProps({
   editable: { type: Boolean, default: false },
 })
 
+const INDENT_SIZE = 7
+const indentPx = computed(() => ((props.rule.context?.length ?? 0) + 1) * INDENT_SIZE + 'px')
 const ruleEl = ref(null)
 
 const originLabel = computed(() => {
@@ -108,40 +131,53 @@ function onAddDeclaration() {
   background: #fff;
 }
 
-/* At-Rule context */
-.rule__context {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-  margin-bottom: 4px;
-}
-.rule__at-rule {
+/* At-Rules hierárquicas */
+.rule__at-rule-row {
   display: flex;
   align-items: center;
   gap: 4px;
-  background: #f3f4f6;
-  padding: 3px 6px;
-  border-radius: 4px;
-  color: #000000;
+  padding: 1px 0;
   font-size: 11px;
-  border: 1px solid #eb61f5;
-  line-height: 1;
+  line-height: 1.4;
+  color: #6b7280;
 }
-.rule__at-rule-name { opacity: 0.6; }
-.rule__at-rule-prelude { cursor: text; }
+.rule__at-rule-name {
+  color: #7c3aed;   /* roxo — mesmo tom do Chrome DevTools */
+  flex-shrink: 0;
+}
+.rule__at-rule-prelude {
+  color: #374151;
+  cursor: text;
+}
 .rule__at-rule-prelude:hover { text-decoration: underline; }
 
-/* Header */
-.rule__header {}
-.rule__header-left {
-    display: flex;
-    align-items: center;
+/* @layer — badge de categoria (estilo diferente dos at-rules condicionais) */
+.rule__layer-badge-container{
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background-color: #e3ecff;
 }
-.rule__selector-line {
-    font-size: 11px;
-    margin-bottom: 4px;
-    color: blue;
+
+.rule__layer-badge {
+  font-size: 10px;
+  font-style: italic;
+  color: #1e3a5f;
+  padding: 1px 4px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+.rule__layer-name {
+  font-size: 10px;
+  color: #1e40af;
+  font-weight: 600;
+}
+
+/* Header */
+.rule__header-left {
+  display: flex;
+  align-items: center;
 }
 .rule__selector {
   font-size: 13px;

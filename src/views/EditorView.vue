@@ -219,14 +219,6 @@ watch(
   { immediate: true },
 )
 
-watch(
-  () => EditorStore.inspectMode,
-  (val) => {
-    // Logic integrated into EditorStore? 
-    // Actually EditorStore.inspectMode IS the state now.
-  },
-)
-
 
 // Viewport sync from Iframe
 watch(
@@ -337,6 +329,9 @@ watch(
             <Append :nodeId="EditorStore.selectedNodeId" html="<ul><li>lista 1</li><li>lista 2</li></ul>">UL</Append>
             <Separator />
             <Append :nodeId="EditorStore.selectedNodeId" html="<ol><li>lista 1</li><li>lista 2</li></ol>">OL</Append>
+            </div>
+            <div>
+              <SelectionControls :nodeId="EditorStore.selectedNodeId" />
             </div>
             <div>
               <Delete :nodeId="EditorStore.selectedNodeId" icon-only custom-class="hover:scale-110" />

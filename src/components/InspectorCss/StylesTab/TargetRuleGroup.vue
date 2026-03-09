@@ -1,10 +1,10 @@
 <template>
-  <div class="p-2 border-b border-gray-300">
+  <div class="px-[4x] border-b border-gray-300">
 
     <!-- Main rules (no pseudo-element) -->
     <div v-for="(rule, i) in mainRules" :key="rule.uid || i">
       <CssRule
-        class="border-b border-[#b1b1b1] pb-[13px] mb-[6px]"
+        class="border-b border-[#b1b1b1]"
         :rule="rule"
         :editable="isEditable(rule)"
       />
@@ -16,7 +16,7 @@
         <div class="pseudo-sub-section__label">{{ pseudoEl }}</div>
         <div v-for="(rule, i) in sectionRules" :key="rule.uid || i">
           <CssRule
-            class="border-b border-[#b1b1b1] pb-[13px] mb-[6px]"
+            class="border-b border-[#b1b1b1]"
             :rule="rule"
             :editable="isEditable(rule)"
           />

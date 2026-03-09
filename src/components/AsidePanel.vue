@@ -8,7 +8,7 @@ const props = defineProps({
   <div
     class="border-r border-gray-300 bg-white w-64 h-full max-h-full bg-surface-elevated flex flex-col"
   >
-    <div class="p-2 border-b border-gray-300 grow-0 shrink-1">
+    <div class="border-b border-gray-300 grow-0 shrink-1">
       <div class="flex items-center gap-2">
         <h2 class="text-sm font-semibold text-text-primary" v-if="title">{{ title }}</h2>
       </div>

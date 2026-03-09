@@ -4,6 +4,8 @@ import { useEditorStore } from '@/stores/EditorStore'
 import { NodeDispatcher } from '@/editor/dispatchers/NodeDispatcher'
 
 import IconSelectParent from '@/components/icons/inconSelectParent.vue'
+import IconChevronUp from '@/components/icons/IconChevronUp.vue'
+import IconChevronDown from '@/components/icons/IconChevronDown.vue'
 
 const store = useEditorStore()
 
@@ -67,16 +69,16 @@ const moveDown = () => {
         :disabled="!canMoveUp"
         class="p-1 hover:bg-white rounded border border-transparent hover:border-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
         title="Move Up"
-      >
-        ↑
-      </button>
-      <button
-        @click="moveDown"
-        :disabled="!canMoveDown"
-        class="p-1 hover:bg-white rounded border border-transparent hover:border-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
-        title="Move Down"
-      >
-        ↓
+        >
+          <IconChevronUp />
+        </button>
+        <button
+          @click="moveDown"
+          :disabled="!canMoveDown"
+          class="p-1 hover:bg-white rounded border border-transparent hover:border-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
+          title="Move Down"
+        >
+          <IconChevronDown />
       </button>
     </div>
   </div>

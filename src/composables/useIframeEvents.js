@@ -1,35 +1,31 @@
+import { watch } from 'vue'
+
 export function useIframeEvents(iframeRef, EditorStore) {
   const getDoc = () => iframeRef.value?.contentDocument
 
-  /**
-   * Limpa o estado de hover
-   */
+  // --- Cursor do iframe ---
+  function setIframeCursor(cursor) {
+    const doc = getDoc()
+    if (!doc) return
+    doc.documentElement.style.cursor = cursor
+    doc.body.style.cursor = cursor
+  }
+
+  // --- Hover ---
   function clearHover() {
-    EditorStore.handleHover({
-      id: null,
-      source: 'preview',
-    })
+    EditorStore.handleHover({ id: null, source: 'preview' })
   }
 
-  /**
-   * Aplica visualmente o atributo de hover no DOM do iframe
-   */
   function applyHover(nodeId) {
-    EditorStore.handleHover({
-      id: nodeId,
-      source: 'preview',
-    })
+    EditorStore.handleHover({ id: nodeId, source: 'preview' })
   }
 
-  /**
-   * Aplica visualmente o atributo de seleção no DOM do iframe
-   */
+  // --- Seleção visual no DOM do iframe ---
   function applySelection(nodeId) {
     const doc = getDoc()
     if (!doc) return
 
     doc.querySelectorAll('[data-selected]').forEach((el) => el.removeAttribute('data-selected'))
-
     if (!nodeId) return
 
     const el = doc.querySelector(`[data-node-id="${nodeId}"]`)
@@ -39,34 +35,58 @@ export function useIframeEvents(iframeRef, EditorStore) {
     }
   }
 
-  /**
-   * Configura os listeners globais do iframe
-   */
-  function setup() {
-    const doc = getDoc()
-    if (!doc) return
+  // --- Handlers (armazenados para poder remover) ---
+  let clickHandler = null
+  let mouseover = null
+  let mouseleave = null
 
-    // Evento de Clique (Seleção)
-    doc.addEventListener('click', (e) => {
+  function attachInspectListeners(doc) {
+    clickHandler = (e) => {
+      if (!EditorStore.inspectMode) return
       e.preventDefault()
+      e.stopPropagation()
+
       const el = e.target.closest('[data-node-id]')
       if (!el) return
 
       EditorStore.selectNode(el.dataset.nodeId, el)
-    })
+      EditorStore.deactivate() // desativa o inspect mode após selecionar (comportamento Chrome)
+    }
 
-    doc.addEventListener('mouseover', (e) => {
-      // Procura o elemento mais próximo que tenha um ID de nó
+    mouseover = (e) => {
+      if (!EditorStore.inspectMode) return
       const target = e.target.closest('[data-node-id]')
-      if (target) {
-        const nodeId = target.getAttribute('data-node-id')
-        applyHover(nodeId)
-      }
-    })
+      if (target) applyHover(target.getAttribute('data-node-id'))
+    }
 
-    // Limpeza quando o mouse sai do iframe
-    doc.addEventListener('mouseleave', clearHover)
+    mouseleave = () => {
+      if (!EditorStore.inspectMode) return
+      clearHover()
+    }
+
+    doc.addEventListener('click', clickHandler, true) // capture: true para interceptar antes dos links
+    doc.addEventListener('mouseover', mouseover)
+    doc.addEventListener('mouseleave', mouseleave)
   }
+
+  function setup() {
+    const doc = getDoc()
+    if (!doc) return
+    attachInspectListeners(doc)
+  }
+
+  // Reage ao inspectMode para mudar cursor e limpar hover ao desativar
+  watch(
+    () => EditorStore.inspectMode,
+    (active) => {
+      if (active) {
+        setIframeCursor('crosshair')
+      } else {
+        setIframeCursor('')
+        clearHover()
+      }
+    },
+  )
 
   return {
     setup,
@@ -74,3 +94,4 @@ export function useIframeEvents(iframeRef, EditorStore) {
     applySelection,
   }
 }
+
