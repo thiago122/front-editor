@@ -57,7 +57,7 @@ export const useEditorStore = defineStore('editor', () => {
 
   function selectNode(nodeId, element = null) {
     selectedNodeId.value = nodeId
-    
+
     if (element) {
       selectedElement.value = markRaw(element)
     } else if (nodeId) {
@@ -67,8 +67,7 @@ export const useEditorStore = defineStore('editor', () => {
     } else {
       selectedElement.value = null
     }
-    
-    inspectMode.value = false
+    // inspectMode não é alterado aqui — quem controla é o usuário via IconInspect
   }
 
   function activate() {

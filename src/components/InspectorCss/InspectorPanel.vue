@@ -77,8 +77,6 @@ function refresh() {
   )
 }
 
-// Note: selectedRuleId is intentionally NOT watched here.
-// updateInspectorRules calls selectRule() internally — watching it would loop.
 watch(() => editorStore.selectedElement, refresh)
 watch(() => styleStore.astMutationKey, refresh)
 watch(() => editorStore.viewport, refresh)

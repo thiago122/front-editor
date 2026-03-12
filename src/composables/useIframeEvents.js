@@ -50,7 +50,7 @@ export function useIframeEvents(iframeRef, EditorStore) {
       if (!el) return
 
       EditorStore.selectNode(el.dataset.nodeId, el)
-      EditorStore.deactivate() // desativa o inspect mode após selecionar (comportamento Chrome)
+      // inspect mode permanece ativo — o usuário desativa manualmente pelo ícone
     }
 
     mouseover = (e) => {

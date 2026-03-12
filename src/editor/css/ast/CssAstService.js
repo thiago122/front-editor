@@ -40,15 +40,36 @@ export class CssAstService {
   }
 
   /**
-   * Parse a CSS string into an AST node
-   * @param {string} css - CSS string to parse
-   * @param {string} context - Parse context ('Rule', 'Declaration', 'SelectorList', etc.)
-   * @returns {Object|null} AST node or null if parsing fails
+   * Parse a CSS string into an AST node.
+   *
+   * Accepts context in any casing — maps to the correct css-tree context name.
+   * css-tree valid contexts: 'rule', 'selector', 'declaration', 'value',
+   *   'atrule', 'atruleprelude', 'mediaquerylist', 'stylesheet', etc.
+   *
+   * @param {string} css     - CSS string to parse
+   * @param {string} context - Parse context (case-insensitive alias supported)
+   * @returns {Object|null}  AST node or null if parsing fails
    */
   static createNode(css, context) {
+    // Explicit alias map: callers may pass PascalCase names → css-tree lowercase
+    const CONTEXT_MAP = {
+      rule:         'rule',
+      Rule:         'rule',
+      selector:     'selector',
+      SelectorList: 'selector',
+      selectorlist: 'selector',
+      declaration:  'declaration',
+      Declaration:  'declaration',
+      value:        'value',
+      Value:        'value',
+      atrule:       'atrule',
+      Atrule:       'atrule',
+      stylesheet:   'stylesheet',
+      StyleSheet:   'stylesheet',
+    }
+    const ctx = CONTEXT_MAP[context] ?? context.toLowerCase()
     try {
-      const normalizedContext = context.toLowerCase()
-      return parse(css, { context: normalizedContext })
+      return parse(css, { context: ctx })
     } catch (e) {
       console.error('[CssAstService] Failed to create node from CSS:', css, 'context:', context, e)
       return null

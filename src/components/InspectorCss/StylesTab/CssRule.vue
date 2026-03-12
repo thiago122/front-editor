@@ -7,6 +7,16 @@
         v-for="(ctx, idx) in rule.context"
         :key="idx"
       >
+
+      <!-- Source file / origin — acima do seletor -->
+      <div>
+        <!-- adicioner o ícone aqui -->
+        <div class="rule__origin">
+          <span class="rule__origin-label">{{ originLabel }}</span>
+        </div>
+      </div>
+
+
         <!-- @layer: exibe como badge de categoria -->
         <template v-if="ctx.name === 'layer'">
           <div 
@@ -41,6 +51,7 @@
       class="rule__body"
       :style="{ paddingLeft: indentPx }"
     >
+
       <!-- Rule Header -->
       <div class="rule__header">
         <div class="rule__header-left">
@@ -175,6 +186,10 @@ function onAddDeclaration() {
 }
 
 /* Header */
+.rule__header {
+  display: flex;
+  align-items: center;
+}
 .rule__header-left {
   display: flex;
   align-items: center;
@@ -194,15 +209,13 @@ function onAddDeclaration() {
 
 /* Origin */
 .rule__origin {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-  padding: 2px 8px;
-  font-size: 11px;
-  letter-spacing: -0.02em;
+  display: block;
+  padding: 2px 8px 0;
+  font-size: 10px;
+  color: #9ca3af;
+  letter-spacing: 0.01em;
 }
-.rule__origin-label { font-weight: 700; }
+.rule__origin-label { font-weight: 600; }
 
 /* Declarations */
 .rule__declarations {

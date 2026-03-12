@@ -57,6 +57,13 @@ export const useStyleStore = defineStore('style', () => {
   /** Active pseudo-state/element tab in the Inspector Styles panel. */
   const activePseudoTab = ref({ id: 'default', state: null, pseudoEl: null })
 
+  /**
+   * 'element'  — inspector tracks the selected DOM element (default)
+   * 'explorer' — inspector tracks the rule selected in the CSS Explorer
+   * Clicking element → resets to 'element'. Clicking rule in Explorer → 'explorer'.
+   */
+  const inspectorSource = ref('element')
+
   // ── Actions ────────────────────────────────────────────────────────────────
 
   function notifyTreeMutation() {
@@ -69,8 +76,13 @@ export const useStyleStore = defineStore('style', () => {
   }
 
   /** Select a rule — syncs Inspector and Explorer simultaneously. */
-  function selectRule(id) {
+  function selectRule(id, source = null) {
     selectedRuleId.value = id
+    if (source) inspectorSource.value = source
+  }
+
+  function setInspectorSource(source) {
+    inspectorSource.value = source
   }
 
   /**
@@ -106,17 +118,17 @@ export const useStyleStore = defineStore('style', () => {
   function updateInspectorRules(element, viewport, ruleId) {
     const logicTree = toRaw(cssLogicTree.value)
 
-    // Explorer mode: only when NO element is selected and user clicked a rule in the CSS Explorer.
-    // When an element IS selected, we always use the matched rules — even if selectedRuleId is set.
-    if (!element && ruleId) {
+    // Explorer mode: mostra a rule do Explorer mesmo que um elemento esteja selecionado.
+    // O usuário clicou explicitamente no Explorer — priorizar essa intenção.
+    if (inspectorSource.value === 'explorer' && ruleId) {
       const node = findCssNode(logicTree, ruleId)
       if (node && node.type === 'selector') {
-        ruleGroups.value = [{ isTarget: true, tagName: 'Selected Rule', rules: [buildInspectorRule(node)] }]
+        ruleGroups.value = [{ isTarget: true, tagName: 'Explorer: ' + node.label, rules: [buildInspectorRule(node)] }]
         return
       }
     }
 
-    // Element mode
+    // Element mode (padrão)
     if (!element || !logicTree) {
       ruleGroups.value = []
       return
@@ -140,8 +152,10 @@ export const useStyleStore = defineStore('style', () => {
     astMutationKey,
     ruleGroups,
     activePseudoTab,
+    inspectorSource,
     notifyTreeMutation,
     selectRule,
+    setInspectorSource,
     setActivePseudoTab,
     applyMutation,
     rebuildLogicTree,

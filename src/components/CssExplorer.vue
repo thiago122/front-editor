@@ -4,9 +4,13 @@ import { useEditorStore } from '@/stores/EditorStore'
 import { useStyleStore } from '@/stores/StyleStore'
 import { CssLogicTreeService } from '@/editor/css/tree/CssLogicTreeService'
 import CssTreeItem from './CssTreeItem.vue'
+import { useCssDragDrop } from '@/composables/useCssDragDrop'
 
 const styleStore = useStyleStore()
 const editorStore = useEditorStore()
+
+const { dragState, dropTarget, onDragStart, onDragOver, onDrop, onDragEnd } = useCssDragDrop()
+
 
 // ============================================
 // LOCAL UI STATE — Tree expansion
@@ -197,7 +201,13 @@ const itemsOffset = computed(() => startIndex.value * ROW_HEIGHT)
                         :key="node.id" 
                         :node="node" 
                         :depth="node.depth" 
+                        :isDragging="dragState?.node?.id === node.id"
+                        :dropPosition="dropTarget?.nodeId === node.id ? dropTarget.position : null"
                         style="height: 22px;"
+                        @dragstart="onDragStart"
+                        @dragover="onDragOver"
+                        @drop="onDrop"
+                        @dragend="onDragEnd"
                     />
                 </div>
             </div>

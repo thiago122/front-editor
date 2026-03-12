@@ -84,7 +84,7 @@ export class CssRuleService {
     const node = findCssNode(logicTree, ruleUid)
     if (!node || node.type !== 'selector') return false
 
-    const newPrelude = CssAstService.createNode(newSelector, 'SelectorList')
+    const newPrelude = CssAstService.createNode(newSelector, 'selector')
     if (!newPrelude) return false
 
     toRaw(node.metadata.astNode).prelude = newPrelude
