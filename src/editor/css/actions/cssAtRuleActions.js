@@ -11,6 +11,7 @@ import { toRaw } from 'vue'
 import { useStyleStore } from '@/stores/StyleStore'
 import { useEditorStore } from '@/stores/EditorStore'
 import { CssLogicTreeService } from '@/editor/css/tree/CssLogicTreeService'
+import { cssHistory } from '@/editor/css/history/CssHistoryManager'
 
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
@@ -23,8 +24,14 @@ import { CssLogicTreeService } from '@/editor/css/tree/CssLogicTreeService'
 export function createAtRule(rule, type) {
   if (!rule.astNode) return null
   const styleStore = useStyleStore()
+  cssHistory.snapshot(styleStore.cssLogicTree)
   const newNode = CssLogicTreeService.createAtRule(toRaw(styleStore.cssLogicTree), rule.uid, type)
-  if (newNode) styleStore.applyMutation(useEditorStore().getIframeDoc())
+  if (newNode) {
+    styleStore.applyMutation(useEditorStore().getIframeDoc())
+    cssHistory.commit(styleStore.cssLogicTree)
+  } else {
+    cssHistory._pending = null
+  }
   return newNode
 }
 
@@ -37,8 +44,14 @@ export function createAtRule(rule, type) {
 export function updateAtRule(contextItem, newCondition) {
   if (!contextItem?.astNode) return false
   const styleStore = useStyleStore()
+  cssHistory.snapshot(styleStore.cssLogicTree)
   const updated = CssLogicTreeService.updateAtRule(contextItem.astNode, newCondition)
-  if (updated) styleStore.applyMutation(useEditorStore().getIframeDoc())
+  if (updated) {
+    styleStore.applyMutation(useEditorStore().getIframeDoc())
+    cssHistory.commit(styleStore.cssLogicTree)
+  } else {
+    cssHistory._pending = null
+  }
   return updated
 }
 
@@ -50,7 +63,13 @@ export function updateAtRule(contextItem, newCondition) {
 export function deleteAtRule(atRuleUid) {
   if (!atRuleUid) return false
   const styleStore = useStyleStore()
+  cssHistory.snapshot(styleStore.cssLogicTree)
   const removed = CssLogicTreeService.deleteAtRule(toRaw(styleStore.cssLogicTree), atRuleUid)
-  if (removed) styleStore.applyMutation(useEditorStore().getIframeDoc())
+  if (removed) {
+    styleStore.applyMutation(useEditorStore().getIframeDoc())
+    cssHistory.commit(styleStore.cssLogicTree)
+  } else {
+    cssHistory._pending = null
+  }
   return removed
 }

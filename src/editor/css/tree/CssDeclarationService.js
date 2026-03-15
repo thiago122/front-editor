@@ -53,6 +53,7 @@ export class CssDeclarationService {
         children: [],
       }
       rule.logicNode.children.push(logicDecl)
+      return logicDecl
     }
 
     return true

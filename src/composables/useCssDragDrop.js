@@ -62,11 +62,23 @@ export function useCssDragDrop() {
 
     event.preventDefault() // permite o drop
 
+    const dragged = dragState.value.node
+    const isContainer = node.type === 'at-rule' || node.type === 'file'
     const rect = event.currentTarget.getBoundingClientRect()
-    const mid = rect.top + rect.height / 2
-    const position = event.clientY < mid ? 'before' : 'after'
+    const relY = event.clientY - rect.top
+    const pct  = relY / rect.height // 0..1
 
-    dropTarget.value = { nodeId: node.id, position }
+    if (isContainer && isValidDropInside(dragged, node)) {
+      // 3 zonas: topo 20% → before | centro 60% → inside | base 20% → after
+      let position
+      if      (pct < 0.2) position = 'before'
+      else if (pct > 0.8) position = 'after'
+      else                position = 'inside'
+      dropTarget.value = { nodeId: node.id, position }
+    } else {
+      const position = pct < 0.5 ? 'before' : 'after'
+      dropTarget.value = { nodeId: node.id, position }
+    }
   }
 
   function onDrop(node) {
@@ -78,44 +90,66 @@ export function useCssDragDrop() {
     const targetId = dropTarget.value.nodeId
     const position = dropTarget.value.position
 
-    // Encontra o pai do nó alvo para inserção
-    const targetParent = findParentNode(logicTree, targetId)
-    if (!targetParent) return
-
-    // Verifica se o tipo do nó arrastado é compatível com o pai alvo
-    if (!isValidDrop(dragged, targetParent)) return
-
-    // Calcula o índice de inserção no pai do target
-    const siblings = targetParent.children
-    const targetIdx = siblings.findIndex(n => n.id === targetId)
-    const insertAt = position === 'before' ? targetIdx : targetIdx + 1
-
-    const targetParentId = targetParent.id
     let moved = false
 
-    if (dragged.type === 'selector') {
-      moved = CssLogicTreeService.moveRule(logicTree, dragged.id, targetParentId, insertAt)
-    } else if (dragged.type === 'at-rule') {
-      moved = CssLogicTreeService.moveAtRule(logicTree, dragged.id, targetParentId, insertAt)
-    } else if (dragged.type === 'declaration') {
-      // Para declarations, precisa do nó pai (selector) tanto do source quanto do target
-      const sourceParent = findParentNode(logicTree, dragged.id)
-      const targetSelectorNode = findParentNode(logicTree, targetId)
-      if (sourceParent && targetSelectorNode) {
-        moved = CssLogicTreeService.moveDeclaration(sourceParent, dragged, targetSelectorNode, insertAt)
+    if (position === 'inside') {
+      // Drop dentro de um container (at-rule vazia ou file):
+      // insere o nó arrastado como último filho do nó alvo.
+      const targetNode = findCssNode(logicTree, targetId)
+      if (!targetNode || !isValidDropInside(dragged, targetNode)) {
+        dragState.value = null
+        dropTarget.value = null
+        return
       }
-    } else if (dragged.type === 'file') {
-      // Reorder de files: manipula diretamente o array do root pai
-      const sourceParent = findParentNode(logicTree, dragged.id)
-      const targetParentFile = findParentNode(logicTree, targetId)
-      if (sourceParent && sourceParent === targetParentFile) {
-        const fromIdx = sourceParent.children.findIndex(n => n.id === dragged.id)
-        if (fromIdx !== -1) {
-          sourceParent.children.splice(fromIdx, 1)
-          const newIdx = sourceParent.children.findIndex(n => n.id === targetId)
-          const finalIdx = position === 'before' ? newIdx : newIdx + 1
-          sourceParent.children.splice(finalIdx, 0, dragged)
-          moved = true
+      const insertAt = targetNode.children?.length ?? 0
+
+      if (dragged.type === 'selector') {
+        moved = CssLogicTreeService.moveRule(logicTree, dragged.id, targetId, insertAt)
+      } else if (dragged.type === 'at-rule') {
+        moved = CssLogicTreeService.moveAtRule(logicTree, dragged.id, targetId, insertAt)
+      }
+    } else {
+      // Drop antes/depois de um nó irmão (comportamento original)
+      const targetParent = findParentNode(logicTree, targetId)
+      if (!targetParent) {
+        dragState.value = null
+        dropTarget.value = null
+        return
+      }
+
+      if (!isValidDrop(dragged, targetParent)) {
+        dragState.value = null
+        dropTarget.value = null
+        return
+      }
+
+      const siblings = targetParent.children
+      const targetIdx = siblings.findIndex(n => n.id === targetId)
+      const insertAt = position === 'before' ? targetIdx : targetIdx + 1
+      const targetParentId = targetParent.id
+
+      if (dragged.type === 'selector') {
+        moved = CssLogicTreeService.moveRule(logicTree, dragged.id, targetParentId, insertAt)
+      } else if (dragged.type === 'at-rule') {
+        moved = CssLogicTreeService.moveAtRule(logicTree, dragged.id, targetParentId, insertAt)
+      } else if (dragged.type === 'declaration') {
+        const sourceParent = findParentNode(logicTree, dragged.id)
+        const targetSelectorNode = findParentNode(logicTree, targetId)
+        if (sourceParent && targetSelectorNode) {
+          moved = CssLogicTreeService.moveDeclaration(sourceParent, dragged, targetSelectorNode, insertAt)
+        }
+      } else if (dragged.type === 'file') {
+        const sourceParent = findParentNode(logicTree, dragged.id)
+        const targetParentFile = findParentNode(logicTree, targetId)
+        if (sourceParent && sourceParent === targetParentFile) {
+          const fromIdx = sourceParent.children.findIndex(n => n.id === dragged.id)
+          if (fromIdx !== -1) {
+            sourceParent.children.splice(fromIdx, 1)
+            const newIdx = sourceParent.children.findIndex(n => n.id === targetId)
+            const finalIdx = position === 'before' ? newIdx : newIdx + 1
+            sourceParent.children.splice(finalIdx, 0, dragged)
+            moved = true
+          }
         }
       }
     }
@@ -151,6 +185,17 @@ export function useCssDragDrop() {
     }
     if (dragged.type === 'file') {
       return targetParent.type === 'root'
+    }
+    return false
+  }
+
+  /**
+   * Verifica se é válido soltar o nó arrastado DENTRO do nó alvo (container).
+   * Utilizado quando o target é uma at-rule ou file.
+   */
+  function isValidDropInside(dragged, targetContainer) {
+    if (targetContainer.type === 'at-rule' || targetContainer.type === 'file') {
+      return dragged.type === 'selector' || dragged.type === 'at-rule'
     }
     return false
   }

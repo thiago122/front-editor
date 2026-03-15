@@ -1,8 +1,9 @@
-import { ref, markRaw, toRaw } from 'vue'
+import { ref, computed, markRaw, toRaw } from 'vue'
 import { defineStore } from 'pinia'
 import { CssAstService } from '@/editor/css/ast/CssAstService'
 import { CssLogicTreeService } from '@/editor/css/tree/CssLogicTreeService'
 import { calculateOverrides, findCssNode } from '@/utils/astHelpers'
+import { cssHistory } from '@/editor/css/history/CssHistoryManager'
 
 // ─── Internal helper ──────────────────────────────────────────────────────────
 
@@ -48,6 +49,19 @@ export const useStyleStore = defineStore('style', () => {
   /** ID of the selected CSS rule. Shared between Inspector and Explorer. */
   const selectedRuleId = ref(null)
 
+  /**
+   * Incrementing this value signals CssExplorer to scroll to the highlighted rule.
+   * EditorView also watches it to auto-open the CSS Explorer panel.
+   */
+  const explorerScrollRequest = ref(0)
+
+  /**
+   * ID de uma regra a ser localizada visualmente no CSS Explorer.
+   * Distinto de selectedRuleId: não altera o que o Inspector exibe.
+   * Usado apenas para highlight + scroll no Explorer.
+   */
+  const explorerHighlightId = ref(null)
+
   /** Increment this after any Logic Tree mutation to trigger Vue reactivity. */
   const astMutationKey = ref(0)
 
@@ -79,6 +93,19 @@ export const useStyleStore = defineStore('style', () => {
   function selectRule(id, source = null) {
     selectedRuleId.value = id
     if (source) inspectorSource.value = source
+  }
+
+  /**
+   * Localiza uma regra visualmente no CSS Explorer:
+   * - Define explorerHighlightId (highlight visual, sem alterar o Inspector)
+   * - Expande os ancestrais do nó no Explorer
+   * - Incrementa explorerScrollRequest para rolar até o nó
+   * - Abre o painel CSS no EditorView
+   * NÃO altera selectedRuleId nem inspectorSource.
+   */
+  function navigateToRule(id) {
+    explorerHighlightId.value = id
+    explorerScrollRequest.value++
   }
 
   function setInspectorSource(source) {
@@ -144,21 +171,52 @@ export const useStyleStore = defineStore('style', () => {
     selectRule(target?.rules[0]?.uid ?? null)
   }
 
+  // ── CSS History ────────────────────────────────────────────────────────────
+
+  /** Se há mudanças CSS para desfazer. */
+  const canCssUndo = computed(() => cssHistory.canUndo)
+
+  /** Se há mudanças CSS para refazer. */
+  const canCssRedo = computed(() => cssHistory.canRedo)
+
+  /**
+   * Desfaz a última mutação CSS.
+   * @param {Document} doc — iframe.contentDocument
+   */
+  function cssUndo(doc) {
+    cssHistory.undo(cssLogicTree.value, () => applyMutation(doc))
+  }
+
+  /**
+   * Refaz a última mutação CSS desfeita.
+   * @param {Document} doc — iframe.contentDocument
+   */
+  function cssRedo(doc) {
+    cssHistory.redo(cssLogicTree.value, () => applyMutation(doc))
+  }
+
   // ── Exports ────────────────────────────────────────────────────────────────
 
   return {
     cssLogicTree,
     selectedRuleId,
+    explorerHighlightId,
+    explorerScrollRequest,
     astMutationKey,
     ruleGroups,
     activePseudoTab,
     inspectorSource,
     notifyTreeMutation,
     selectRule,
+    navigateToRule,
     setInspectorSource,
     setActivePseudoTab,
     applyMutation,
     rebuildLogicTree,
     updateInspectorRules,
+    canCssUndo,
+    canCssRedo,
+    cssUndo,
+    cssRedo,
   }
 })

@@ -1,22 +1,39 @@
 <script setup>
-import { computed, ref, nextTick, toRaw } from 'vue'
+import { computed, ref, nextTick, toRaw, watch } from 'vue'
 import { useStyleStore } from '@/stores/StyleStore'
+import { findCssNode } from '@/utils/astHelpers'
 
 const styleStore = useStyleStore()
 
 const props = defineProps({
-  node:         { type: Object,  required: true },
-  depth:        { type: Number,  default: 0 },
-  isDragging:   { type: Boolean, default: false },
-  dropPosition: { type: String,  default: null },
+  node:           { type: Object,  required: true },
+  depth:          { type: Number,  default: 0 },
+  isDragging:     { type: Boolean, default: false },
+  dropPosition:   { type: String,  default: null },
+  editNodeId:     { type: String,  default: null },
+  searchQuery:    { type: String,  default: '' },
+  isActive:       { type: Boolean, default: true },
+  inactiveReason: { type: String,  default: null },
 })
 
-const emit = defineEmits(['dragstart', 'dragover', 'drop', 'dragend'])
+const emit = defineEmits(['dragstart', 'dragover', 'drop', 'dragend', 'contextmenu', 'import-css'])
 
-const hasChildren = computed(() => props.node.children?.length > 0)
-const isExpanded  = computed(() => props.node.isExpanded ?? false)
-const isSelected  = computed(() => styleStore.selectedRuleId === props.node.id)
-const isDraggable = computed(() => props.node.type !== 'root')
+const hasChildren   = computed(() => props.node.children?.length > 0)
+const isExpanded    = computed(() => props.node.isExpanded ?? false)
+const isSelected    = computed(() => styleStore.selectedRuleId === props.node.id)
+const isHighlighted = computed(() => styleStore.explorerHighlightId === props.node.id)
+const isDraggable   = computed(() => props.node.type !== 'root')
+
+// node é markRaw — Vue não rastreia mutações internas.
+// Dependendo de astMutationKey, estes computeds relêem label/value após saveEdit.
+const nodeLabel = computed(() => {
+  void styleStore.astMutationKey
+  return props.node.label
+})
+const nodeValue = computed(() => {
+  void styleStore.astMutationKey
+  return props.node.value
+})
 
 // ── Inline editing ────────────────────────────────────────────────────────────
 
@@ -24,10 +41,14 @@ const editing  = ref(false)
 const draft    = ref('')
 const inputRef = ref(null)
 
+const isExternal = computed(() => props.node.metadata?.origin === 'external')
+
 const isEditable = computed(() =>
-  props.node.type === 'selector' ||
-  props.node.type === 'at-rule'  ||
-  props.node.type === 'declaration'
+  !isExternal.value && (
+    props.node.type === 'selector' ||
+    props.node.type === 'at-rule'  ||
+    props.node.type === 'declaration'
+  )
 )
 
 function startEdit() {
@@ -40,6 +61,12 @@ function startEdit() {
   nextTick(() => { inputRef.value?.focus(); inputRef.value?.select() })
 }
 
+// Quando o CssExplorer cria um novo nó e passa seu ID via editNodeId,
+// este item abre automaticamente em modo de edição inline.
+watch(() => props.editNodeId, (id) => {
+  if (id && id === props.node.id) startEdit()
+})
+
 function cancelEdit() {
   editing.value = false
 }
@@ -48,13 +75,20 @@ function saveEdit() {
   const val = draft.value.trim()
   if (!val) { cancelEdit(); return }
 
-  const raw     = toRaw(props.node)
-  const astNode = toRaw(raw.metadata?.astNode)
-  const t       = raw.type
+  // Encontra o NÓ ORIGINAL na cssLogicTree (não a cópia spread de displayedNodes).
+  // O spread { ...node, depth } em visibleNodes cria uma cópia shallow —
+  // mutar raw.label na cópia não afeta o tree, e o valor antigo volta na próxima
+  // recomputação de visibleNodes.
+  const logicTree = toRaw(styleStore.cssLogicTree)
+  const original  = findCssNode(logicTree, props.node.id)
+  if (!original) { cancelEdit(); return }
+
+  const astNode = toRaw(original.metadata?.astNode)
+  const t       = original.type
 
   if (t === 'selector') {
     if (astNode) astNode.prelude = { type: 'Raw', value: val }
-    raw.label = val
+    original.label = val
   }
   else if (t === 'at-rule') {
     const withoutAt = val.startsWith('@') ? val.slice(1) : val
@@ -65,7 +99,7 @@ function saveEdit() {
       astNode.name    = atName
       astNode.prelude = condition ? { type: 'Raw', value: condition } : null
     }
-    raw.label = condition ? `@${atName} ${condition}` : `@${atName}`
+    original.label = condition ? `@${atName} ${condition}` : `@${atName}`
   }
   else if (t === 'declaration') {
     const ci   = val.indexOf(':')
@@ -75,8 +109,8 @@ function saveEdit() {
       astNode.property = prop
       astNode.value    = { type: 'Raw', value: valu }
     }
-    raw.label = prop
-    raw.value = valu
+    original.label = prop
+    original.value = valu
   }
 
   const doc = document.querySelector('iframe')?.contentDocument
@@ -107,11 +141,33 @@ const rowClass = computed(() => {
   const t = props.node.type
   if (t === 'root')        return 'bg-[#f0f0f0] border-y border-[#d1d1d1] font-bold text-[10px] text-gray-600 sticky top-0 z-10'
   if (t === 'file')        return 'bg-white font-medium text-gray-600'
-  if (t === 'selector')    return 'text-blue-700 font-medium'
-  if (t === 'at-rule')     return 'text-purple-700 font-bold'
-  if (t === 'declaration') return 'text-gray-500'
+  if (t === 'selector')    return isExternal.value ? 'text-blue-400 font-medium'   : 'text-blue-700 font-medium'
+  if (t === 'at-rule') {
+    if (isExternal.value)      return 'text-purple-400 font-bold'
+    if (!props.isActive)       return 'text-gray-400 font-bold'   // inactive @media
+    return 'text-purple-700 font-bold'
+  }
+  if (t === 'declaration') return isExternal.value ? 'text-gray-400' : 'text-gray-500'
   return ''
 })
+// ── Search highlight ─────────────────────────────────────────────────────────
+
+/**
+ * Split a text string into segments for highlight rendering.
+ * Returns an array of { text, highlight } objects.
+ */
+function highlightSegments(text, query) {
+  if (!query || !text) return [{ text: text || '', highlight: false }]
+  const q   = query.toLowerCase()
+  const t   = text
+  const idx = t.toLowerCase().indexOf(q)
+  if (idx === -1) return [{ text, highlight: false }]
+  return [
+    { text: t.slice(0, idx),          highlight: false },
+    { text: t.slice(idx, idx + q.length), highlight: true },
+    { text: t.slice(idx + q.length),  highlight: false },
+  ].filter(s => s.text !== '')
+}
 </script>
 
 
@@ -120,12 +176,16 @@ const rowClass = computed(() => {
     class="relative font-mono text-[11px] select-none border-b border-gray-50/50"
     :class="[
       rowClass,
-      isSelected   ? 'bg-blue-50 !border-blue-200' : (node.type !== 'root' ? 'hover:bg-gray-50' : ''),
+      isSelected    ? 'bg-blue-50 !border-blue-200' :
+      isHighlighted ? 'bg-amber-50 !border-amber-300 ring-1 ring-amber-300 ring-inset' :
+      (node.type !== 'root' ? 'hover:bg-gray-50' : ''),
       isDragging   ? 'opacity-40' : '',
       isDraggable  ? 'cursor-grab active:cursor-grabbing' : '',
+      dropPosition === 'inside' ? 'ring-2 ring-inset ring-blue-400' : '',
     ]"
     :draggable="isDraggable"
     @click="handleClick"
+    @contextmenu.stop.prevent="(e) => emit('contextmenu', node, e)"
     @dragstart.stop="emit('dragstart', node)"
     @dragover.stop="(e) => emit('dragover', node, e)"
     @drop.stop="emit('drop', node)"
@@ -137,17 +197,28 @@ const rowClass = computed(() => {
       class="absolute top-0 left-0 right-0 h-0.5 bg-blue-500 z-20 pointer-events-none"
     />
 
+    <!-- Vertical guide lines (one per ancestor depth level, like ASTNode border-l) -->
+    <template v-if="node.type !== 'root' && depth > 0">
+      <div
+        v-for="d in depth"
+        :key="d"
+        class="absolute top-0 bottom-0 w-px bg-gray-100 pointer-events-none"
+        :style="{ left: ((d - 1) * 10 + 14) + 'px' }"
+      />
+    </template>
+
     <div
-      class="flex items-center gap-1.5 cursor-pointer overflow-hidden whitespace-nowrap"
+      class="group flex items-center gap-1.5 cursor-pointer overflow-hidden whitespace-nowrap"
       :style="{ paddingLeft: node.type === 'root' ? '8px' : (depth * 10) + 'px', height: '22px' }"
     >
       <!-- Toggle arrow -->
       <div class="toggle-area w-4 h-4 flex items-center justify-center shrink-0" :class="node.type !== 'root' ? 'hover:bg-black/5 rounded' : ''">
+        <!-- Solid triangle ► identical to ASTNode, rotates 90° when open -->
         <svg v-if="hasChildren && node.type !== 'root'"
           class="w-2.5 h-2.5 text-gray-400 transition-transform duration-150"
           :class="isExpanded ? 'rotate-90' : ''"
-          fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7" />
+          fill="currentColor" viewBox="0 0 24 24">
+          <path d="M8 5v14l11-7z" />
         </svg>
       </div>
 
@@ -188,6 +259,17 @@ const rowClass = computed(() => {
         </svg>
       </span>
 
+      <!-- Lock icon: separate element, after the icon span, so it never conflicts with the v-else-if chain -->
+      <svg
+        v-if="isExternal && (node.type === 'file' || node.type === 'root')"
+        class="w-2.5 h-2.5 text-red-400 shrink-0"
+        title="External file — read only"
+        fill="none" stroke="currentColor" viewBox="0 0 24 24"
+      >
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+      </svg>
+
       <!-- Label + value  OU  input de edição inline -->
       <input
         v-if="editing"
@@ -202,8 +284,48 @@ const rowClass = computed(() => {
         @dragstart.stop
       />
       <div v-else class="flex items-baseline gap-1.5 truncate">
-        <span class="truncate" :class="{ 'uppercase tracking-wide': node.type === 'root' }" :title="node.label">{{ node.label }}</span>
-        <span v-if="node.value" class="text-gray-400 font-normal truncate">: {{ node.value }}</span>
+        <!-- Label with optional search highlight -->
+        <span class="truncate" :class="{ 'uppercase tracking-wide': node.type === 'root' }" :title="nodeLabel">
+          <template v-if="searchQuery">
+            <template v-for="seg in highlightSegments(nodeLabel, searchQuery)" :key="seg.text + seg.highlight">
+              <mark v-if="seg.highlight" class="bg-yellow-200 text-inherit rounded-sm px-0">{{ seg.text }}</mark>
+              <span v-else>{{ seg.text }}</span>
+            </template>
+          </template>
+          <template v-else>{{ nodeLabel }}</template>
+        </span>
+
+        <!-- Inactive @media badge -->
+        <span
+          v-if="!isActive && node.type === 'at-rule'"
+          class="shrink-0 text-[9px] font-semibold px-1 py-px rounded bg-amber-100 text-amber-600 leading-tight"
+          :title="inactiveReason ?? 'Inactive at current viewport'"
+        >inactive</span>
+
+        <!-- Value with optional search highlight -->
+        <span v-if="nodeValue" class="text-gray-400 font-normal truncate">
+          :
+          <template v-if="searchQuery">
+            <template v-for="seg in highlightSegments(nodeValue, searchQuery)" :key="seg.text + seg.highlight">
+              <mark v-if="seg.highlight" class="bg-yellow-200 text-inherit rounded-sm px-0">{{ seg.text }}</mark>
+              <span v-else>{{ seg.text }}</span>
+            </template>
+          </template>
+          <template v-else>{{ nodeValue }}</template>
+        </span>
+        <!-- Import icon: só visível no hover de nós file editáveis -->
+        <button
+          v-if="node.type === 'file' && !isExternal"
+          class="ml-auto mr-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-indigo-500"
+          title="Importar CSS"
+          @click.stop="emit('import-css', node)"
+          @dragstart.stop
+        >
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+          </svg>
+        </button>
       </div>
     </div>
 
@@ -211,6 +333,11 @@ const rowClass = computed(() => {
     <div
       v-if="dropPosition === 'after'"
       class="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 z-20 pointer-events-none"
+    />
+    <!-- Indicador de drop DENTRO (container vazio) -->
+    <div
+      v-if="dropPosition === 'inside'"
+      class="absolute inset-0 border-2 border-blue-400 border-dashed rounded pointer-events-none z-20 opacity-60"
     />
   </div>
 </template>

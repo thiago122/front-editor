@@ -1,1 +1,10 @@
 @import 'tailwindcss';
+
+:root {
+  /* ── Z-Index scale do editor ──────────────────────────────
+   *  overlay   : highlight sobre o preview (hover / selection)
+   *  panel     : painéis e barras do editor (acima do overlay)
+   * ─────────────────────────────────────────────────────── */
+  --z-overlay : 100;
+  --z-panel   : 200;
+}

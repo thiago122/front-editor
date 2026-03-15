@@ -4,6 +4,7 @@ import { CssInspectorMatcher } from '../inspector/CssInspectorMatcher.js'
 import { CssRuleService } from './CssRuleService.js'
 import { CssAtRuleService } from './CssAtRuleService.js'
 import { CssDeclarationService } from './CssDeclarationService.js'
+import { CssExportService } from '../export/CssExportService.js'
 
 /**
  * CssLogicTreeService  ← Facade / Coordinator
@@ -181,5 +182,31 @@ export class CssLogicTreeService {
   /** @see CssDeclarationService.findByProperty */
   static findDeclarationByProperty(rule, property) {
     return CssDeclarationService.findByProperty(rule, property)
+  }
+
+  // ─── Export  →  CssExportService ───────────────────────────────────────────
+
+  /**
+   * Gera mapa de CSS por stylesheet.
+   * @see CssExportService.generateAll
+   */
+  static generateCssExport(logicTree) {
+    return CssExportService.generateAll(logicTree)
+  }
+
+  /**
+   * Baixa uma stylesheet específica como arquivo .css.
+   * @see CssExportService.downloadOne
+   */
+  static downloadStylesheet(logicTree, key) {
+    return CssExportService.downloadOne(logicTree, key)
+  }
+
+  /**
+   * Baixa todas as stylesheets editáveis (exclui externas por padrão).
+   * @see CssExportService.downloadAll
+   */
+  static downloadAllStylesheets(logicTree, includeExternal = false) {
+    return CssExportService.downloadAll(logicTree, includeExternal)
   }
 }

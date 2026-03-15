@@ -1,13 +1,16 @@
 <script setup>
-const props = defineProps({
-  title: String,
+defineProps({
+  title:    String,
   subtitle: String,
 })
 </script>
+
 <template>
-  <div
-    class="border-r border-gray-300 bg-white w-64 h-full max-h-full bg-surface-elevated flex flex-col"
-  >
+  <!--
+    A largura é controlada pelo pai via :style / :class (inheritAttrs padrão).
+    Removemos w-64 fixo para permitir redimensionamento dinâmico.
+  -->
+  <div class="shrink-0 border-r border-gray-300 bg-white h-full max-h-full flex flex-col">
     <div class="border-b border-gray-300 grow-0 shrink-1">
       <div class="flex items-center gap-2">
         <h2 class="text-sm font-semibold text-text-primary" v-if="title">{{ title }}</h2>

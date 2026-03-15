@@ -2,36 +2,65 @@
 import { history } from '@/editor/history/HistoryManager'
 import { computed } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
+import { useStyleStore } from '@/stores/StyleStore'
 import IconUndo from '@/components/icons/IconUndo.vue'
 import IconRedo from '@/components/icons/IconRedo.vue'
-// Como o history é exportado como uma instância reativa:
-// export const history = reactive(new HistoryManager())
 
+const EditorStore = useEditorStore()
+const styleStore  = useStyleStore()
+
+// ── HTML history ────────────────────────────────────────────────────────────
 const canUndo = computed(() => history.undoStack.length > 0)
 const canRedo = computed(() => history.redoStack.length > 0)
+const undo = () => EditorStore.undo()
+const redo = () => EditorStore.redo()
 
-const undo = () => useEditorStore().undo()
-const redo = () => useEditorStore().redo()
+// ── CSS history ─────────────────────────────────────────────────────────────
+const cssUndo = () => styleStore.cssUndo(EditorStore.getIframeDoc())
+const cssRedo = () => styleStore.cssRedo(EditorStore.getIframeDoc())
 </script>
 
 <template>
-  <div class="flex gap-2">
+  <div class="flex items-center gap-1">
+
+    <!-- HTML Undo/Redo -->
     <button
       @click="undo"
       :disabled="!canUndo"
-      class="p-2 hover:bg-gray-100 disabled:opacity-30 transition-opacity p-2 rounded-md hover:bg-surface-hover text-text-tertiary hover:text-text-secondary transition-colors"
-      title="Desfazer (Ctrl+Z)"
+      class="p-1.5 rounded-md hover:bg-gray-100 disabled:opacity-30 transition-all text-text-tertiary hover:text-text-secondary"
+      title="HTML: Desfazer (Ctrl+Z)"
     >
-      <iconUndo />
+      <IconUndo />
     </button>
-
     <button
       @click="redo"
       :disabled="!canRedo"
-      class="p-2 hover:bg-gray-100 disabled:opacity-30 transition-opacity"
-      title="Refazer (Ctrl+Y)"
+      class="p-1.5 rounded-md hover:bg-gray-100 disabled:opacity-30 transition-all text-text-tertiary hover:text-text-secondary"
+      title="HTML: Refazer (Ctrl+Y)"
     >
-      <iconRedo />
+      <IconRedo />
     </button>
+
+    <!-- Separador visual -->
+    <span class="w-px h-4 bg-gray-200 mx-1" />
+
+    <!-- CSS Undo/Redo -->
+    <button
+      @click="cssUndo"
+      :disabled="!styleStore.canCssUndo"
+      class="p-1.5 rounded-md hover:bg-purple-50 disabled:opacity-30 transition-all text-purple-400 hover:text-purple-600"
+      title="CSS: Desfazer"
+    >
+      <IconUndo />
+    </button>
+    <button
+      @click="cssRedo"
+      :disabled="!styleStore.canCssRedo"
+      class="p-1.5 rounded-md hover:bg-purple-50 disabled:opacity-30 transition-all text-purple-400 hover:text-purple-600"
+      title="CSS: Refazer"
+    >
+      <IconRedo />
+    </button>
+
   </div>
 </template>

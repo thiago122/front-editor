@@ -1,10 +1,17 @@
 <script setup>
-import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
+import { computed, ref, watch, nextTick, onMounted, onUnmounted, toRaw, watchEffect } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
 import { useStyleStore } from '@/stores/StyleStore'
 import { CssLogicTreeService } from '@/editor/css/tree/CssLogicTreeService'
+import { findOrCreateRoot, findCssNode } from '@/editor/css/tree/_logicTreeHelpers.js'
+import { findAndRemoveFromLogicTree } from '@/utils/astHelpers.js'
+
+import { generateId } from '@/utils/ids.js'
 import CssTreeItem from './CssTreeItem.vue'
+import CssContextMenu from './CssContextMenu.vue'
+import CssImportModal from './CssImportModal.vue'
 import { useCssDragDrop } from '@/composables/useCssDragDrop'
+import { parse } from 'css-tree'
 
 const styleStore = useStyleStore()
 const editorStore = useEditorStore()
@@ -46,10 +53,133 @@ function expandToNode(id) {
   }
 }
 
+function expandAll() {
+  const ids = new Set(toggledNodes.value)
+  const walk = (nodes) => {
+    for (const node of nodes) {
+      if (node.type !== 'root') ids.add(node.id)
+      if (node.children?.length) walk(node.children)
+    }
+  }
+  walk(styleStore.cssLogicTree || [])
+  toggledNodes.value = ids
+}
+
+function collapseAll() {
+  toggledNodes.value = new Set()
+}
+
+/** True when all expandable non-root nodes are open */
+const isFullyExpanded = computed(() => {
+  const expanded = toggledNodes.value
+  let allExpanded = true
+  const walk = (nodes) => {
+    for (const node of nodes) {
+      if (node.type !== 'root' && node.children?.length > 0) {
+        if (!expanded.has(node.id)) { allExpanded = false; return }
+      }
+      if (node.children?.length) walk(node.children)
+    }
+  }
+  walk(styleStore.cssLogicTree || [])
+  return allExpanded
+})
+
 // When the selected rule changes, expand all its ancestors so it becomes
 // visible in the tree — works at any nesting depth (root > file > @media > selector).
 watch(() => styleStore.selectedRuleId, (id) => {
   if (id) expandToNode(id)
+})
+
+// When navigateToRule() is called from the Inspector, expand ancestors of the
+// highlighted rule and scroll to it — WITHOUT changing what the Inspector shows.
+function scrollToHighlighted() {
+  const id = styleStore.explorerHighlightId
+  if (!id) return
+  // 1. Expand ancestors so the node becomes visible in the flat list
+  expandToNode(id)
+  // 2. After Vue recomputes visibleNodes, scroll to the node
+  nextTick(() => {
+    const index = visibleNodes.value.findIndex(n => n.id === id)
+    if (index === -1 || !containerRef.value) return
+    const targetTop    = index * ROW_HEIGHT
+    const targetBottom = targetTop + ROW_HEIGHT
+    const { scrollTop, clientHeight } = containerRef.value
+    if (targetTop < scrollTop || targetBottom > scrollTop + clientHeight) {
+      containerRef.value.scrollTop = Math.max(0, targetTop - clientHeight / 2)
+    }
+  })
+}
+
+watch(() => styleStore.explorerScrollRequest, () => {
+  scrollToHighlighted()
+})
+
+// ============================================
+// SEARCH / FILTER
+// ============================================
+
+const searchQuery   = ref('')
+const searchActive  = ref(false)
+const searchInputRef = ref(null)
+
+function openSearch() {
+  searchActive.value = true
+  nextTick(() => searchInputRef.value?.focus())
+}
+
+function clearSearch() {
+  searchQuery.value  = ''
+  searchActive.value = false
+}
+
+// Set of node IDs that match the current query (used in visibleNodes filter)
+const matchedIds = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return null // null = no filter active
+  const roots = styleStore.cssLogicTree || []
+  const ids = new Set()
+
+  const checkNode = (node) => {
+    const label = (node.label || '').toLowerCase()
+    const value = (node.value || '').toLowerCase()
+    return label.includes(q) || value.includes(q)
+  }
+
+  // Walk tree; mark a node if it matches OR if any descendant matches
+  const walk = (nodes) => {
+    let anyMatch = false
+    for (const node of nodes) {
+      const childMatch = node.children?.length ? walk(node.children) : false
+      const selfMatch  = checkNode(node)
+      if (selfMatch || childMatch) {
+        ids.add(node.id)
+        anyMatch = true
+      }
+    }
+    return anyMatch
+  }
+
+  walk(roots)
+  return ids
+})
+
+// How many leaf-level nodes actually match the typed term
+const matchCount = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q || !matchedIds.value) return 0
+  const roots = styleStore.cssLogicTree || []
+  let count = 0
+  const walk = (nodes) => {
+    for (const node of nodes) {
+      const label = (node.label || '').toLowerCase()
+      const value = (node.value || '').toLowerCase()
+      if (label.includes(q) || value.includes(q)) count++
+      if (node.children?.length) walk(node.children)
+    }
+  }
+  walk(roots)
+  return count
 })
 
 // ============================================
@@ -71,9 +201,27 @@ const updateDimensions = () => {
   }
 }
 
+// Ctrl+F anywhere in the explorer opens the search bar
+function onContainerKeydown(e) {
+  if (e.key === 'f' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault()
+    openSearch()
+    return
+  }
+  if (e.key === 'Escape' && searchActive.value) {
+    clearSearch()
+  }
+}
+
 onMounted(() => {
   updateDimensions()
   window.addEventListener('resize', updateDimensions)
+  // Se o painel foi aberto por navigateToRule(), o watcher de explorerScrollRequest
+  // já disparou antes do componente estar montado. Reaplicar aqui garante que o
+  // primeiro clique funcione corretamente.
+  if (styleStore.explorerHighlightId) {
+    scrollToHighlighted()
+  }
 })
 
 onUnmounted(() => {
@@ -81,40 +229,326 @@ onUnmounted(() => {
 })
 
 // ============================================
-// ACTIONS
+// ACTIONS — Criação contextual
 // ============================================
 
-const addNewRule = async () => {
-  const selector = window.prompt('Enter selector:', '.new-rule')
-  if (!selector) return
+// ID do nó que deve abrir em modo de edição inline após ser criado.
+const pendingEditId = ref(null)
 
-  if (!styleStore.cssLogicTree) return
+/** Nó atualmente selecionado na árvore (via styleStore.selectedRuleId) */
+const selectedNode = computed(() => {
+  const id = styleStore.selectedRuleId
+  if (!id || !styleStore.cssLogicTree) return null
+  return findCssNode(toRaw(styleStore.cssLogicTree), id) ?? null
+})
 
-  let targetOrigin = 'on_page'
-  let targetSource = 'style'
+/**
+ * Tipo de contexto baseado no nó selecionado:
+ *  'file'     → nenhum/root/file selecionado → adicionar rule/@media no arquivo ativo
+ *  'at-rule'  → at-rule selecionada → adicionar rule/@at-rule dentro dela
+ *  'selector' → selector selecionado → adicionar declaração
+ */
+const contextType = computed(() => {
+  const n = selectedNode.value
+  if (!n || n.type === 'root' || n.type === 'file') return 'file'
+  if (n.type === 'at-rule')  return 'at-rule'
+  if (n.type === 'selector') return 'selector'
+  return 'file'
+})
 
-  const targetRoot = styleStore.cssLogicTree.find(n => n.metadata.origin !== 'external')
-  if (targetRoot) {
-    targetOrigin = targetRoot.metadata.origin
-    if (targetRoot.children.length > 0) {
-      targetSource = targetRoot.children[0].label
-    }
-  }
-
-  const newLogicNode = CssLogicTreeService.createRule(styleStore.cssLogicTree, selector, targetOrigin, targetSource)
-
-  if (newLogicNode) {
-    const doc = document.querySelector('iframe')?.contentDocument
-    CssLogicTreeService.syncToDOM(styleStore.cssLogicTree, doc)
-    styleStore.notifyTreeMutation()
-    styleStore.selectRule(newLogicNode.id)
-  } else {
-    alert('Invalid selector or failed to create rule')
+/** Resolve origem e sourceName do arquivo ativo (não-externo) */
+function resolveTarget() {
+  const tree = styleStore.cssLogicTree
+  if (!tree) return { origin: 'on_page', sourceName: 'style' }
+  const root     = tree.find(n => n.metadata?.origin !== 'external') ?? tree[0]
+  const fileNode = root?.children?.[0]
+  return {
+    origin:     root?.metadata?.origin ?? 'on_page',
+    sourceName: fileNode?.label        ?? 'style',
   }
 }
 
+/** Cria nó, aplica mutação, rola até ele e abre edição inline */
+async function createAndEdit(newNode) {
+  if (!newNode) return
+  styleStore.applyMutation(editorStore.getIframeDoc())
+  expandToNode(newNode.id)
+  await nextTick()
+  const index = visibleNodes.value.findIndex(n => n.id === newNode.id)
+  if (index !== -1 && containerRef.value) {
+    const targetTop = index * ROW_HEIGHT
+    containerRef.value.scrollTop = Math.max(0, targetTop - containerRef.value.clientHeight / 2)
+  }
+  await nextTick()
+  pendingEditId.value = newNode.id
+  setTimeout(() => { pendingEditId.value = null }, 200)
+}
+
+// — Context: file —
+function addRule() {
+  if (!styleStore.cssLogicTree) return
+  const { origin, sourceName } = resolveTarget()
+  createAndEdit(CssLogicTreeService.createRule(
+    styleStore.cssLogicTree, '.nova-regra', origin, sourceName
+  ))
+}
+function addAtRule() {
+  if (!styleStore.cssLogicTree) return
+  const { origin, sourceName } = resolveTarget()
+  createAndEdit(CssLogicTreeService.createAtRule(
+    styleStore.cssLogicTree, null, 'media', '(min-width: 0px)', origin, sourceName
+  ))
+}
+
+// — Context: at-rule (adicionar como filho) —
+function addRuleInside() {
+  const atRule = selectedNode.value
+  if (!atRule || atRule.type !== 'at-rule') return
+  const { origin, sourceName } = { origin: atRule.metadata?.origin ?? 'on_page', sourceName: atRule.metadata?.sourceName ?? 'style' }
+  createAndEdit(CssLogicTreeService.createRule(
+    styleStore.cssLogicTree, '.nova-regra', origin, sourceName, atRule.id
+  ))
+}
+function addAtRuleInside() {
+  const atRule = selectedNode.value
+  if (!atRule || atRule.type !== 'at-rule') return
+  const { origin, sourceName } = { origin: atRule.metadata?.origin ?? 'on_page', sourceName: atRule.metadata?.sourceName ?? 'style' }
+  createAndEdit(CssLogicTreeService.createAtRule(
+    styleStore.cssLogicTree, null, 'media', '(min-width: 0px)', origin, sourceName, atRule.id
+  ))
+}
+
+// — Context: selector (adicionar declaração) —
+function addDeclaration(targetNode) {
+  const selectorNode = targetNode ?? selectedNode.value
+  if (!selectorNode || selectorNode.type !== 'selector') return
+  const original = findCssNode(toRaw(styleStore.cssLogicTree), selectorNode.id)
+  if (!original) return
+  // CssDeclarationService.create espera { astNode, logicNode }.
+  // Na Logic Tree, o astNode fica em metadata.astNode e o logicNode é o próprio nó.
+  const ruleArg = { astNode: toRaw(original.metadata?.astNode), logicNode: original }
+  if (!ruleArg.astNode) return
+  const newDecl = CssLogicTreeService.createDeclaration(ruleArg, 'property', 'value')
+  if (newDecl && typeof newDecl === 'object') {
+    createAndEdit(newDecl)
+  }
+}
+
+// — Deletar nó —
+function deleteNode(node) {
+  if (!node || !styleStore.cssLogicTree) return
+  const tree = styleStore.cssLogicTree
+  if (node.type === 'selector') {
+    CssLogicTreeService.deleteRule(tree, node.id)
+  } else if (node.type === 'at-rule') {
+    CssLogicTreeService.deleteAtRule(tree, node.id)
+  } else if (node.type === 'declaration') {
+    // Remove directly from the Logic Tree by ID.
+    // applyMutation → syncLogicNodeToAst will regenerate the CSS block without it.
+    findAndRemoveFromLogicTree(toRaw(tree), node.id)
+  }
+  styleStore.applyMutation(editorStore.getIframeDoc())
+  // Force-refresh the inspector immediately so the declaration disappears from the panel.
+  styleStore.updateInspectorRules(
+    editorStore.selectedElement,
+    editorStore.viewport,
+    styleStore.selectedRuleId,
+  )
+}
+
+// — Duplicar nó —
+function duplicateNode(node) {
+  if (!node || !styleStore.cssLogicTree) return
+  const tree  = toRaw(styleStore.cssLogicTree)
+  let clone = null
+  if (node.type === 'selector') {
+    clone = CssLogicTreeService.duplicateRule(tree, node.id)
+  } else if (node.type === 'at-rule') {
+    clone = CssLogicTreeService.duplicateAtRule(tree, node.id)
+  }
+  if (!clone) return
+  styleStore.applyMutation(editorStore.getIframeDoc())
+  // Expand the parent so the clone is visible, then open it in edit mode
+  expandToNode(clone.id)
+  createAndEdit(clone)
+}
+
+
+// — Adicionar arquivo —
+function addFile() {
+  if (!styleStore.cssLogicTree) return
+  const { origin } = resolveTarget()
+  const name = `style-${Date.now()}.css`
+  // Cria apenas o nó file, sem nenhuma regra dentro
+  const root     = findOrCreateRoot(styleStore.cssLogicTree, origin)
+  const fileNode = {
+    id:       generateId(),
+    type:     'file',
+    label:    name,
+    metadata: { origin, sourceName: name },
+    children: [],
+  }
+  root.children.push(fileNode)
+  styleStore.applyMutation(editorStore.getIframeDoc())
+  createAndEdit(fileNode)
+}
+
+// ============================================
+// CONTEXT MENU
+// ============================================
+
+const contextMenu = ref(null) // { x, y, items }
+
+// ─── CSS Import ───────────────────────────────────────────────────────────────
+
+/**
+ * Estado do modal de importação.
+ * targetFileNode é o nó `file` de destino selecionado pelo usuário.
+ */
+const importModal = ref({ open: false, fileNode: null })
+
+/** Abre o modal para importar CSS no arquivo `node`. */
+function openImportModal(node) {
+  importModal.value = { open: true, fileNode: node }
+}
+
+/**
+ * Recebe o CSS colado pelo usuário, injeta no iframe e reconstrói a árvore.
+ *
+ * Estratégia:
+ *   1. Validar que o CSS pode ser parseado (css-tree).
+ *   2. Localizar o `<style>` correto no iframe pelo sourceName do nó.
+ *   3. Concatenar o CSS novo ao conteúdo existente.
+ *   4. Reconstruir a Logic Tree para o Explorer refletir os novos nós.
+ *
+ * @param {string} cssText - CSS bruto colado pelo usuário
+ */
+async function handleCssImport(cssText) {
+  const fileNode = importModal.value.fileNode
+  if (!fileNode || !cssText.trim()) return
+
+  // 1. Validar o CSS (parse lança erro se o CSS for inválido)
+  try {
+    parse(cssText)
+  } catch (err) {
+    console.error('[CssExplorer] CSS inválido, import abortado:', err)
+    return
+  }
+
+  // 2. Localizar o <style> no iframe pelo sourceName do arquivo
+  const doc        = editorStore.getIframeDoc()
+  const sourceName = fileNode.metadata?.sourceName
+  const origin     = fileNode.metadata?.origin
+
+  // Para nós on_page/internal: procura a tag <style> com data-location correspondente
+  let styleTag = null
+  if (origin === 'on_page' || origin === 'internal') {
+    const styles = Array.from(doc.querySelectorAll('style'))
+    styleTag = styles.find(s => {
+      const loc = s.dataset.location
+      // Se o arquivo é "style" sem nome específico, pega o primeiro on_page
+      return loc === origin || loc === 'on_page'
+    }) ?? null
+  }
+
+  if (!styleTag) {
+    // Cria uma nova <style> on_page se não encontrar a existente
+    styleTag = doc.createElement('style')
+    styleTag.setAttribute('data-location', 'on_page')
+    doc.head.appendChild(styleTag)
+  }
+
+  // 3. Concatenar o CSS novo (separado por linha em branco)
+  styleTag.textContent += '\n\n' + cssText
+
+  // 4. Reconstruir a Logic Tree para o Explorer refletir os novos nós
+  await styleStore.rebuildLogicTree(doc)
+
+  console.log(`[CssExplorer] CSS importado em "${sourceName}" (${origin}).`)
+}
+
+function openContextMenu(node, event) {
+  event.preventDefault()
+  const x = event.clientX
+  const y = event.clientY
+  let items = []
+
+  const isExternal = node?.metadata?.origin === 'external'
+
+  if (!node || node.type === 'root') {
+    items = [
+      { label: 'New File', icon: '📄', action: addFile },
+    ]
+  } else if (node.type === 'file') {
+    const fileKey = `${node.metadata?.origin}::${node.label}`
+    if (isExternal) {
+      items = [{ label: 'External — read only', icon: '🔒', disabled: true }]
+    } else {
+      items = [
+        { label: 'New CSS Rule', icon: '{}', action: () => addRuleInContext(node) },
+        { label: 'New At-Rule',  icon: '@',  action: () => addAtRuleInContext(node) },
+        { divider: true },
+        { label: 'Import CSS',  icon: '↑', action: () => openImportModal(node) },
+        { label: 'Export .css', icon: '↓', action: () => downloadSheet(fileKey) },
+      ]
+    }
+  } else if (node.type === 'at-rule') {
+    if (isExternal) {
+      items = [{ label: 'External — read only', icon: '🔒', disabled: true }]
+    } else {
+      items = [
+        { label: 'New CSS Rule inside', icon: '{}', action: () => addRuleInContext(node) },
+        { label: 'New At-Rule inside',  icon: '@',  action: () => addAtRuleInContext(node) },
+        { divider: true },
+        { label: 'Delete', icon: '✕', action: () => deleteNode(node), danger: true },
+      ]
+    }
+  } else if (node.type === 'selector') {
+    if (isExternal) {
+      items = [{ label: 'External — read only', icon: '🔒', disabled: true }]
+    } else {
+      items = [
+        { label: 'New Declaration', icon: ':', action: () => addDeclaration(node) },
+        { divider: true },
+        { label: 'Delete', icon: '✕', action: () => deleteNode(node), danger: true },
+      ]
+    }
+  } else if (node.type === 'declaration') {
+    if (isExternal) {
+      items = [{ label: 'External — read only', icon: '🔒', disabled: true }]
+    } else {
+      items = [
+        { label: 'Delete', icon: '✕', action: () => deleteNode(node), danger: true },
+      ]
+    }
+  }
+
+  if (items.length) contextMenu.value = { x, y, items }
+}
+
+
+/** Adiciona regra como filho de um nó file ou at-rule específico */
+function addRuleInContext(parentNode) {
+  const origin     = parentNode.metadata?.origin     ?? resolveTarget().origin
+  const sourceName = parentNode.metadata?.sourceName ?? resolveTarget().sourceName
+  const parentId   = parentNode.type === 'at-rule' ? parentNode.id : null
+  createAndEdit(CssLogicTreeService.createRule(
+    styleStore.cssLogicTree, '.nova-regra', origin, sourceName, parentId
+  ))
+}
+
+/** Adiciona @media como filho de um nó file ou at-rule específico */
+function addAtRuleInContext(parentNode) {
+  const origin     = parentNode.metadata?.origin     ?? resolveTarget().origin
+  const sourceName = parentNode.metadata?.sourceName ?? resolveTarget().sourceName
+  const parentId   = parentNode.type === 'at-rule' ? parentNode.id : null
+  createAndEdit(CssLogicTreeService.createAtRule(
+    styleStore.cssLogicTree, null, 'media', '(min-width: 0px)', origin, sourceName, parentId
+  ))
+}
+
 const refresh = async () => {
-  const doc = document.querySelector('iframe')?.contentDocument
+  const doc = editorStore.getIframeDoc()
   await styleStore.rebuildLogicTree(doc)
 }
 
@@ -134,13 +568,21 @@ const visibleNodes = computed(() => {
   // Depend on toggledNodes to trigger re-computation when expansion changes
   void toggledNodes.value
 
-  const flat = []
+  const flat  = []
   const roots = styleStore.cssLogicTree || []
+  const ids   = matchedIds.value // null when no search active
 
   const traverse = (nodes, depth = 0) => {
     for (const node of nodes) {
+      // In search mode: only include nodes that are matched (or ancestors of matched)
+      if (ids !== null && !ids.has(node.id)) continue
+
       flat.push({ ...node, depth })
-      if (isExpanded(node) && node.children?.length > 0) {
+
+      // In search mode: always show children if this node is in the matched set
+      // (the set already contains ancestors of real matches, so we expand them)
+      const expand = ids !== null ? ids.has(node.id) : isExpanded(node)
+      if (expand && node.children?.length > 0) {
         const nextDepth = node.type === 'root' ? 0 : depth + 1
         traverse(node.children, nextDepth)
       }
@@ -155,13 +597,90 @@ const totalHeight = computed(() => visibleNodes.value.length * ROW_HEIGHT)
 const startIndex = computed(() => Math.max(0, Math.floor(scrollTop.value / ROW_HEIGHT) - 5))
 const endIndex = computed(() => Math.min(visibleNodes.value.length, Math.ceil((scrollTop.value + containerHeight.value) / ROW_HEIGHT) + 5))
 
+// ============================================
+// MEDIA QUERY EVALUATION
+// ============================================
+
+/**
+ * Evaluate whether an @media at-rule label is active for the given viewport.
+ * Handles the most common cases: min/max-width, min/max-height, print, screen, all.
+ * Returns { active: boolean, reason: string | null }
+ */
+function evaluateMediaQuery(label, viewport) {
+  if (!label || !label.includes('@media')) return { active: true, reason: null }
+
+  // Extract the condition string after '@media'
+  const condition = label.replace(/^@media\s*/i, '').trim()
+
+  if (!condition || condition === 'all' || condition === 'screen') {
+    return { active: true, reason: null }
+  }
+  if (condition === 'print') {
+    return { active: false, reason: `@media print — inactive (screen)` }
+  }
+
+  const vw = viewport?.width  ?? window.innerWidth
+  const vh = viewport?.height ?? window.innerHeight
+
+  // Parse all conditions joined by 'and'
+  const parts = condition.split(/\s+and\s+/i)
+  for (const part of parts) {
+    const clean = part.replace(/[()]/g, '').trim()
+
+    let m
+    // min-width
+    m = clean.match(/^min-width\s*:\s*([\d.]+)(px|em|rem)?$/i)
+    if (m) {
+      const val = parseFloat(m[1]) * (m[2] === 'em' || m[2] === 'rem' ? 16 : 1)
+      if (vw < val) return { active: false, reason: `${label} — inactive (viewport ${vw}px < ${Math.round(val)}px)`}
+      continue
+    }
+    // max-width
+    m = clean.match(/^max-width\s*:\s*([\d.]+)(px|em|rem)?$/i)
+    if (m) {
+      const val = parseFloat(m[1]) * (m[2] === 'em' || m[2] === 'rem' ? 16 : 1)
+      if (vw > val) return { active: false, reason: `${label} — inactive (viewport ${vw}px > ${Math.round(val)}px)`}
+      continue
+    }
+    // min-height
+    m = clean.match(/^min-height\s*:\s*([\d.]+)(px|em|rem)?$/i)
+    if (m) {
+      const val = parseFloat(m[1]) * (m[2] === 'em' || m[2] === 'rem' ? 16 : 1)
+      if (vh < val) return { active: false, reason: `${label} — inactive (viewport height ${vh}px < ${Math.round(val)}px)`}
+      continue
+    }
+    // max-height
+    m = clean.match(/^max-height\s*:\s*([\d.]+)(px|em|rem)?$/i)
+    if (m) {
+      const val = parseFloat(m[1]) * (m[2] === 'em' || m[2] === 'rem' ? 16 : 1)
+      if (vh > val) return { active: false, reason: `${label} — inactive (viewport height ${vh}px > ${Math.round(val)}px)`}
+      continue
+    }
+  }
+  return { active: true, reason: null }
+}
+
 const displayedNodes = computed(() => {
-  return visibleNodes.value.slice(startIndex.value, endIndex.value).map((node, index) => ({
-    ...node,
-    virtualIndex: startIndex.value + index,
-    isExpanded: isExpanded(node),
-    onToggle: () => toggleNode(node.id),
-  }))
+  const q        = searchQuery.value.trim()
+  const viewport = editorStore.viewport
+  return visibleNodes.value.slice(startIndex.value, endIndex.value).map((node, index) => {
+    let isActive      = true
+    let inactiveReason = null
+    if (node.type === 'at-rule' && node.label?.includes('@media')) {
+      const result = evaluateMediaQuery(node.label, viewport)
+      isActive       = result.active
+      inactiveReason = result.reason
+    }
+    return {
+      ...node,
+      virtualIndex:   startIndex.value + index,
+      isExpanded:     isExpanded(node),
+      onToggle:       () => toggleNode(node.id),
+      searchQuery:    q,
+      isActive,
+      inactiveReason,
+    }
+  })
 })
 
 const itemsOffset = computed(() => startIndex.value * ROW_HEIGHT)
@@ -170,26 +689,87 @@ const itemsOffset = computed(() => startIndex.value * ROW_HEIGHT)
 
 
 <template>
-    <div class="flex flex-col h-full bg-white border-r border-[#d1d1d1]">
+    <div
+      class="flex flex-col h-full bg-white border-r border-[#d1d1d1]"
+      @keydown="onContainerKeydown"
+      tabindex="-1"
+    >
         <!-- Header -->
         <div class="px-3 py-2 bg-[#f3f3f3] border-b border-[#d1d1d1] flex items-center justify-between shrink-0">
             <span class="text-xs font-bold text-gray-700">CSS Explorer</span>
             <div class="flex items-center gap-2">
-                <span class="text-[10px] text-gray-400">{{ visibleNodes.length }} nodes</span>
+                <!-- Match counter when search is active -->
+                <span v-if="searchQuery.trim()" class="text-[10px] text-blue-500 font-medium">
+                  {{ matchCount }} match{{ matchCount !== 1 ? 'es' : '' }}
+                </span>
+                <span v-else class="text-[10px] text-gray-400">{{ visibleNodes.length }} nodes</span>
+
+                <!-- Expand / Collapse All toggle -->
+                <button
+                  @click="isFullyExpanded ? collapseAll() : expandAll()"
+                  class="text-gray-500 hover:text-black"
+                  :title="isFullyExpanded ? 'Collapse All' : 'Expand All'"
+                >
+                  <!-- Collapse icon (shown when fully expanded — click to collapse) -->
+                  <svg v-if="isFullyExpanded" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M4 14l7-7m0 0V3m0 4H7M20 10l-7 7m0 0v4m0-4h4"/>
+                  </svg>
+                  <!-- Expand icon (shown when collapsed — click to expand) -->
+                  <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                  </svg>
+                </button>
+
+                <!-- Search toggle -->
+                <button
+                  @click="searchActive ? clearSearch() : openSearch()"
+                  class="text-gray-500 hover:text-black"
+                  :class="searchActive ? 'text-blue-500' : ''"
+                  title="Search (Ctrl+F)"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 111 11a6 6 0 0116 0z"/>
+                  </svg>
+                </button>
+
                 <button @click="refresh" class="text-gray-500 hover:text-black" title="Refresh AST">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                 </button>
-                <button @click="addNewRule" class="text-blue-600 hover:text-blue-700 font-bold text-lg leading-none" title="Create New Rule">
-                    +
-                </button>
             </div>
         </div>
+
+        <!-- Search bar -->
+        <transition name="search-bar">
+          <div v-if="searchActive" class="px-2 py-1.5 bg-[#f8f8f8] border-b border-[#d1d1d1] flex items-center gap-1.5 shrink-0">
+            <svg class="w-3 h-3 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 111 11a6 6 0 0116 0z"/>
+            </svg>
+            <input
+              ref="searchInputRef"
+              v-model="searchQuery"
+              type="text"
+              placeholder="Filter rules…"
+              class="flex-1 min-w-0 bg-transparent outline-none text-[11px] text-gray-700 placeholder-gray-400 font-mono"
+              @keydown.escape.stop="clearSearch"
+            />
+
+            <button
+              v-if="searchQuery"
+              @click="searchQuery = ''"
+              class="text-gray-400 hover:text-gray-700 text-[11px] leading-none font-bold shrink-0"
+              title="Clear"
+            >×</button>
+          </div>
+        </transition>
 
         <!-- Virtualized List Container -->
         <div 
             ref="containerRef"
             class="flex-1 overflow-y-auto custom-scrollbar bg-white relative"
             @scroll="handleScroll"
+            @contextmenu.self.prevent="(e) => openContextMenu(null, e)"
         >
             <div v-if="visibleNodes.length" :style="{ height: totalHeight + 'px' }" class="relative">
                 <div 
@@ -203,19 +783,40 @@ const itemsOffset = computed(() => startIndex.value * ROW_HEIGHT)
                         :depth="node.depth" 
                         :isDragging="dragState?.node?.id === node.id"
                         :dropPosition="dropTarget?.nodeId === node.id ? dropTarget.position : null"
+                        :editNodeId="pendingEditId"
+                        :searchQuery="node.searchQuery"
+                        :isActive="node.isActive"
+                        :inactiveReason="node.inactiveReason"
                         style="height: 22px;"
                         @dragstart="onDragStart"
                         @dragover="onDragOver"
                         @drop="onDrop"
                         @dragend="onDragEnd"
+                        @contextmenu="openContextMenu"
+                        @import-css="openImportModal"
                     />
                 </div>
             </div>
             <div v-else class="p-4 text-center text-gray-400 text-xs">
-                No CSS AST loaded.<br>
-                Try clicking refresh.
+              <template v-if="searchQuery.trim()">
+                No results for <strong>{{ searchQuery }}</strong>.
+              </template>
+              <template v-else>
+                No CSS AST loaded.<br>Try clicking refresh.
+              </template>
             </div>
         </div>
+
+        <!-- Menu de contexto -->
+        <CssContextMenu :menu="contextMenu" @close="contextMenu = null" />
+
+        <!-- Modal de importação de CSS -->
+        <CssImportModal
+          :isOpen="importModal.open"
+          :fileName="importModal.fileNode?.label ?? 'style'"
+          @import="handleCssImport"
+          @close="importModal.open = false"
+        />
     </div>
 </template>
 
@@ -232,6 +833,23 @@ const itemsOffset = computed(() => startIndex.value * ROW_HEIGHT)
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #ccc;
+}
+
+/* Search bar slide-down animation */
+.search-bar-enter-active,
+.search-bar-leave-active {
+  transition: max-height 0.15s ease, opacity 0.15s ease;
+  overflow: hidden;
+}
+.search-bar-enter-from,
+.search-bar-leave-to {
+  max-height: 0;
+  opacity: 0;
+}
+.search-bar-enter-to,
+.search-bar-leave-from {
+  max-height: 40px;
+  opacity: 1;
 }
 </style>
 

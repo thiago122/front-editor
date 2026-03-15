@@ -1,6 +1,26 @@
 <template>
   <div ref="ruleEl" class="rule">
-
+      <!-- Source file / origin — acima do seletor -->
+      <div>
+        <!-- ícone: revelar esta regra no CSS Explorer -->
+        <button
+          v-if="rule.selector !== 'element.style'"
+          class="rule__reveal-btn"
+          title="Revelar no CSS Explorer"
+          @click.stop="styleStore.navigateToRule(rule.uid)"
+        >
+          <!-- document-search icon -->
+          <svg class="rule__reveal-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586
+                 a1 1 0 01.707.293l5.414 5.414A1 1 0 0119 9.414V19a2 2 0
+                 01-2 2z" />
+          </svg>
+        </button>
+        <div class="rule__origin">
+          <span class="rule__origin-label">{{ originLabel }}</span>
+        </div>
+      </div>
     <!-- At-Rules hierárquicas: cada nível indenta o próximo -->
     <template v-if="rule.context && rule.context.length">
       <div
@@ -8,13 +28,7 @@
         :key="idx"
       >
 
-      <!-- Source file / origin — acima do seletor -->
-      <div>
-        <!-- adicioner o ícone aqui -->
-        <div class="rule__origin">
-          <span class="rule__origin-label">{{ originLabel }}</span>
-        </div>
-      </div>
+
 
 
         <!-- @layer: exibe como badge de categoria -->
@@ -101,6 +115,9 @@ import CssDeclaration from './CssDeclaration.vue'
 import { updateRule } from '@/editor/css/actions/cssRuleActions'
 import { createAtRule, updateAtRule } from '@/editor/css/actions/cssAtRuleActions'
 import { addDeclaration } from '@/editor/css/actions/cssDeclarationActions'
+import { useStyleStore } from '@/stores/StyleStore'
+
+const styleStore = useStyleStore()
 
 const props = defineProps({
   rule: { type: Object, required: true },
@@ -207,15 +224,41 @@ function onAddDeclaration() {
 }
 .rule__brace { margin-left: 4px; line-height: 1; }
 
-/* Origin */
 .rule__origin {
-  display: block;
+  display: inline-flex;
+  align-items: center;
   padding: 2px 8px 0;
   font-size: 10px;
   color: #9ca3af;
   letter-spacing: 0.01em;
 }
 .rule__origin-label { font-weight: 600; }
+
+/* Reveal-in-Explorer button */
+.rule__reveal-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 6px;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #9ca3af;
+  vertical-align: middle;
+  border-radius: 3px;
+  transition: color 0.15s, background 0.15s;
+}
+.rule__reveal-btn:hover {
+  color: #2563eb;
+  background: #eff6ff;
+}
+.rule__reveal-icon {
+  width: 11px;
+  height: 11px;
+}
 
 /* Declarations */
 .rule__declarations {

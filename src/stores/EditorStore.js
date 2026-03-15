@@ -17,7 +17,10 @@ export const useEditorStore = defineStore('editor', () => {
   const selectedElement = ref(null) // From Inspector
   const hoveredNodeId = ref(null)
   const inspectMode = ref(null)
+  const showBoxModel = ref(true) // Exibir margin/padding no overlay de seleção
+  const outlineMode  = ref(false) // Exibir outline em todos os elementos do iframe
   const iframe = ref(null)
+  const previewContainer = ref(null) // wrapper do <Preview> — base para position:absolute do overlay
   const viewport = ref({ width: window.innerWidth, height: window.innerHeight })
   const manipulation = ref(null)
   const clipboard = ref({ type: null, data: null }) // Clipboard tipado
@@ -100,6 +103,21 @@ export const useEditorStore = defineStore('editor', () => {
   // Getters para a UI
   const canPaste = computed(() => clipboard.value.type === 'html-node')
 
+  // ── Outline mode: injeta/remove <style> no iframe ──────────────────────────
+  const OUTLINE_STYLE_ID = 'editor-outline-mode'
+  watch([outlineMode, iframe], () => {
+    const doc = getIframeDoc()
+    if (!doc) return
+    // Remove sempre primeiro para garantir estado limpo
+    doc.getElementById(OUTLINE_STYLE_ID)?.remove()
+    if (outlineMode.value) {
+      const style = doc.createElement('style')
+      style.id = OUTLINE_STYLE_ID
+      style.textContent = '* { outline: 1px solid rgba(255, 100, 0, 0.4) !important; }'
+      doc.head.appendChild(style)
+    }
+  })
+
   watch(iframe, (newIframe) => {
     if (newIframe) {
       initEngine(newIframe.contentDocument)
@@ -153,11 +171,14 @@ export const useEditorStore = defineStore('editor', () => {
     hoveredElement,
     hoveredNodeId,
     inspectMode,
+    showBoxModel,
+    outlineMode,
     loadHTML,
     viewport,
     setViewport,
     selectParent,
     iframe,
+    previewContainer,
     getIframeDoc,
     manipulation,
     clipboard,
