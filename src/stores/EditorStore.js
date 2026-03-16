@@ -7,7 +7,7 @@ import { htmlPlugin } from '@/editor/pipeline/plugins/html-plugin'
 import { findNodeById } from '@/utils/ast'
 
 import { ManipulationEngine } from '@/editor/ManipulationEngine'
-import { history } from '@/editor/history/HistoryManager'
+import { unifiedHistory } from '@/editor/history/UnifiedHistoryManager'
 import { useStyleStore } from './StyleStore'
 
 export const useEditorStore = defineStore('editor', () => {
@@ -155,11 +155,11 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function undo() {
-    history.undo(manipulation.value)
+    unifiedHistory.undo()
   }
 
   function redo() {
-    history.redo(manipulation.value)
+    unifiedHistory.redo()
   }
 
   return {

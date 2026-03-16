@@ -1,6 +1,6 @@
 <template>
   <div class="p-2 border-b border-gray-300">
-    <label class="text-[12px] font-semibold text-gray-600 cursor-pointer mb-1" @click="showForm = !showForm">Selector +</label>
+    <label class="text-[12px] font-semibold text-gray-600 cursor-pointer mb-1" @click="showForm = !showForm">Create Selector +</label>
     <div v-if="showForm">
       <div class="flex items-center mb-2">
         <input

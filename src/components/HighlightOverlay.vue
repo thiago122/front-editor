@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
+import { NodeDispatcher } from '@/editor/dispatchers/NodeDispatcher'
 
 const props = defineProps({
   mode: {
@@ -49,12 +50,18 @@ watch(() => EditorStore.iframe, (iframe) => {
   attachIframeListeners(iframe)
 }, { immediate: true })
 
+// Também precisa recompor quando o previewContainer faz scroll
+watch(() => EditorStore.previewContainer, (container) => {
+  if (!container) return
+  container.addEventListener('scroll', onLayout, { passive: true })
+}, { immediate: true })
+
 onBeforeUnmount(detachIframeListeners)
 
-// ── Rect ─────────────────────────────────────────────────────────────────────
-// Coordenadas relativas ao previewContainer (position: relative).
-// O overflow: hidden do container recorta o overlay naturalmente,
-// sem necessidade de clip-path ou z-index fixo.
+// ── Rect em coordenadas de scroll-content (position: absolute dentro do container) ──
+// O container tem overflow:auto + position:relative — clipa o overlay naturalmente.
+// Não clampamos top/left: valores negativos ficam acima do container e somem.
+// Isso evita o efeito de "overlay fixo no topo" ao scrollar.
 
 const rect = computed(() => {
   void layoutTick.value
@@ -66,21 +73,47 @@ const rect = computed(() => {
   const iframeRect    = EditorStore.iframe.getBoundingClientRect()
   const containerRect = container.getBoundingClientRect()
 
+  // Coordenadas no espaço de scroll-content do container
   const top  = elRect.top  + iframeRect.top  - containerRect.top  + container.scrollTop
   const left = elRect.left + iframeRect.left - containerRect.left + container.scrollLeft
 
-  // Clamp to container's visible size so the overlay never expands the scrollable area.
-  // Without this, selecting a large element (e.g. body) causes unwanted vertical scroll.
+  // Clampamos apenas o tamanho (para evitar expansão da scroll area em elementos grandes)
   const maxW = container.clientWidth
   const maxH = container.clientHeight + container.scrollTop
 
   return {
-    top:    Math.max(0, top),
-    left:   Math.max(0, left),
-    width:  Math.min(elRect.width,  maxW - Math.max(0, left)),
-    height: Math.min(elRect.height, maxH - Math.max(0, top)),
+    top,
+    left,
+    width:  Math.min(elRect.width,  maxW),
+    height: Math.min(elRect.height, maxH),
   }
 })
+
+// ── Controles de seleção (apenas mode=selection) ─────────────────────────────
+
+const selNodeId = computed(() => props.mode === 'selection' ? EditorStore.selectedNodeId : null)
+
+const selParent = computed(() =>
+  selNodeId.value ? EditorStore.getParent(selNodeId.value) : null
+)
+
+const selIndex = computed(() => {
+  if (!selParent.value?.children || !selNodeId.value) return -1
+  return selParent.value.children.findIndex(c => c.nodeId === selNodeId.value)
+})
+
+const canMoveUp   = computed(() => selIndex.value > 0)
+const canMoveDown = computed(() =>
+  selParent.value && selIndex.value < selParent.value.children.length - 1
+)
+
+function selectParent() {
+  if (selParent.value) EditorStore.selectParent()
+}
+
+function moveUp()   { if (canMoveUp.value)   NodeDispatcher.moveNode(selNodeId.value, -1) }
+function moveDown() { if (canMoveDown.value) NodeDispatcher.moveNode(selNodeId.value,  1) }
+function deleteNode() { if (selNodeId.value) NodeDispatcher.deleteNode(selNodeId.value) }
 
 const label = computed(() => {
   const el = props.mode === 'hover' ? EditorStore.hoveredElement : EditorStore.selectedElement
@@ -88,11 +121,8 @@ const label = computed(() => {
   return el.tagName.toLowerCase() + (el.id ? '#' + el.id : '')
 })
 
-/**
- * Lê margin e padding do elemento selecionado via getComputedStyle.
- * Usa a janela do iframe para que os valores reflitam os estilos aplicados.
- * Retorna null fora do modo 'selection' ou se não houver elemento.
- */
+/** Quando o elemento está muito próximo do topo, move a barra para baixo */
+const labelBelow = computed(() => !!rect.value && rect.value.top < 30)
 const boxSpacing = computed(() => {
   void layoutTick.value
   if (props.mode !== 'selection') return null
@@ -115,7 +145,7 @@ const boxSpacing = computed(() => {
 <template>
   <div
     v-if="rect"
-    class="pointer-events-none absolute transition-all duration-75"
+    class="pointer-events-none absolute transition-all duration-75 border border-blue-500"
     :style="{
       top:    rect.top    + 'px',
       left:   rect.left   + 'px',
@@ -153,13 +183,8 @@ const boxSpacing = computed(() => {
       </div>
     </template>
 
-    <!-- ── Borda do elemento (azul tracejado no selection) ── -->
-    <div
-      class="absolute inset-0 border"
-      :class="mode === 'hover'
-        ? 'border-blue-500 bg-blue-500/10'
-        : 'border-blue-600 border-dashed bg-blue-500/5'"
-    >
+    <!-- ── Borda do elemento — hover sempre, selection só com box model ── -->
+    <div class="absolute inset-0 " v-if="mode === 'hover' || boxSpacing">
 
       <!-- ── Camada de PADDING (verde) — dentro do elemento ── -->
       <template v-if="boxSpacing">
@@ -191,13 +216,53 @@ const boxSpacing = computed(() => {
 
     </div>
 
-    <!-- ── Tag Label (estilo DevTools) ── -->
+    <!-- ── Tag Label barra de controles (estilo DevTools) ── -->
     <div
       v-if="label"
-      class="absolute bottom-full left-0 mb-1 px-1.5 py-0.5 bg-blue-600 text-white text-[10px] font-bold rounded flex items-center gap-1 whitespace-nowrap shadow-sm"
+      class="absolute left-[-1px] bg-blue-600 text-white text-[10px] font-bold flex items-center whitespace-nowrap pointer-events-auto"
+      :class="labelBelow ? 'top-full' : 'bottom-full'"
     >
-      <span class="opacity-80">{{ label }}</span>
-      <span class="font-mono text-[9px] opacity-60">{{ Math.round(rect.width) }} × {{ Math.round(rect.height) }}</span>
+      <!-- Tag + dimensões -->
+      <div class="flex items-center gap-1 px-1.5 py-0.5">
+        <span class="opacity-80">{{ label }}</span>
+        <span class="font-mono text-[10px] opacity-60">{{ Math.round(rect.width) }} × {{ Math.round(rect.height) }}</span>
+      </div>
+
+      <!-- Controles: apenas no modo selection -->
+      <template v-if="mode === 'selection' && selNodeId">
+        <div class="flex items-center border-l border-blue-500">
+          <!-- Ir para pai -->
+          <button
+            v-if="selParent"
+            @click.stop="selectParent"
+            class="px-1.5 py-0.5 hover:bg-blue-700 transition-colors"
+            title="Selecionar pai"
+          >↑</button>
+
+          <!-- Mover acima -->
+          <button
+            @click.stop="moveUp"
+            :disabled="!canMoveUp"
+            class="px-1.5 py-0.5 hover:bg-blue-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Mover acima"
+          >▲</button>
+
+          <!-- Mover abaixo -->
+          <button
+            @click.stop="moveDown"
+            :disabled="!canMoveDown"
+            class="px-1.5 py-0.5 hover:bg-blue-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Mover abaixo"
+          >▼</button>
+
+          <!-- Deletar -->
+          <button
+            @click.stop="deleteNode"
+            class="px-1.5 py-0.5 hover:bg-red-600 transition-colors"
+            title="Deletar elemento"
+          >×</button>
+        </div>
+      </template>
     </div>
 
   </div>

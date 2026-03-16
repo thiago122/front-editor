@@ -14,7 +14,7 @@ import { useEditorStore } from '@/stores/EditorStore'
 import { CssLogicTreeService } from '@/editor/css/tree/CssLogicTreeService'
 import { createInlineStyleStrategy } from '@/strategies/inlineStyleStrategy'
 import { findAndRemoveFromLogicTree } from '@/utils/astHelpers'
-import { cssHistory } from '@/editor/css/history/CssHistoryManager'
+import { unifiedHistory } from '@/editor/history/UnifiedHistoryManager'
 
 const INLINE = 'element.style'
 
@@ -37,10 +37,11 @@ export function toggleDeclaration(rule, decl) {
     inline.toggleProperty(decl)
   } else {
     const styleStore = useStyleStore()
-    cssHistory.snapshot(styleStore.cssLogicTree)
+    const applyFn = () => styleStore.applyMutation(useEditorStore().getIframeDoc())
+    unifiedHistory.snapshotCss(styleStore.cssLogicTree, applyFn)
     CssLogicTreeService.toggleDeclaration(decl)
     styleStore.applyMutation(useEditorStore().getIframeDoc())
-    cssHistory.commit(styleStore.cssLogicTree)
+    unifiedHistory.commitCss(styleStore.cssLogicTree)
   }
 }
 
@@ -53,13 +54,13 @@ export function updateDeclaration(rule, decl, field, newValue) {
   const inline = getInlineStrategy(rule)
   if (inline) {
     inline.updateProperty(decl, field, newValue, oldValue)
-    // MutationObserver fires updateInspectorRules automatically for inline
   } else {
     const styleStore = useStyleStore()
-    cssHistory.snapshot(styleStore.cssLogicTree)
+    const applyFn = () => styleStore.applyMutation(useEditorStore().getIframeDoc())
+    unifiedHistory.snapshotCss(styleStore.cssLogicTree, applyFn)
     CssLogicTreeService.updateDeclaration(decl, field, newValue)
     styleStore.applyMutation(useEditorStore().getIframeDoc())
-    cssHistory.commit(styleStore.cssLogicTree)
+    unifiedHistory.commitCss(styleStore.cssLogicTree)
   }
 }
 
@@ -73,20 +74,16 @@ export function deleteDeclaration(rule, decl) {
   } else {
     const styleStore  = useStyleStore()
     const editorStore = useEditorStore()
+    const applyFn = () => styleStore.applyMutation(editorStore.getIframeDoc())
 
-    cssHistory.snapshot(styleStore.cssLogicTree)
+    unifiedHistory.snapshotCss(styleStore.cssLogicTree, applyFn)
 
-    // 1. Remove from the Logic Tree first (so syncToDOM regenerates CSS without it)
     const logicTree = toRaw(styleStore.cssLogicTree)
-    if (decl.id && logicTree) {
-      findAndRemoveFromLogicTree(logicTree, decl.id)
-    }
+    if (decl.id && logicTree) findAndRemoveFromLogicTree(logicTree, decl.id)
 
-    // 2. Sync Logic Tree → DOM and notify Vue reactivity
     styleStore.applyMutation(editorStore.getIframeDoc())
-    cssHistory.commit(styleStore.cssLogicTree)
+    unifiedHistory.commitCss(styleStore.cssLogicTree)
 
-    // 3. Force-refresh the inspector immediately (don't rely on the async watcher)
     styleStore.updateInspectorRules(
       editorStore.selectedElement,
       editorStore.viewport,
@@ -115,9 +112,10 @@ export function addDeclaration(rule, ruleEl = null, prop = null, val = null) {
     strategy?.addProperty(rule)
   } else {
     const styleStore = useStyleStore()
-    cssHistory.snapshot(styleStore.cssLogicTree)
+    const applyFn = () => styleStore.applyMutation(useEditorStore().getIframeDoc())
+    unifiedHistory.snapshotCss(styleStore.cssLogicTree, applyFn)
     CssLogicTreeService.createDeclaration(rule, prop, val)
     styleStore.applyMutation(useEditorStore().getIframeDoc())
-    cssHistory.commit(styleStore.cssLogicTree)
+    unifiedHistory.commitCss(styleStore.cssLogicTree)
   }
 }

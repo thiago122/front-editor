@@ -1,7 +1,7 @@
 // ManipulatinEngine.js
 
 import { findNodeById, findParentAndIndex, findParentNode, cloneAndRegenerate } from '@/utils/ast'
-import { history } from './history/HistoryManager'
+import { unifiedHistory as history } from './history/UnifiedHistoryManager'
 
 export class ManipulationEngine {
   // Passamos funções que buscam os valores atuais (getters)
@@ -9,6 +9,9 @@ export class ManipulationEngine {
     this.getCtx = getCtx
     this.getDoc = getDoc
     this.pipeline = pipeline
+    // Registra esta engine no UnifiedHistoryManager para que HtmlCommand
+    // possa executar applyOperation() durante undo/redo.
+    history.setEngine(this)
   }
 
   // Método interno para atualizar o DOM
@@ -39,7 +42,11 @@ export class ManipulationEngine {
         break
 
       case 'attr':
-        el?.setAttribute(arguments[2], arguments[3])
+        if (arguments[3] === null || arguments[3] === undefined) {
+          el?.removeAttribute(arguments[2])
+        } else {
+          el?.setAttribute(arguments[2], arguments[3])
+        }
         break
     }
   }
@@ -166,6 +173,22 @@ export class ManipulationEngine {
       type: 'moveNodeAt',
       args: [parentId, toIndex, fromIndex], // Swap args
     })
+  }
+
+  /**
+   * Move um nó uma posição acima (-1) ou abaixo (+1) entre os irmãos.
+   * Chamado pelo MoveCommand via NodeDispatcher.
+   */
+  move(nodeId, direction) {
+    const ctx = this.getCtx()
+    const result = findParentAndIndex(ctx.ast, nodeId)
+    if (!result) return
+
+    const { parent, index } = result
+    const toIndex = index + direction
+
+    if (toIndex < 0 || toIndex >= parent.children.length) return
+    this.moveNodeAt(parent.nodeId, index, toIndex)
   }
 
   // Helper for move DOM sync
@@ -391,12 +414,32 @@ export class ManipulationEngine {
   }
 
   setAttributes(nodeId, attrsMap) {
-    // Wrapper for setAttribute in loop?
-    // Or explicit transaction.
     history.beginTransaction()
     Object.entries(attrsMap).forEach(([key, val]) => {
       this.setAttribute(nodeId, key, val)
     })
     history.commit()
+  }
+
+  /**
+   * Remove an HTML attribute from a node.
+   * Fully undoable: inverse is setAttribute(nodeId, name, oldValue).
+   */
+  removeAttribute(nodeId, name) {
+    const ctx = this.getCtx()
+    const node = findNodeById(ctx.ast, nodeId)
+    if (!node || node.type !== 'element' || !node.attrs) return
+
+    const oldValue = node.attrs[name]
+    delete node.attrs[name]
+
+    const doc = this.getDoc()
+    doc?.querySelector(`[data-node-id="${nodeId}"]`)?.removeAttribute(name)
+
+    // Inverse: restore the attribute with its old value
+    history.record({
+      type: 'setAttribute',
+      args: [nodeId, name, oldValue ?? null],
+    })
   }
 }

@@ -47,7 +47,11 @@ export function useIframeEvents(iframeRef, EditorStore) {
       e.stopPropagation()
 
       const el = e.target.closest('[data-node-id]')
-      if (!el) return
+      if (!el) {
+        // Clique em área vazia do canvas → deseleciona e oculta o overlay
+        EditorStore.clearSelection()
+        return
+      }
 
       EditorStore.selectNode(el.dataset.nodeId, el)
       // inspect mode permanece ativo — o usuário desativa manualmente pelo ícone
@@ -73,6 +77,17 @@ export function useIframeEvents(iframeRef, EditorStore) {
     const doc = getDoc()
     if (!doc) return
     attachInspectListeners(doc)
+
+    // Previne que Space/ArrowUp/ArrowDown scrollem o iframe quando o foco
+    // está no documento (não num contenteditable ou input).
+    doc.addEventListener('keydown', (e) => {
+      const SCROLL_KEYS = [' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown']
+      if (!SCROLL_KEYS.includes(e.key)) return
+      const active = doc.activeElement
+      const isEditable = active &&
+        (active.isContentEditable || active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')
+      if (!isEditable) e.preventDefault()
+    })
   }
 
   // Reage ao inspectMode para mudar cursor e limpar hover ao desativar
@@ -84,6 +99,7 @@ export function useIframeEvents(iframeRef, EditorStore) {
       } else {
         setIframeCursor('')
         clearHover()
+        EditorStore.clearSelection()
       }
     },
   )

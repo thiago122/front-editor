@@ -1,5 +1,5 @@
 <template>
-  <div class="decl">
+  <div class="decl" @keydown="ac.onKeydown($event)">
 
     <input
       v-if="editable"
@@ -12,14 +12,15 @@
 
     <!-- Prop name -->
     <input
+      ref="propInput"
       class="prop-name decl__prop"
       :class="fieldStateClasses()"
       :readonly="!editable"
       :value="decl.prop"
       :size="Math.max(decl.prop.length, 2)"
-      @focus="e => e.target.select()"
-      @input="(e) => e.target.size = Math.max(e.target.value.length, 2)"
-      @blur="(e) => updateDeclaration(rule, decl, 'prop', e.target.value)"
+      @focus="onPropFocus"
+      @input="onPropInput"
+      @blur="onPropBlur"
       @keydown.enter.prevent="onFocusValue"
       @keydown.tab.prevent="onFocusValue"
     />
@@ -29,24 +30,33 @@
     <div class="decl__value-wrap">
       <!-- Value -->
       <input
+        ref="valueInput"
         class="prop-value decl__value"
         :class="fieldStateClasses()"
         :readonly="!editable"
         :value="decl.important ? decl.value + ' !important' : decl.value"
-        @focus="e => e.target.select()"
-        @blur="(e) => updateDeclaration(rule, decl, 'value', e.target.value)"
+        @focus="onValueFocus"
+        @input="onValueInput"
+        @blur="onValueBlur"
         @keydown.enter.prevent="onFocusNextDecl"
         @keydown.tab.prevent="onFocusNextDecl"
       />
     </div>
 
-
     <button v-if="editable" @click.stop="deleteDeclaration(rule, decl)" class="decl__delete">×</button>
+
+    <!-- Autocomplete dropdown (prop) -->
+    <CssAutocompleteDropdown :ac="ac" :anchor="propInput" v-if="acTarget === 'prop'" />
+    <!-- Autocomplete dropdown (value) -->
+    <CssAutocompleteDropdown :ac="ac" :anchor="valueInput" v-if="acTarget === 'value'" />
   </div>
 </template>
 
 <script setup>
+import { ref } from 'vue'
 import { toggleDeclaration, updateDeclaration, deleteDeclaration } from '@/editor/css/actions/cssDeclarationActions'
+import { useCssAutocomplete } from '@/composables/useCssAutocomplete'
+import CssAutocompleteDropdown from '@/components/CssAutocompleteDropdown.vue'
 
 const props = defineProps({
   rule: { type: Object, required: true },
@@ -54,25 +64,93 @@ const props = defineProps({
   editable: { type: Boolean, default: false },
 })
 
+const ac        = useCssAutocomplete()
+const propInput  = ref(null)
+const valueInput = ref(null)
+const acTarget   = ref(null)  // 'prop' | 'value' | null — qual input está com dropdown
+
+// ── Prop name handlers ────────────────────────────────────────────────────────
+
+function onPropFocus(e) {
+  if (!props.editable) return
+  e.target.select()
+  acTarget.value = 'prop'
+  ac.openProp(propInput.value, e.target.value, accepted => {
+    updateDeclaration(props.rule, props.decl, 'prop', accepted)
+    // Após aceitar a prop, foca o value
+    setTimeout(() => valueInput.value?.focus(), 0)
+  })
+}
+
+function onPropInput(e) {
+  e.target.size = Math.max(e.target.value.length, 2)
+  if (!props.editable) return
+  acTarget.value = 'prop'
+  ac.updateQuery(e.target.value)
+  if (!ac.isActive.value) {
+    ac.openProp(propInput.value, e.target.value, accepted => {
+      updateDeclaration(props.rule, props.decl, 'prop', accepted)
+      setTimeout(() => valueInput.value?.focus(), 0)
+    })
+  }
+}
+
+function onPropBlur(e) {
+  // Pequeno delay para permitir mousedown no dropdown antes de fechar
+  setTimeout(() => {
+    ac.close()
+    acTarget.value = null
+    updateDeclaration(props.rule, props.decl, 'prop', e.target.value)
+  }, 120)
+}
+
+// ── Value handlers ────────────────────────────────────────────────────────────
+
+function onValueFocus(e) {
+  if (!props.editable) return
+  e.target.select()
+  acTarget.value = 'value'
+  ac.openValue(valueInput.value, props.decl.prop, e.target.value, accepted => {
+    updateDeclaration(props.rule, props.decl, 'value', accepted)
+  })
+}
+
+function onValueInput(e) {
+  if (!props.editable) return
+  acTarget.value = 'value'
+  ac.updateQuery(e.target.value)
+  if (!ac.isActive.value) {
+    ac.openValue(valueInput.value, props.decl.prop, e.target.value, accepted => {
+      updateDeclaration(props.rule, props.decl, 'value', accepted)
+    })
+  }
+}
+
+function onValueBlur(e) {
+  setTimeout(() => {
+    ac.close()
+    acTarget.value = null
+    updateDeclaration(props.rule, props.decl, 'value', e.target.value)
+  }, 120)
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+
 function onFocusValue(e) {
+  if (ac.isActive.value && ac.activeIdx.value >= 0) return // Enter aceita sugestão via ac.onKeydown
   e.target.closest('.decl')?.querySelector('.prop-value')?.focus()
 }
 
-/** Enter/Tab no value: salva (via blur) e vai para o prop da próxima declaration */
 function onFocusNextDecl(e) {
+  if (ac.isActive.value && ac.activeIdx.value >= 0) return
   const currentDecl = e.target.closest('.decl')
-  const nextDecl = currentDecl?.nextElementSibling
-  // blur salva o valor atual via o handler @blur
+  const nextDecl    = currentDecl?.nextElementSibling
   e.target.blur()
   if (nextDecl?.classList.contains('decl')) {
     nextDecl.querySelector('.prop-name')?.focus()
   }
 }
 
-/** Retorna as classes de estado compartilhadas pelos campos de prop e valor.
- *  is-editable / is-readonly  → controla cursor e highlight de hover
- *  is-inactive                 → esmaece e risca declarações sobrescritas ou desativadas
- */
 function fieldStateClasses() {
   return [
     props.editable ? 'is-editable' : 'is-readonly',
@@ -85,7 +163,7 @@ function fieldStateClasses() {
 .decl {
   display: flex;
   align-items: center;
-padding-top: 1.5px;
+  padding-top: 1.5px;
   padding-bottom: 1.5px;
 }
 
@@ -100,10 +178,7 @@ padding-top: 1.5px;
   opacity: 0;
   transition: opacity 0.1s;
 }
-/* Aparece apenas ao hover na rule inteira */
-.rule:hover .decl__checkbox {
-  opacity: 1;
-}
+.rule:hover .decl__checkbox { opacity: 1; }
 .decl__checkbox.is-faded { opacity: 0.3; }
 
 /* Prop name */
@@ -148,19 +223,10 @@ padding-top: 1.5px;
 .decl__value.is-editable:focus { background: #eff6ff; }
 .decl__value.is-readonly { pointer-events: none; }
 
-/* Declaração inativa (sobrescrita ou desativada) */
+/* Declaração inativa */
 .is-inactive {
   opacity: 0.3;
   text-decoration: line-through;
-}
-
-/* !important badge */
-.decl__important {
-  flex-shrink: 0;
-  color: #f59e0b;
-  font-size: 8px;
-  font-weight: 900;
-  text-transform: uppercase;
 }
 
 /* Delete button */

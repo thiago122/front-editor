@@ -75,7 +75,7 @@ function injectStyle() {
 onMounted(() => {
   iframeRef.value.addEventListener('load', () => {
     iframeEvents.setup()
-    inlineEdit.setup(() => EditorStore.inspectMode)
+    inlineEdit.setup()
 
     // Sincroniza estado inicial se houver
     if (EditorStore.selectedNodeId) iframeEvents.applySelection(EditorStore.selectedNodeId)

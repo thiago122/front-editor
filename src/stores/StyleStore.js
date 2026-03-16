@@ -3,7 +3,7 @@ import { defineStore } from 'pinia'
 import { CssAstService } from '@/editor/css/ast/CssAstService'
 import { CssLogicTreeService } from '@/editor/css/tree/CssLogicTreeService'
 import { calculateOverrides, findCssNode } from '@/utils/astHelpers'
-import { cssHistory } from '@/editor/css/history/CssHistoryManager'
+import { unifiedHistory } from '@/editor/history/UnifiedHistoryManager'
 
 // ─── Internal helper ──────────────────────────────────────────────────────────
 
@@ -131,6 +131,9 @@ export const useStyleStore = defineStore('style', () => {
     if (!doc) return
     const masterAst = await CssAstService.buildMasterAst(doc, locations)
     cssLogicTree.value = markRaw(CssLogicTreeService.buildLogicTree(masterAst))
+    // A logicTree foi substituída por um novo array — snapshots antigos
+    // apontam para o array anterior e não fazem mais sentido.
+    unifiedHistory.clearCssHistory()
     notifyTreeMutation()
   }
 
@@ -171,30 +174,6 @@ export const useStyleStore = defineStore('style', () => {
     selectRule(target?.rules[0]?.uid ?? null)
   }
 
-  // ── CSS History ────────────────────────────────────────────────────────────
-
-  /** Se há mudanças CSS para desfazer. */
-  const canCssUndo = computed(() => cssHistory.canUndo)
-
-  /** Se há mudanças CSS para refazer. */
-  const canCssRedo = computed(() => cssHistory.canRedo)
-
-  /**
-   * Desfaz a última mutação CSS.
-   * @param {Document} doc — iframe.contentDocument
-   */
-  function cssUndo(doc) {
-    cssHistory.undo(cssLogicTree.value, () => applyMutation(doc))
-  }
-
-  /**
-   * Refaz a última mutação CSS desfeita.
-   * @param {Document} doc — iframe.contentDocument
-   */
-  function cssRedo(doc) {
-    cssHistory.redo(cssLogicTree.value, () => applyMutation(doc))
-  }
-
   // ── Exports ────────────────────────────────────────────────────────────────
 
   return {
@@ -214,9 +193,5 @@ export const useStyleStore = defineStore('style', () => {
     applyMutation,
     rebuildLogicTree,
     updateInspectorRules,
-    canCssUndo,
-    canCssRedo,
-    cssUndo,
-    cssRedo,
   }
 })

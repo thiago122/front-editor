@@ -1,7 +1,5 @@
-[data-selected] {
-  /* outline: 1px solid #3b82f6;
-  background-color: rgba(59, 130, 246, 0.1); */
-}
+/* [data-selected] styles reserved for future use */
+
 
 #__ast-overlay__ {
   position: fixed;
@@ -13,6 +11,24 @@
 }
 
 [data-node-id][data-editor-hovered] {
-  background-color: rgba(255, 165, 0, 0.2) !important; /* Laranja suave */
-  outline: 1px solid orange !important;
+  /*   background-color: rgba(255, 165, 0, 0.2) !important; /* Laranja suave */
+  /* outline: 1px solid orange !important;  */
+}
+
+/* ── Inline text editing ─────────────────────────────────────────────────── */
+
+/* Elemento em modo de edição de texto: outline azul estilo DevTools */
+[data-editing] {
+  outline: 2px solid #3b82f6 !important;
+  outline-offset: 2px !important;
+  background: rgba(59, 130, 246, 0.04) !important;
+  caret-color: #3b82f6;
+}
+
+/* Cursor text em tags de texto quando não está em inspect mode */
+p[data-node-id], h1[data-node-id], h2[data-node-id], h3[data-node-id],
+h4[data-node-id], h5[data-node-id], h6[data-node-id],
+span[data-node-id], a[data-node-id], button[data-node-id],
+li[data-node-id], td[data-node-id], th[data-node-id], label[data-node-id] {
+  cursor: text;
 }

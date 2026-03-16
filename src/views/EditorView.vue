@@ -335,14 +335,14 @@ watch(
       :save="pendingSave"
       @restore="handleRestoreSave"
       @discard="handleDiscardSave"
+      class="z-[1000]"
     />
     <!-- <div class="flex justify-center bg-gray-200">
       <RouterLink to="/">Home</RouterLink>
       <RouterLink to="/editor">Editor</RouterLink>
     </div> -->
 
-    <div class="flex items-center justify-center bg-white border-b border-gray-200"
-         style="position: relative; ">
+    <div class="flex items-center justify-center bg-white border-b border-gray-200 relative z-[1000]">
 
 
       <div class="flex gap-2">
@@ -367,7 +367,7 @@ watch(
           <!-- Botão principal: ativa/desativa inspect mode -->
           <button
             class="w-8 h-8 rounded-md flex items-center justify-center transition-all duration-150 hover:bg-gray-200 text-text-primary"
-            :class="EditorStore.inspectMode ? 'bg-gray-200' : ''"
+            :class="EditorStore.inspectMode ? 'bg-blue-100 text-blue-600' : ''"
             @click="EditorStore.inspectMode = !EditorStore.inspectMode"
             title="Inspect"
           >
@@ -510,8 +510,7 @@ watch(
 
       <!-- col-main: canvas (absorve diferenças via flex-1) -->
       <div class="flex flex-col h-full w-full overflow-hidden gap-3" id="col-main">
-          <div class="flex justify-between shrink-0 px-4 gap-2 overflow-x-auto w-full text-text-secondary text-xs  border-b border-gray-200"
-               style="position: relative;">
+          <div class="flex justify-between shrink-0 px-4 gap-2 overflow-x-auto w-full text-text-secondary text-xs  border-b border-gray-200 relative z-[1000]">
             <div class="flex gap-2 items-center">
               <HistoryControls></HistoryControls>
               <Separator />

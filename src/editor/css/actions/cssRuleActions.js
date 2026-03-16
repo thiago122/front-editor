@@ -11,7 +11,7 @@ import { toRaw } from 'vue'
 import { useStyleStore } from '@/stores/StyleStore'
 import { useEditorStore } from '@/stores/EditorStore'
 import { CssLogicTreeService } from '@/editor/css/tree/CssLogicTreeService'
-import { cssHistory } from '@/editor/css/history/CssHistoryManager'
+import { unifiedHistory } from '@/editor/history/UnifiedHistoryManager'
 
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
@@ -24,14 +24,15 @@ import { cssHistory } from '@/editor/css/history/CssHistoryManager'
  */
 export function createRule(selector, origin = 'on_page', sourceName = 'style') {
   const styleStore = useStyleStore()
-  cssHistory.snapshot(styleStore.cssLogicTree)
+  const applyFn = () => styleStore.applyMutation(useEditorStore().getIframeDoc())
+  unifiedHistory.snapshotCss(styleStore.cssLogicTree, applyFn)
   const newNode = CssLogicTreeService.createRule(toRaw(styleStore.cssLogicTree), selector, origin, sourceName)
   if (newNode) {
     styleStore.applyMutation(useEditorStore().getIframeDoc())
-    cssHistory.commit(styleStore.cssLogicTree)
+    unifiedHistory.commitCss(styleStore.cssLogicTree)
     styleStore.selectRule(newNode.id)
   } else {
-    cssHistory._pending = null // descarta snapshot se nada foi criado
+    unifiedHistory.discardCssSnapshot()
   }
   return newNode
 }
@@ -43,14 +44,15 @@ export function createRule(selector, origin = 'on_page', sourceName = 'style') {
 export function updateRule(rule, newSelector) {
   if (rule.selector === 'element.style' || !rule.astNode) return false
   const styleStore = useStyleStore()
-  cssHistory.snapshot(styleStore.cssLogicTree)
+  const applyFn = () => styleStore.applyMutation(useEditorStore().getIframeDoc())
+  unifiedHistory.snapshotCss(styleStore.cssLogicTree, applyFn)
   const updated = CssLogicTreeService.updateRule(toRaw(styleStore.cssLogicTree), rule.uid, newSelector)
   if (updated) {
     rule.selector = newSelector
     styleStore.applyMutation(useEditorStore().getIframeDoc())
-    cssHistory.commit(styleStore.cssLogicTree)
+    unifiedHistory.commitCss(styleStore.cssLogicTree)
   } else {
-    cssHistory._pending = null
+    unifiedHistory.discardCssSnapshot()
   }
   return updated
 }
@@ -62,13 +64,14 @@ export function updateRule(rule, newSelector) {
 export function deleteRule(rule) {
   if (rule.selector === 'element.style') return false
   const styleStore = useStyleStore()
-  cssHistory.snapshot(styleStore.cssLogicTree)
+  const applyFn = () => styleStore.applyMutation(useEditorStore().getIframeDoc())
+  unifiedHistory.snapshotCss(styleStore.cssLogicTree, applyFn)
   const removed = CssLogicTreeService.deleteRule(toRaw(styleStore.cssLogicTree), rule.uid)
   if (removed) {
     styleStore.applyMutation(useEditorStore().getIframeDoc())
-    cssHistory.commit(styleStore.cssLogicTree)
+    unifiedHistory.commitCss(styleStore.cssLogicTree)
   } else {
-    cssHistory._pending = null
+    unifiedHistory.discardCssSnapshot()
   }
   return removed
 }
