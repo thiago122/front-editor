@@ -1,7 +1,9 @@
 <script setup>
-import { computed, ref, watch, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
 import { NodeDispatcher } from '@/editor/dispatchers/NodeDispatcher'
+import TagAutocomplete from '@/components/TagAutocomplete.vue'
+import { tagToHtml } from '@/editor/html/htmlTags'
 
 const props = defineProps({
   mode: {
@@ -24,9 +26,12 @@ function onLayout() { layoutTick.value++ }
 
 function attachScrollListener(iframe) {
   try { iframeWin?.removeEventListener('scroll', onLayout) } catch { /* ignore */ }
+  try { iframeWin?.removeEventListener('keydown', handleGlobalKeydown) } catch { /* ignore */ }
   try {
     iframeWin = iframe.contentWindow
     iframeWin?.addEventListener('scroll', onLayout, { passive: true })
+    // Ctrl+Space: foco pode estar no iframe, então escuta lá também
+    iframeWin?.addEventListener('keydown', handleGlobalKeydown)
   } catch { /* cross-origin */ }
 }
 
@@ -41,6 +46,7 @@ function attachIframeListeners(iframe) {
 
 function detachIframeListeners() {
   try { iframeWin?.removeEventListener('scroll', onLayout) } catch { /* ignore */ }
+  try { iframeWin?.removeEventListener('keydown', handleGlobalKeydown) } catch { /* ignore */ }
   iframeWin = null
   resizeObserver?.disconnect()
   resizeObserver = null
@@ -115,6 +121,69 @@ function moveUp()   { if (canMoveUp.value)   NodeDispatcher.moveNode(selNodeId.v
 function moveDown() { if (canMoveDown.value) NodeDispatcher.moveNode(selNodeId.value,  1) }
 function deleteNode() { if (selNodeId.value) NodeDispatcher.deleteNode(selNodeId.value) }
 
+// ── Autocomplete de tags (botão +) ───────────────────────────────────────────
+
+const showAutocomplete   = ref(false)
+const autocompleteStyle  = ref({})
+
+/** Abre o autocomplete posicionado abaixo do botão + clicado */
+function openAutocomplete(event) {
+  const rect = event.currentTarget.getBoundingClientRect()
+  openAutocompleteAt(rect.bottom + 4, rect.left)
+}
+
+/**
+ * Abre o autocomplete em coordenadas fixas.
+ * Usado tanto pelo clique no botão quanto pelo atalho Ctrl+Space.
+ */
+function openAutocompleteAt(top, left) {
+  autocompleteStyle.value = { top: `${top}px`, left: `${left}px` }
+  showAutocomplete.value  = true
+}
+
+// ── Atalho de teclado Ctrl+Space ─────────────────────────────────────────────
+
+function handleGlobalKeydown(e) {
+  // Só abre se houver elemento selecionado e o autocomplete estiver fechado
+  if (!e.ctrlKey || e.key !== ' ') return
+  if (props.mode !== 'selection') return
+  if (!selNodeId.value) return
+
+  e.preventDefault()
+
+  if (showAutocomplete.value) {
+    showAutocomplete.value = false
+    return
+  }
+
+  // Calcula posição em coordenadas de viewport (position:fixed)
+  // elRect + iframeRect = posição real do elemento na janela principal
+  const el     = EditorStore.selectedElement
+  const iframe = EditorStore.iframe
+
+  if (el && iframe) {
+    const elRect     = el.getBoundingClientRect()
+    const iframeRect = iframe.getBoundingClientRect()
+    openAutocompleteAt(
+      elRect.bottom + iframeRect.top + 6,
+      elRect.left   + iframeRect.left,
+    )
+  } else {
+    // Fallback: centro do viewport
+    openAutocompleteAt(window.innerHeight / 2 - 60, window.innerWidth / 2 - 90)
+  }
+}
+
+onMounted(()  => window.addEventListener('keydown', handleGlobalKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', handleGlobalKeydown))
+
+/** Usuário selecionou uma tag no autocomplete */
+function onTagSelected(tag) {
+  showAutocomplete.value = false
+  if (!selNodeId.value) return
+  NodeDispatcher.insertAfter(selNodeId.value, tagToHtml(tag))
+}
+
 const label = computed(() => {
   const el = props.mode === 'hover' ? EditorStore.hoveredElement : EditorStore.selectedElement
   if (!el) return ''
@@ -145,7 +214,8 @@ const boxSpacing = computed(() => {
 <template>
   <div
     v-if="rect"
-    class="pointer-events-none absolute transition-all duration-75 border border-blue-500"
+    class="pointer-events-none absolute border border-blue-500"
+    :class="{ 'overlay-blink': props.mode === 'selection' && EditorStore.isBlinking }"
     :style="{
       top:    rect.top    + 'px',
       left:   rect.left   + 'px',
@@ -239,21 +309,12 @@ const boxSpacing = computed(() => {
             title="Selecionar pai"
           >↑</button>
 
-          <!-- Mover acima -->
+          <!-- Inserir irmão após (+) -->
           <button
-            @click.stop="moveUp"
-            :disabled="!canMoveUp"
-            class="px-1.5 py-0.5 hover:bg-blue-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            title="Mover acima"
-          >▲</button>
-
-          <!-- Mover abaixo -->
-          <button
-            @click.stop="moveDown"
-            :disabled="!canMoveDown"
-            class="px-1.5 py-0.5 hover:bg-blue-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            title="Mover abaixo"
-          >▼</button>
+            @click.stop="openAutocomplete"
+            class="px-1.5 py-0.5 hover:bg-blue-700 transition-colors font-bold"
+            title="Inserir tag após este elemento"
+          >+</button>
 
           <!-- Deletar -->
           <button
@@ -266,4 +327,29 @@ const boxSpacing = computed(() => {
     </div>
 
   </div>
+
+  <!-- Autocomplete de tags: abre ao clicar no botão + da barra de seleção -->
+  <TagAutocomplete
+    v-if="showAutocomplete"
+    :style="autocompleteStyle"
+    @select="onTagSelected"
+    @close="showAutocomplete = false"
+  />
+
 </template>
+
+
+
+<style scoped>
+/* Pulso colorido — ativado por 3s após inserção de elemento */
+@keyframes overlayBlink {
+  0%   { border-color: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,0.35);  }  /* verde */
+  33%  { border-color: #f97316; box-shadow: 0 0 0 5px rgba(249,115,22,0.30); }  /* laranja */
+  66%  { border-color: #a855f7; box-shadow: 0 0 0 3px rgba(168,85,247,0.30); }  /* roxo */
+  100% { border-color: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,0.35);  }  /* verde */
+}
+
+.overlay-blink {
+  animation: overlayBlink 0.65s ease-in-out infinite;
+}
+</style>

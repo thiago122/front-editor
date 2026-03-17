@@ -191,6 +191,51 @@ export class ManipulationEngine {
     this.moveNodeAt(parent.nodeId, index, toIndex)
   }
 
+  /**
+   * Move um nó para outro pai — ou reordena dentro do mesmo pai.
+   * Usa removeNodeAt + insertNodeAt para todas as situações, pois:
+   *  - moveNodeAt dependia de _syncMoveDom, que falhava silenciosamente quando
+   *    o próximo irmão no AST era um text node (sem data-node-id no DOM).
+   *  - insertNodeAt já tem lógica robusta de busca de âncora no DOM,
+   *    iterando sobre irmãos até encontrar um com data-node-id real.
+   *
+   * @param {string} nodeId         — nó a mover
+   * @param {string} targetParentId — pai de destino
+   * @param {number} targetIndex    — índice de inserção (no AST do pai de destino)
+   */
+  moveNodeToParent(nodeId, targetParentId, targetIndex) {
+    const ctx = this.getCtx()
+    const srcResult = findParentAndIndex(ctx.ast, nodeId)
+    if (!srcResult.parent) return
+
+    const { parent: srcParent, index: srcIndex } = srcResult
+
+    // Captura o nó ANTES de qualquer modificação no AST
+    const node = findNodeById(ctx.ast, nodeId)
+    if (!node) return
+
+    // Ajuste de índice para mesmo pai:
+    // removeNodeAt(srcIndex) desloca todos os elementos posteriores em -1.
+    // Quando a fonte está ANTES do alvo, o targetIndex precisa ser decrementado.
+    //
+    // Exemplo: [X, Y, Z], mover X(0) para depois de Y → targetIndex=2
+    //   remove X → [Y, Z]
+    //   sem ajuste: insertAt(2) → [Y, Z, X]  ✗  (X vai para o final)
+    //   com ajuste: insertAt(1) → [Y, X, Z]  ✓
+    const isSameParent   = srcParent.nodeId === targetParentId
+    const adjustedIndex  = isSameParent && srcIndex < targetIndex
+      ? targetIndex - 1
+      : targetIndex
+
+    // Sem mudança real → no-op
+    if (isSameParent && adjustedIndex === srcIndex) return
+
+    history.beginTransaction()
+    this.removeNodeAt(srcParent.nodeId, srcIndex)
+    this.insertNodeAt(targetParentId, adjustedIndex, node)
+    history.commit()
+  }
+
   // Helper for move DOM sync
   _syncMoveDom(nodeId, parentAstNode, toIndex) {
     const doc = this.getDoc()
@@ -293,15 +338,46 @@ export class ManipulationEngine {
     const fragment = this.pipeline.parseFragment(rawHTML)
     const parent = findNodeById(ctx.ast, parentId)
 
-    if (parent) {
-      if (!parent.children) parent.children = []
+    if (!parent) return null
+    if (!parent.children) parent.children = []
 
-      history.beginTransaction()
-      fragment.forEach((node) => {
-        this.insertNodeAt(parentId, parent.children.length, node)
-      })
-      history.commit()
-    }
+    let lastInserted = null
+    history.beginTransaction()
+    fragment.forEach((node) => {
+      this.insertNodeAt(parentId, parent.children.length, node)
+      lastInserted = node
+    })
+    history.commit()
+
+    // Retorna o último nó inserido para que o chamador possa selecioná-lo
+    return lastInserted
+  }
+
+  /**
+   * Insere HTML como IRMÃO, logo após o nó targetId.
+   * Útil para o botão "+" do overlay: insere ao lado do elemento selecionado.
+   *
+   * @param {string} targetId - nodeId do elemento de referência
+   * @param {string} rawHTML  - HTML a inserir
+   * @returns {Object|null}   - primeiro nó inserido, ou null se falhar
+   */
+  insertAfter(targetId, rawHTML) {
+    const ctx = this.getCtx()
+    const result = findParentAndIndex(ctx.ast, targetId)
+    if (!result) return null
+
+    const { parent, index } = result
+    const fragment = this.pipeline.parseFragment(rawHTML)
+    if (!fragment.length) return null
+
+    history.beginTransaction()
+    // Insere cada nó a partir de index+1, preservando a ordem
+    fragment.forEach((node, i) => {
+      this.insertNodeAt(parent.nodeId, index + 1 + i, node)
+    })
+    history.commit()
+
+    return fragment[0] // retorna o primeiro nó inserido
   }
 
   updateInnerContent(nodeId, newHTML) {

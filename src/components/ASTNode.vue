@@ -3,8 +3,18 @@
 
 import { computed, ref } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
+import { useExplorerDragDrop } from '@/composables/useExplorerDragDrop'
+import { DRAG_RESTRICTED_TAGS } from '@/editor/html/constants'
 
 const EditorStore = useEditorStore()
+const { startDrag, explorerDragState } = useExplorerDragDrop()
+
+const isDragging    = computed(() => explorerDragState.nodeId.value === props.node.nodeId)
+
+const isDragAllowed = computed(() =>
+  props.node.type === 'element' &&
+  !DRAG_RESTRICTED_TAGS.has(props.node.tag?.toLowerCase())
+)
 
 const emit = defineEmits(['select'])
 
@@ -32,6 +42,7 @@ const props = defineProps({
  * LOCAL STATE
  */
 const openedManually = ref(false)
+const closedManually = ref(false) // Override explícito: fecha mesmo se o nó está selecionado
 
 /**
  * COMPUTED FLAGS
@@ -71,6 +82,8 @@ const visibleChildren = computed(() => {
  * OPEN LOGIC
  */
 const isOpen = computed(() => {
+  // Se o usuário fechou explicitamente, respeita isso acima de tudo
+  if (closedManually.value) return false
   return (
     openedManually.value ||
     props.openPath.includes(props.node.nodeId) ||
@@ -92,7 +105,15 @@ function onMouseLeave() {
 
 function onToggle(e) {
   e.stopPropagation()
-  openedManually.value = !openedManually.value
+  if (isOpen.value) {
+    // Fechar: marca como fechado manualmente (override)
+    closedManually.value = true
+    openedManually.value = false
+  } else {
+    // Abrir: limpa o override de fechamento
+    closedManually.value = false
+    openedManually.value = true
+  }
 }
 
 function onSelect() {
@@ -109,12 +130,28 @@ function onSelect() {
       :class="{ 
         'bg-blue-100 text-blue-900 shadow-sm': isSelected,
         'hover:bg-gray-50': !isSelected,
-        'has-children': visibleChildren.length
+        'has-children': visibleChildren.length,
+        'opacity-40': isDragging,
       }"
       @mouseenter="onMouseEnter"
       @mouseleave="onMouseLeave"
       @click.stop="onSelect"
     >
+      <!-- DRAG HANDLE — visível no hover, só para elementos arrastáveis -->
+      <div
+        v-if="isDragAllowed"
+        class="w-3.5 h-4 flex items-center justify-center mr-0.5 rounded opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 transition-opacity shrink-0"
+        title="Arrastar"
+        @mousedown.stop="startDrag(node.nodeId, $event)"
+      >
+        <!-- ⠿ grip icon -->
+        <svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor">
+          <circle cx="2" cy="2" r="1.2"/><circle cx="6" cy="2" r="1.2"/>
+          <circle cx="2" cy="6" r="1.2"/><circle cx="6" cy="6" r="1.2"/>
+          <circle cx="2" cy="10" r="1.2"/><circle cx="6" cy="10" r="1.2"/>
+        </svg>
+      </div>
+      <div v-else class="w-3.5 shrink-0" />
       <!-- TOGGLE ICON -->
       <div
         v-if="visibleChildren.length"

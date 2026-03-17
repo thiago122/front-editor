@@ -3,6 +3,10 @@
 
 import { computed, ref } from 'vue'
 import ASTNode from './ASTNode.vue'
+import { useExplorerDragDrop } from '@/composables/useExplorerDragDrop'
+
+const { explorerDragState } = useExplorerDragDrop()
+const s = explorerDragState
 
 const showTextNodes = ref(false)
 const showCommentNodes = ref(false)
@@ -55,4 +59,34 @@ const openPath = computed(() => {
       </div>
     </div>
   </div>
+
+  <!-- Indicador de drop: linha azul durante drag no Explorer -->
+  <Teleport to="body">
+    <template v-if="s.active.value && s.indicator.value">
+      <!-- Linha horizontal -->
+      <div
+        class="pointer-events-none"
+        style="position: fixed; z-index: 9500; height: 2px; background: #3b82f6; transition: top 50ms ease"
+        :style="{
+          top:  (s.indicator.value.lineY - 1) + 'px',
+          left:  s.indicator.value.lineX + 'px',
+          width: s.indicator.value.lineW + 'px',
+        }"
+      />
+      <!-- Triângulo no início da linha -->
+      <div
+        class="pointer-events-none"
+        style="position: fixed; z-index: 9500"
+        :style="{
+          top:  (s.indicator.value.lineY - 5) + 'px',
+          left: (s.indicator.value.lineX - 6) + 'px',
+          width: 0,
+          height: 0,
+          borderTop: '5px solid transparent',
+          borderBottom: '5px solid transparent',
+          borderLeft: '6px solid #3b82f6',
+        }"
+      />
+    </template>
+  </Teleport>
 </template>

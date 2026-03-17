@@ -21,7 +21,21 @@ export const NodeDispatcher = {
     const cmd = new AppendCommand(parentId, html, {
       manipulation: store.manipulation,
     })
-    cmd.execute()
+    const newNode = cmd.execute()
+    if (newNode) {
+      store.selectNode(newNode.nodeId)
+      store.startBlink()
+    }
+  },
+
+  /** Insere HTML como irmão logo após o elemento targetId */
+  insertAfter(targetId, html) {
+    const store = useEditorStore()
+    const newNode = store.manipulation.insertAfter(targetId, html)
+    if (newNode) {
+      store.selectNode(newNode.nodeId)
+      store.startBlink()
+    }
   },
 
   moveNode(nodeId, direction) {

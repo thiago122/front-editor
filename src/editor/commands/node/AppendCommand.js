@@ -6,6 +6,6 @@ export class AppendCommand {
   }
 
   execute() {
-    this.manipulation.append(this.parentId, this.html)
+    return this.manipulation.append(this.parentId, this.html)
   }
 }

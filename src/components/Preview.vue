@@ -1,10 +1,15 @@
 <script setup>
 // Preview.vue
+// inheritAttrs: false → necessário porque o template tem múltiplos nós raiz
+// (iframe + InlineToolbar via Teleport). Sem isso Vue não sabe onde aplicar
+// os atributos class/style passados pelo pai e emite um warning.
+defineOptions({ inheritAttrs: false })
 
 import { ref, watch, onMounted } from 'vue'
 import { useBoxModel } from '@/composables/useBoxModel'
 import { useInlineEdit } from '@/composables/useInlineEdit'
 import { useIframeEvents } from '@/composables/useIframeEvents'
+import InlineToolbar from '@/components/InlineToolbar.vue'
 
 import EDITOR_UI_STYLES from '@/assets/editor-iframe-ui.css?raw'
 
@@ -32,9 +37,9 @@ function getDoc() {
   return iframeRef.value?.contentDocument
 }
 
-const boxModel = useBoxModel(iframeRef)
-const inlineEdit = useInlineEdit(iframeRef)
-const iframeEvents = useIframeEvents(iframeRef, EditorStore)
+const boxModel      = useBoxModel(iframeRef)
+const inlineEdit    = useInlineEdit(iframeRef)
+const iframeEvents  = useIframeEvents(iframeRef, EditorStore)
 
 // Watchers
 
@@ -88,5 +93,15 @@ onMounted(() => {
 </script>
 
 <template>
-  <iframe ref="iframeRef" :srcdoc="html" />
+  <!-- v-bind="$attrs" aplica o class/style que o pai passa (ex: class="w-full h-full...") -->
+  <iframe ref="iframeRef" :srcdoc="html" v-bind="$attrs" />
+
+  <!-- Toolbar de formatação inline: aparece sobre texto selecionado durante edição -->
+  <InlineToolbar
+    :selectionRect="inlineEdit.selectionRect.value"
+    :activeFormats="inlineEdit.activeFormats.value"
+    :wrap="inlineEdit.wrap"
+    :onEnterLinkMode="inlineEdit.enterLinkMode"
+    :onExitLinkMode="inlineEdit.exitLinkMode"
+  />
 </template>

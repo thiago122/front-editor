@@ -180,10 +180,8 @@ function highlightSegments(text, query) {
       isHighlighted ? 'bg-amber-50 !border-amber-300 ring-1 ring-amber-300 ring-inset' :
       (node.type !== 'root' ? 'hover:bg-gray-50' : ''),
       isDragging   ? 'opacity-40' : '',
-      isDraggable  ? 'cursor-grab active:cursor-grabbing' : '',
       dropPosition === 'inside' ? 'ring-2 ring-inset ring-blue-400' : '',
     ]"
-    :draggable="isDraggable"
     @click="handleClick"
     @contextmenu.stop.prevent="(e) => emit('contextmenu', node, e)"
     @dragstart.stop="emit('dragstart', node)"
@@ -211,6 +209,21 @@ function highlightSegments(text, query) {
       class="group flex items-center gap-1.5 cursor-pointer overflow-hidden whitespace-nowrap"
       :style="{ paddingLeft: node.type === 'root' ? '8px' : (depth * 10) + 'px', height: '22px' }"
     >
+      <!-- DRAG HANDLE — visível no hover, só para nós arrastáveis -->
+      <div
+        v-if="isDraggable"
+        draggable="true"
+        class="w-3.5 h-4 flex items-center justify-center mr-0.5 opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 transition-opacity shrink-0"
+        title="Arrastar"
+      >
+        <svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor">
+          <circle cx="2" cy="2" r="1.2"/><circle cx="6" cy="2" r="1.2"/>
+          <circle cx="2" cy="6" r="1.2"/><circle cx="6" cy="6" r="1.2"/>
+          <circle cx="2" cy="10" r="1.2"/><circle cx="6" cy="10" r="1.2"/>
+        </svg>
+      </div>
+      <div v-else class="w-3.5 shrink-0" />
+
       <!-- Toggle arrow -->
       <div class="toggle-area w-4 h-4 flex items-center justify-center shrink-0" :class="node.type !== 'root' ? 'hover:bg-black/5 rounded' : ''">
         <!-- Solid triangle ► identical to ASTNode, rotates 90° when open -->

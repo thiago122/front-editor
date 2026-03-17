@@ -30,9 +30,9 @@ import AsidePanel from '@/components/AsidePanel.vue'
 
 // node commands
 import Delete from '@/components/Delete.vue'
-import Append from '@/components/Append.vue'
 import SelectionControls from '@/components/SelectionControls.vue'
 import ClipboardControls from '@/components/ClipboardControls.vue'
+import InsertTagMenu from '@/components/InsertTagMenu.vue'
 
 // icons
 import IconSidebar from '@/components/IconSidebar.vue'
@@ -343,7 +343,12 @@ watch(
     </div> -->
 
     <div class="flex items-center justify-center bg-white border-b border-gray-200 relative z-[1000]">
-
+        <div class="flex gap-2 items-center">
+              <HistoryControls></HistoryControls>
+              
+              <ClipboardControls :nodeId="EditorStore.selectedNodeId" />
+              
+            </div>
 
       <div class="flex gap-2">
         <BreakpointeControl :previewWidth="previewWidth" :previewUnit="previewUnit" @update="
@@ -353,6 +358,15 @@ watch(
           }
         " />
       </div>
+
+      <div>
+        <SelectionControls :nodeId="EditorStore.selectedNodeId" />
+      </div>
+      <div>
+        <Delete :nodeId="EditorStore.selectedNodeId" icon-only custom-class="hover:scale-110" />
+      </div>
+
+
     </div><!-- linha -->
 
     <!-- Cursor global durante drag: impede piscar ao sair do handle -->
@@ -511,35 +525,12 @@ watch(
       <!-- col-main: canvas (absorve diferenças via flex-1) -->
       <div class="flex flex-col h-full w-full overflow-hidden gap-3" id="col-main">
           <div class="flex justify-between shrink-0 px-4 gap-2 overflow-x-auto w-full text-text-secondary text-xs  border-b border-gray-200 relative z-[1000]">
-            <div class="flex gap-2 items-center">
-              <HistoryControls></HistoryControls>
-              <Separator />
-              <ClipboardControls :nodeId="EditorStore.selectedNodeId" />
-            </div>
-            <div class="flex gap-2 items-center">
-            <Append :nodeId="EditorStore.selectedNodeId" html="<div>minha div</div>">div</Append>
-            <Separator />
-            <Append :nodeId="EditorStore.selectedNodeId" html="<span>meu span</span>">span</Append>
-            <Separator />
-            <Append :nodeId="EditorStore.selectedNodeId" html="<p>meu parágrafo</p>">P</Append>
-            <Separator />
-            <Append :nodeId="EditorStore.selectedNodeId"
-              html="<table border='1'><tr><td>tabela 1</td><td>tabela 2</td></tr></table>">Table</Append>
-            <Separator />
-            <Append :nodeId="EditorStore.selectedNodeId" html="<ul><li>lista 1</li><li>lista 2</li></ul>">UL</Append>
-            <Separator />
-            <Append :nodeId="EditorStore.selectedNodeId" html="<ol><li>lista 1</li><li>lista 2</li></ol>">OL</Append>
-            </div>
-            <div>
-              <SelectionControls :nodeId="EditorStore.selectedNodeId" />
-            </div>
-            <div>
-              <Delete :nodeId="EditorStore.selectedNodeId" icon-only custom-class="hover:scale-110" />
-            </div>
+            <InsertTagMenu :nodeId="EditorStore.selectedNodeId" />
+            
 
           </div>
           <div ref="previewContainerEl"
-               class="grow shrink-0 overflow-auto flex justify-center"
+               class="grow shrink-0 overflow-auto flex justify-center overflow-hidden"
                style="position: relative">
             <HighlightOverlay mode="hover" />
             <HighlightOverlay mode="selection" />

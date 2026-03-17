@@ -23,7 +23,15 @@ export const useEditorStore = defineStore('editor', () => {
   const previewContainer = ref(null) // wrapper do <Preview> — base para position:absolute do overlay
   const viewport = ref({ width: window.innerWidth, height: window.innerHeight })
   const manipulation = ref(null)
-  const clipboard = ref({ type: null, data: null }) // Clipboard tipado
+  const clipboard      = ref({ type: null, data: null }) // Clipboard tipado
+
+  /**
+   * Controla o efeito de blink visual no overlay de seleção.
+   * Ativado após inserção de novo elemento para ajudar o usuário a
+   * identificar onde o elemento foi inserido.
+   */
+  const isBlinking = ref(false)
+  let   _blinkTimer = null
 
   const pipeline = new Pipeline()
   pipeline.use(htmlPlugin())
@@ -71,6 +79,17 @@ export const useEditorStore = defineStore('editor', () => {
       selectedElement.value = null
     }
     // inspectMode não é alterado aqui — quem controla é o usuário via IconInspect
+  }
+
+  /** Inicia o blink do overlay de seleção por 5 segundos. */
+  function startBlink() {
+    // Cancela timer anterior se houver (reinicia o blink)
+    if (_blinkTimer) clearTimeout(_blinkTimer)
+    isBlinking.value = true
+    _blinkTimer = setTimeout(() => {
+      isBlinking.value = false
+      _blinkTimer = null
+    }, 3000)
   }
 
   function activate() {
@@ -191,6 +210,8 @@ export const useEditorStore = defineStore('editor', () => {
     clearSelection,
     undo,
     redo,
+    isBlinking,
+    startBlink,
   }
 })
 
