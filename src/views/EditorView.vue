@@ -56,6 +56,7 @@ import { HtmlExportService } from '@/editor/css/export/HtmlExportService.js'
 import { AutoSaveService, AUTOSAVE_INTERVAL_MS } from '@/editor/css/export/AutoSaveService.js'
 import AutoSaveRecoveryBanner from '@/components/AutoSaveRecoveryBanner.vue'
 import { useColumnResize } from '@/composables/useColumnResize.js'
+import { resolveRelativeUrls } from '@/utils/resolveRelativeUrls.js'
 
 const { startResize, isResizing } = useColumnResize()
 
@@ -90,6 +91,10 @@ function runAutoSave() {
   const doc = EditorStore.getIframeDoc()
   const html = HtmlExportService.generateHtml(doc)
   AutoSaveService.save(html)
+  // Se há documento aberto via API, salva também no backend
+  if (EditorStore.currentDocument) {
+    EditorStore.saveDocument().catch(console.error)
+  }
 }
 
 /**
@@ -122,6 +127,23 @@ function downloadHtml() {
   HtmlExportService.downloadFile(doc, 'index.html')
 }
 
+// ── Ctrl+S ────────────────────────────────────────────────────────────────
+function handleGlobalKeydown(e) {
+  if (e.ctrlKey && e.key === 's') {
+    e.preventDefault()
+    // Prioridade: API backend > File System Access > download
+    if (EditorStore.currentDocument) {
+      EditorStore.saveDocument()
+    } else if (EditorStore.fileAccessSupported) {
+      EditorStore.saveFile()
+    } else {
+      downloadHtml()
+    }
+  }
+}
+onMounted(()      => window.addEventListener('keydown', handleGlobalKeydown))
+onUnmounted(() => window.removeEventListener('keydown', handleGlobalKeydown))
+
 // Auto-open CSS Explorer when a rule navigation is requested from the Inspector
 watch(() => styleStore.explorerScrollRequest, (v) => {
   if (v > 0) activeExplorer.value = 'css'
@@ -132,30 +154,6 @@ const handleHtmlLoad = (newHtml) => {
 }
 
 const TEST_PAGE_URL = 'http://editor.test/assets/teste-2'
-
-/**
- * Resolve URLs relativas nos atributos href/src do HTML para absolutas.
- * URLs já absolutas passam sem alteração (new URL() garante isso).
- */
-function resolveRelativeUrls(html, pageUrl) {
-  // new URL('.', pageUrl) extrai o diretório corretamente:
-  // 'http://editor.test/assets/teste-2/index.html' → 'http://editor.test/assets/teste-2/'
-  // 'http://editor.test/assets/teste-2/'           → 'http://editor.test/assets/teste-2/'
-  const baseUrl = new URL('.', pageUrl).href
-
-  const resolve = (match, pre, url, post) => {
-    try {
-      return pre + new URL(url, baseUrl).href + post
-    } catch {
-      return match // se a URL for inválida, deixa como está
-    }
-  }
-
-  return html
-    .replace(/(<link\b[^>]*\shref=")([^"]+)(")/gi, resolve)
-    .replace(/(<script\b[^>]*\ssrc=")([^"]+)(")/gi, resolve)
-    .replace(/(<img\b[^>]*\ssrc=")([^"]+)(")/gi, resolve)
-}
 
 const loadExternalTestPage = async () => {
   try {
@@ -175,7 +173,12 @@ onMounted(async () => {
   // Verifica se existe backup da sessão anterior antes de carregar a página
   pendingSave.value = AutoSaveService.load()
 
-  await loadExternalTestPage()
+  // Só carrega a página de teste quando o editor foi aberto diretamente
+  // (sem selecionar documento no HomeView).
+  // Quando vem do HomeView, EditorStore.openDocument() já carregou o HTML.
+  // if (!EditorStore.currentDocument) {
+  //   await loadExternalTestPage()
+  // }
 
   // Inicia o auto-save periódico após carregar a página
   autoSaveTimer = setInterval(runAutoSave, AUTOSAVE_INTERVAL_MS)
@@ -191,91 +194,21 @@ const inputHTML = `
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-
-    <!-- 1. External Layer: Bootstrap CSS -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" data-location="external" crossorigin="anonymous">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" data-location="external" crossorigin="anonymous">
-
-    <!-- 2. Internal Layer: Bootstrap CSS -->
-    <link rel="stylesheet" href="http://editor.test/assets/teste-1/css/all.css" data-location="internal" crossorigin="anonymous">
-    
-    <!-- 3. On Page Layer: Styles specific to this page -->
     <style data-location="on_page">
       body {
-        background-color: #f8f9fa;
-        min-height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        font-family:  sans-serif;
       }
-      .layer-tag {
-        font-size: 0.7rem;
-        font-weight: bold;
-        text-transform: uppercase;
-        padding: 0.2rem 0.5rem;
-        border-radius: 4px;
+      .container {
+      margin: 0 auto;
+         background-color: #ccc;
+        width: 1080px;
       }
-    </style>
-
-    <style data-location="on_page">
-      body {
-        font-family: 'Roboto', sans-serif;
-      }
-      
     </style>
 
   </head>
   <body>
     <div class="container">
-      <div class="row justify-content-center">
-        <div class="col-md-6">
-          <div class="card custom-card shadow-sm p-4">
-            <div class="card-body">
-              <h2 class="card-title mb-4 font-weight-bold">
-                <i class="fas fa-microchip text-primary me-2"></i>
-                Export Test (Bootstrap)
-              </h2>
-              
-              <p class="card-text text-muted mb-4 class-1 class-2 class-3">
-                Este template usa <strong>Bootstrap 5</strong> para validar a extração de CSS por camadas:
-              </p>
-
-              <div class="list-group">
-                <div class="list-group-item d-flex justify-content-between align-items-center">
-                  <div>
-                    <i class="fas fa-link text-warning me-2"></i>
-                    <strong>External</strong>
-                  </div>
-                  <span class="badge bg-warning layer-tag">Bootstrap + FontAwesome</span>
-                </div>
-                
-                <div class="list-group-item d-flex justify-content-between align-items-center">
-                  <div>
-                    <i class="fas fa-file-code text-primary me-2"></i>
-                    <strong>Internal</strong>
-                  </div>
-                  <span class="badge bg-primary layer-tag" id="meu-id">.custom-card styles</span>
-                </div>
-
-                <div class="list-group-item d-flex justify-content-between align-items-center">
-                  <div>
-                    <i class="fas fa-pager text-success me-2"></i>
-                    <strong>On Page</strong>
-                  </div>
-                  <span class="badge bg-success layer-tag">Body & Utility styles</span>
-                </div>
-              </div>
-
-              <div class="mt-4 p-3 bg-light rounded border text-center" style="border-style: dashed !important; border-color: #dee2e6 !important;">
-                <p class="mb-0 text-secondary small">
-                  <i class="fas fa-info-circle me-1"></i>
-                  Clique em <strong>Salvar</strong> para ver o output de cada camada nos textareas.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      asdasd
     </div>
   </body>
 </html>
@@ -302,8 +235,10 @@ pipeline.use(htmlPlugin())
 // observa o imput
 watch(
   input,
-  (newInput) => {
-    // ctx.value = pipeline.run(newInput)
+  (newInput, oldInput) => {
+    // oldInput === undefined significa execução imediata ({ immediate: true }).
+    // Se já há um documento aberto via API, não sobrescrever o HTML carregado.
+    if (oldInput === undefined && EditorStore.currentDocument) return
     EditorStore.loadHTML(input.value)
   },
   { immediate: true },
@@ -344,10 +279,32 @@ watch(
 
     <div class="flex items-center justify-center bg-white border-b border-gray-200 relative z-[1000]">
         <div class="flex gap-2 items-center">
+
+              <!-- Voltar para Home (quando veio da lista de documentos) -->
+              <button
+                v-if="EditorStore.currentDocument"
+                @click="$router.push('/')"
+                title="Voltar para documentos"
+                class="flex items-center gap-1 text-[11px] text-gray-500 hover:text-indigo-600 px-2 border-r border-gray-200 transition-colors"
+              >
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                </svg>
+                Docs
+              </button>
+
               <HistoryControls></HistoryControls>
               
               <ClipboardControls :nodeId="EditorStore.selectedNodeId" />
-              
+
+              <!-- Nome do documento/arquivo aberto -->
+              <span
+                v-if="EditorStore.fileName"
+                class="text-[11px] text-gray-500 font-mono px-2 border-l border-gray-200"
+                :title="'Documento: ' + EditorStore.fileName"
+              >
+                📄 {{ EditorStore.fileName }}
+              </span>
             </div>
 
       <div class="flex gap-2">
@@ -441,6 +398,18 @@ watch(
           </svg>
         </IconSidebarButton>
 
+        <!-- Placeholder em elementos vazios -->
+        <IconSidebarButton
+          title="Mostrar placeholder em elementos vazios"
+          @click="EditorStore.showEmptyPlaceholder = !EditorStore.showEmptyPlaceholder"
+          :class="EditorStore.showEmptyPlaceholder ? 'bg-indigo-100 text-indigo-600' : ''"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <rect x="3" y="3" width="18" height="18" rx="2" stroke-width="1.5" stroke-dasharray="3 2"/>
+            <line x1="9" y1="12" x2="15" y2="12" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </IconSidebarButton>
+
         <IconSidebarButton title="Layers" @click="activeExplorer = activeExplorer === 'html' ? null : 'html'"
           :class="activeExplorer === 'html' ? 'bg-gray-200' : ''">
           <IconLayer />
@@ -471,8 +440,35 @@ watch(
           <IconStyles />
         </IconSidebarButton> -->
 
-        <IconSidebarButton title="Abrir" @click="isImportModalOpen = true">
+        <IconSidebarButton title="Abrir arquivo do disco"
+          @click="EditorStore.fileAccessSupported ? EditorStore.openFile() : (isImportModalOpen = true)"
+        >
           <IconOpen class="w-5 h-5" />
+        </IconSidebarButton>
+
+        <!-- Salvar (Ctrl+S) -->
+        <IconSidebarButton
+          title="Salvar (Ctrl+S)"
+          @click="EditorStore.fileAccessSupported ? EditorStore.saveFile() : downloadHtml()"
+          :class="EditorStore.fileHandle ? 'text-green-600 hover:bg-green-50' : 'text-gray-400'"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+          </svg>
+        </IconSidebarButton>
+
+        <!-- Salvar Como -->
+        <IconSidebarButton
+          v-if="EditorStore.fileAccessSupported"
+          title="Salvar como..."
+          @click="EditorStore.saveFileAs()"
+          class="text-blue-500 hover:bg-blue-50"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3M9 11l3-3m0 0l3 3m-3-3v8" />
+          </svg>
         </IconSidebarButton>
 
         <!-- Download CSS: baixa todos os stylesheets editáveis -->

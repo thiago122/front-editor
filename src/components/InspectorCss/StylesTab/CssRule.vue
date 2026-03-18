@@ -87,6 +87,8 @@
           :rule="rule"
           :decl="decl"
           :editable="editable"
+          @request-new-decl="onAddDeclaration"
+          @remove-if-empty="onRemoveIfEmpty(decl)"
         />
       </div>
 
@@ -114,7 +116,7 @@ import { ref, computed, nextTick } from 'vue'
 import CssDeclaration from './CssDeclaration.vue'
 import { updateRule } from '@/editor/css/actions/cssRuleActions'
 import { createAtRule, updateAtRule } from '@/editor/css/actions/cssAtRuleActions'
-import { addDeclaration } from '@/editor/css/actions/cssDeclarationActions'
+import { addDeclaration, deleteDeclaration } from '@/editor/css/actions/cssDeclarationActions'
 import { useStyleStore } from '@/stores/StyleStore'
 
 const styleStore = useStyleStore()
@@ -143,13 +145,18 @@ function onAddDeclaration() {
     if (propNames?.length) {
       const last = propNames[propNames.length - 1]
       last.focus()
-      const range = document.createRange()
-      range.selectNodeContents(last)
-      range.collapse(false)
-      window.getSelection()?.removeAllRanges()
-      window.getSelection()?.addRange(range)
+      last.select()
     }
   })
+}
+
+function onRemoveIfEmpty(decl) {
+  // Remove apenas se ainda estiver com os valores padrão do placeholder
+  const p = (decl.prop  ?? '').trim()
+  const v = (decl.value ?? '').trim()
+  const isDefault = (!p || p === 'property') && (!v || v === 'value')
+  if (!isDefault) return
+  deleteDeclaration(props.rule, decl)
 }
 </script>
 

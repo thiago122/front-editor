@@ -121,43 +121,48 @@ function moveUp()   { if (canMoveUp.value)   NodeDispatcher.moveNode(selNodeId.v
 function moveDown() { if (canMoveDown.value) NodeDispatcher.moveNode(selNodeId.value,  1) }
 function deleteNode() { if (selNodeId.value) NodeDispatcher.deleteNode(selNodeId.value) }
 
-// ── Autocomplete de tags (botão +) ───────────────────────────────────────────
+// ── Autocomplete de tags (botões + e ↳) ──────────────────────────────────────
 
-const showAutocomplete   = ref(false)
-const autocompleteStyle  = ref({})
+const showAutocomplete  = ref(false)
+const autocompleteStyle = ref({})
+// 'after' = inserir como irmão após | 'child' = inserir como último filho
+const insertMode        = ref('after')
 
-/** Abre o autocomplete posicionado abaixo do botão + clicado */
-function openAutocomplete(event) {
+/** Abre o autocomplete posicionado abaixo do botão clicado */
+function openAutocomplete(event, mode = 'after') {
   const rect = event.currentTarget.getBoundingClientRect()
-  openAutocompleteAt(rect.bottom + 4, rect.left)
+  openAutocompleteAt(rect.bottom + 4, rect.left, mode)
 }
 
 /**
  * Abre o autocomplete em coordenadas fixas.
- * Usado tanto pelo clique no botão quanto pelo atalho Ctrl+Space.
+ * Usado tanto pelo clique nos botões quanto pelos atalhos de teclado.
  */
-function openAutocompleteAt(top, left) {
+function openAutocompleteAt(top, left, mode = 'after') {
+  insertMode.value        = mode
   autocompleteStyle.value = { top: `${top}px`, left: `${left}px` }
   showAutocomplete.value  = true
 }
 
-// ── Atalho de teclado Ctrl+Space ─────────────────────────────────────────────
+// ── Atalhos de teclado ────────────────────────────────────────────────────────
+// Ctrl+Space       → inserir irmão após (+)
+// Ctrl+Shift+Space → inserir como último filho (↳)
 
 function handleGlobalKeydown(e) {
-  // Só abre se houver elemento selecionado e o autocomplete estiver fechado
   if (!e.ctrlKey || e.key !== ' ') return
   if (props.mode !== 'selection') return
   if (!selNodeId.value) return
 
   e.preventDefault()
 
-  if (showAutocomplete.value) {
+  const mode = e.shiftKey ? 'child' : 'after'
+
+  // Toggle: fecha se já estiver aberto no mesmo modo
+  if (showAutocomplete.value && insertMode.value === mode) {
     showAutocomplete.value = false
     return
   }
 
-  // Calcula posição em coordenadas de viewport (position:fixed)
-  // elRect + iframeRect = posição real do elemento na janela principal
   const el     = EditorStore.selectedElement
   const iframe = EditorStore.iframe
 
@@ -167,21 +172,25 @@ function handleGlobalKeydown(e) {
     openAutocompleteAt(
       elRect.bottom + iframeRect.top + 6,
       elRect.left   + iframeRect.left,
+      mode,
     )
   } else {
-    // Fallback: centro do viewport
-    openAutocompleteAt(window.innerHeight / 2 - 60, window.innerWidth / 2 - 90)
+    openAutocompleteAt(window.innerHeight / 2 - 60, window.innerWidth / 2 - 90, mode)
   }
 }
 
-onMounted(()  => window.addEventListener('keydown', handleGlobalKeydown))
+onMounted(()      => window.addEventListener('keydown', handleGlobalKeydown))
 onBeforeUnmount(() => window.removeEventListener('keydown', handleGlobalKeydown))
 
 /** Usuário selecionou uma tag no autocomplete */
 function onTagSelected(tag) {
   showAutocomplete.value = false
   if (!selNodeId.value) return
-  NodeDispatcher.insertAfter(selNodeId.value, tagToHtml(tag))
+  if (insertMode.value === 'child') {
+    NodeDispatcher.appendElement(selNodeId.value, tagToHtml(tag))
+  } else {
+    NodeDispatcher.insertAfter(selNodeId.value, tagToHtml(tag))
+  }
 }
 
 const label = computed(() => {
@@ -311,10 +320,17 @@ const boxSpacing = computed(() => {
 
           <!-- Inserir irmão após (+) -->
           <button
-            @click.stop="openAutocomplete"
+            @click.stop="openAutocomplete($event, 'after')"
             class="px-1.5 py-0.5 hover:bg-blue-700 transition-colors font-bold"
-            title="Inserir tag após este elemento"
+            title="Inserir tag após este elemento (Ctrl+Space)"
           >+</button>
+
+          <!-- Inserir como último filho (↳) -->
+          <button
+            @click.stop="openAutocomplete($event, 'child')"
+            class="px-1.5 py-0.5 hover:bg-blue-700 transition-colors font-bold"
+            title="Inserir tag dentro como último filho (Ctrl+Shift+Space)"
+          >↳</button>
 
           <!-- Deletar -->
           <button

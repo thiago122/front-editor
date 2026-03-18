@@ -9,6 +9,10 @@ import { findNodeById } from '@/utils/ast'
 import { ManipulationEngine } from '@/editor/ManipulationEngine'
 import { unifiedHistory } from '@/editor/history/UnifiedHistoryManager'
 import { useStyleStore } from './StyleStore'
+import { FileAccessService } from '@/editor/css/export/FileAccessService'
+import { HtmlExportService } from '@/editor/css/export/HtmlExportService'
+import { ApiService } from '@/services/ApiService'
+import { resolveRelativeUrls } from '@/utils/resolveRelativeUrls'
 
 export const useEditorStore = defineStore('editor', () => {
   // --- STATE ---
@@ -17,8 +21,13 @@ export const useEditorStore = defineStore('editor', () => {
   const selectedElement = ref(null) // From Inspector
   const hoveredNodeId = ref(null)
   const inspectMode = ref(null)
-  const showBoxModel = ref(true) // Exibir margin/padding no overlay de seleção
-  const outlineMode  = ref(false) // Exibir outline em todos os elementos do iframe
+  const showBoxModel = ref(false)
+  const outlineMode  = ref(false)
+  const showEmptyPlaceholder = ref(false)
+  const fileHandle = ref(null)
+  const fileName   = ref(null)
+  /** Documento atualmente aberto via API { id, title, type, path } */
+  const currentDocument = ref(null)
   const iframe = ref(null)
   const previewContainer = ref(null) // wrapper do <Preview> — base para position:absolute do overlay
   const viewport = ref({ width: window.innerWidth, height: window.innerHeight })
@@ -137,6 +146,42 @@ export const useEditorStore = defineStore('editor', () => {
     }
   })
 
+  // ── Empty placeholder: mostra borda tracejada + label em elementos vazios ─────────
+  const EMPTY_PLACEHOLDER_STYLE_ID = 'editor-empty-placeholder'
+  watch([showEmptyPlaceholder, iframe], () => {
+    const doc = getIframeDoc()
+    if (!doc) return
+    doc.getElementById(EMPTY_PLACEHOLDER_STYLE_ID)?.remove()
+    if (showEmptyPlaceholder.value) {
+      const style = doc.createElement('style')
+      style.id = EMPTY_PLACEHOLDER_STYLE_ID
+      style.textContent = `
+        [data-node-id]:empty {
+          min-height: 24px;
+          outline: 1.5px dashed rgba(99,102,241,0.5) !important;
+          
+          position: relative;
+        }
+        [data-node-id]:empty::before {
+          content: attr(data-node-id) !important;
+          width: 90%;
+          display: block !important;
+          content: "vazio" !important;
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 10px;
+          font-family: monospace;
+          color: rgba(99,102,241,0.6);
+          pointer-events: none;
+        }
+      `
+      doc.head.appendChild(style)
+    }
+  })
+
   watch(iframe, (newIframe) => {
     if (newIframe) {
       initEngine(newIframe.contentDocument)
@@ -181,6 +226,98 @@ export const useEditorStore = defineStore('editor', () => {
     unifiedHistory.redo()
   }
 
+  // ── File System Access API ──────────────────────────────────────────────────
+
+  /** Abre um arquivo HTML do disco e carrega no editor. */
+  async function openFile() {
+    try {
+      const { handle, html, name } = await FileAccessService.openFile()
+      fileHandle.value = handle
+      fileName.value   = name
+      loadHTML(html)
+    } catch (e) {
+      if (e.name !== 'AbortError') console.error('[EditorStore] openFile:', e)
+    }
+  }
+
+  /**
+   * Salva o HTML atual no arquivo aberto (sem seletor de arquivo).
+   * Se nenhum arquivo estiver aberto, chama saveFileAs().
+   */
+  async function saveFile() {
+    const doc = getIframeDoc()
+    if (!doc) return
+    const html = HtmlExportService.generateHtml(doc)
+    if (fileHandle.value) {
+      await FileAccessService.saveFile(fileHandle.value, html)
+    } else {
+      await saveFileAs()
+    }
+  }
+
+  /** Abre o seletor "Salvar como" e grava o arquivo. */
+  async function saveFileAs() {
+    const doc = getIframeDoc()
+    if (!doc) return
+    const html = HtmlExportService.generateHtml(doc)
+    try {
+      const { handle, name } = await FileAccessService.saveFileAs(html, fileName.value ?? 'index.html')
+      fileHandle.value = handle
+      fileName.value   = name
+    } catch (e) {
+      if (e.name !== 'AbortError') console.error('[EditorStore] saveFileAs:', e)
+    }
+  }
+
+  // ── API Backend ──────────────────────────────────────────────────────────
+
+  /**
+   * Abre um documento via API e carrega o HTML no editor.
+   * Resolve URLs relativas (CSS, imagens, JS) para absolutas usando assetsBaseUrl do config.js.
+   * @param {{ id, title, type, path }} doc
+   */
+  async function openDocument(doc) {
+    try {
+      const docPath = (doc.path ?? doc.id).replace(/\\/g, '/') // normaliza barras do Windows
+      console.log('[EditorStore] openDocument:', docPath)
+
+      const { html } = await ApiService.readDocument(docPath)
+      console.log('[EditorStore] html recebido, length:', html?.length)
+console.log(html)
+      // Resolve URLs relativas usando assetsBaseUrl + pasta do documento
+      // Ex: docPath = 'teste-2/index.html' → docDir = 'teste-2/'
+      const assetsBaseUrl = window.__EDITOR_CONFIG__?.assetsBaseUrl ?? ''
+      const docDir        = docPath.includes('/') ? docPath.replace(/\/[^/]*$/, '') + '/' : ''
+      const pageBaseUrl   = assetsBaseUrl && docDir ? assetsBaseUrl + docDir : null
+      console.log('[EditorStore] pageBaseUrl:', pageBaseUrl)
+
+      const resolvedHtml  = pageBaseUrl ? resolveRelativeUrls(html, pageBaseUrl) : html
+
+      currentDocument.value = doc
+      fileName.value        = doc.title ?? docPath
+      loadHTML(resolvedHtml)
+      console.log('[EditorStore] loadHTML chamado, ctx:', !!ctx.value)
+    } catch (e) {
+      console.error('[EditorStore] openDocument ERRO:', e)
+      throw e
+    }
+  }
+
+  /**
+   * Salva o HTML atual via API no documento aberto.
+   * Chamado por Ctrl+S quando há currentDocument.
+   */
+  async function saveDocument() {
+    const doc = currentDocument.value
+    if (!doc) return false
+    const iframeDoc = getIframeDoc()
+    if (!iframeDoc) return false
+    const html = HtmlExportService.generateHtml(iframeDoc)
+    await ApiService.saveDocument(doc.path ?? doc.id, html)
+    console.log('[EditorStore] saveDocument: salvo', doc.path ?? doc.id)
+    return true
+  }
+
   return {
     ctx,
     selectNode,
@@ -192,6 +329,16 @@ export const useEditorStore = defineStore('editor', () => {
     inspectMode,
     showBoxModel,
     outlineMode,
+    showEmptyPlaceholder,
+    fileHandle,
+    fileName,
+    currentDocument,
+    openFile,
+    saveFile,
+    saveFileAs,
+    openDocument,
+    saveDocument,
+    fileAccessSupported: FileAccessService.isSupported(),
     loadHTML,
     viewport,
     setViewport,

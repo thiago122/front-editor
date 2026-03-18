@@ -23,6 +23,7 @@
       @blur="onPropBlur"
       @keydown.enter.prevent="onFocusValue"
       @keydown.tab.prevent="onFocusValue"
+      @keydown.escape.prevent="onEscapeProp"
     />
 
     <span class="decl__colon">:</span>
@@ -34,12 +35,13 @@
         class="prop-value decl__value"
         :class="fieldStateClasses()"
         :readonly="!editable"
-        :value="decl.important ? decl.value + ' !important' : decl.value"
+        :value="displayValue"
         @focus="onValueFocus"
         @input="onValueInput"
         @blur="onValueBlur"
         @keydown.enter.prevent="onFocusNextDecl"
         @keydown.tab.prevent="onFocusNextDecl"
+        @keydown.escape.prevent="onEscapeValue"
       />
     </div>
 
@@ -53,10 +55,15 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { toggleDeclaration, updateDeclaration, deleteDeclaration } from '@/editor/css/actions/cssDeclarationActions'
 import { useCssAutocomplete } from '@/composables/useCssAutocomplete'
 import CssAutocompleteDropdown from '@/components/CssAutocompleteDropdown.vue'
+
+const emit = defineEmits([
+  'request-new-decl', // emitido quando Enter no value da última declaração
+  'remove-if-empty',  // emitido quando Escape com prop+value vazios (declaração descartada)
+])
 
 const props = defineProps({
   rule: { type: Object, required: true },
@@ -64,10 +71,23 @@ const props = defineProps({
   editable: { type: Boolean, default: false },
 })
 
-const ac        = useCssAutocomplete()
+const ac         = useCssAutocomplete()
 const propInput  = ref(null)
 const valueInput = ref(null)
 const acTarget   = ref(null)  // 'prop' | 'value' | null — qual input está com dropdown
+
+// ── editingValue ──────────────────────────────────────────────────────────────
+// Enquanto o value input está focado, rastreamos o valor localmente para que
+// re-renders do Vue (causados por mudanças em decl.prop ou acTarget) nunca
+// chamem `el.value = decl.value` e destruam a seleção ou o texto digitado.
+// Fica null quando o input não está focado — aí o :value usa decl.value direto.
+const editingValue = ref(null)
+
+const displayValue = computed(() =>
+  editingValue.value !== null
+    ? editingValue.value
+    : (props.decl.important ? props.decl.value + ' !important' : props.decl.value)
+)
 
 // ── Prop name handlers ────────────────────────────────────────────────────────
 
@@ -108,29 +128,40 @@ function onPropBlur(e) {
 
 function onValueFocus(e) {
   if (!props.editable) return
+  // Ancora o valor atual: enquanto editingValue !== null Vue nunca vai
+  // chamar el.value = decl.value (pois displayValue === el.value → skip).
+  editingValue.value = e.target.value
   e.target.select()
+  // rAF extra de segurança para o caso de algum re-render síncrono ainda pendente
+  const el = e.target
+  requestAnimationFrame(() => { el.select() })
   acTarget.value = 'value'
   ac.openValue(valueInput.value, props.decl.prop, e.target.value, accepted => {
+    editingValue.value = null
     updateDeclaration(props.rule, props.decl, 'value', accepted)
   })
 }
 
 function onValueInput(e) {
   if (!props.editable) return
+  editingValue.value = e.target.value  // mantém em sincronia com o que o usuário digita
   acTarget.value = 'value'
   ac.updateQuery(e.target.value)
   if (!ac.isActive.value) {
     ac.openValue(valueInput.value, props.decl.prop, e.target.value, accepted => {
+      editingValue.value = null
       updateDeclaration(props.rule, props.decl, 'value', accepted)
     })
   }
 }
 
 function onValueBlur(e) {
+  const finalValue = e.target.value
   setTimeout(() => {
     ac.close()
     acTarget.value = null
-    updateDeclaration(props.rule, props.decl, 'value', e.target.value)
+    editingValue.value = null  // libera o anchor — Vue volta a usar decl.value
+    updateDeclaration(props.rule, props.decl, 'value', finalValue)
   }, 120)
 }
 
@@ -147,8 +178,37 @@ function onFocusNextDecl(e) {
   const nextDecl    = currentDecl?.nextElementSibling
   e.target.blur()
   if (nextDecl?.classList.contains('decl')) {
+    // Há uma declaração abaixo → navega normalmente
     nextDecl.querySelector('.prop-name')?.focus()
+  } else {
+    // Última declaração → pede ao pai (CssRule) para criar uma nova
+    emit('request-new-decl')
   }
+}
+
+// Valores padrão que CssDeclarationService.create coloca numa nova declaração
+const DEFAULT_PROP  = 'property'
+const DEFAULT_VALUE = 'value'
+
+function isDeclEmpty() {
+  const p = (props.decl.prop  ?? '').trim()
+  const v = (props.decl.value ?? '').trim()
+  return (!p || p === DEFAULT_PROP) && (!v || v === DEFAULT_VALUE)
+}
+
+function onEscapeProp(e) {
+  if (!props.editable) return
+  // Fecha autocomplete se estiver aberto
+  if (ac.isActive.value) { ac.close(); return }
+  e.target.blur()
+  if (isDeclEmpty()) emit('remove-if-empty')
+}
+
+function onEscapeValue(e) {
+  if (!props.editable) return
+  if (ac.isActive.value) { ac.close(); return }
+  e.target.blur()
+  if (isDeclEmpty()) emit('remove-if-empty')
 }
 
 function fieldStateClasses() {
@@ -165,6 +225,7 @@ function fieldStateClasses() {
   align-items: center;
   padding-top: 1.5px;
   padding-bottom: 1.5px;
+  padding-left: 5px;
 }
 
 /* Checkbox */
@@ -233,12 +294,13 @@ function fieldStateClasses() {
 .decl__delete {
   opacity: 0;
   flex-shrink: 0;
-  color: #9ca3af;
-  background: none;
+  color: white;
+  background: red;
   border: none;
   cursor: pointer;
   padding: 0;
   transition: color 0.15s, opacity 0.15s;
+  margin-right: 4px;
 }
 .decl:hover .decl__delete { opacity: 1; }
 .decl__delete:hover { color: #ef4444; }

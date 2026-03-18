@@ -393,6 +393,51 @@ function addFile() {
   createAndEdit(fileNode)
 }
 
+// — Criar novo stylesheet (on_page / internal / external) —
+// Injeta o elemento HTML no iframe e rebuilda a Logic Tree
+const newSheetMenu = ref(false)
+
+async function createStylesheet(type) {
+  console.log('[createStylesheet] chamado com type:', type)
+  newSheetMenu.value = false
+  const doc = editorStore.getIframeDoc()
+  console.log('[createStylesheet] iframeDoc:', doc)
+  if (!doc) { console.warn('[createStylesheet] doc é null — abortando'); return }
+
+  if (type === 'on_page') {
+    const el = doc.createElement('style')
+    el.setAttribute('data-location', 'on_page')
+    el.textContent = ':root {}'    // seletor real → garante file node no TreeBuilder
+    doc.head.appendChild(el)
+    console.log('[createStylesheet] <style> on_page adicionado. styles no head:', doc.head.querySelectorAll('style').length)
+
+  } else if (type === 'internal') {
+    const href = window.prompt('Nome do arquivo CSS interno (ex: styles.css):', 'styles.css')
+    if (!href) { console.log('[createStylesheet] cancelou prompt'); return }
+    const el = doc.createElement('style')
+    el.setAttribute('data-location', 'internal')
+    el.setAttribute('data-source-name', href.trim())
+    el.textContent = ':root {}'    // seletor real → garante file node no TreeBuilder
+    doc.head.appendChild(el)
+    console.log('[createStylesheet] <style> internal adicionado:', href)
+
+  } else if (type === 'external') {
+    const href = window.prompt('URL do arquivo CSS externo (ex: https://...):', 'https://')
+    if (!href) { console.log('[createStylesheet] cancelou prompt'); return }
+    const el = doc.createElement('link')
+    el.rel  = 'stylesheet'
+    el.href = href.trim()
+    el.setAttribute('data-location', 'external')
+    doc.head.appendChild(el)
+    console.log('[createStylesheet] <link> external adicionado:', href)
+  }
+
+  console.log('[createStylesheet] cssLogicTree antes do rebuild:', JSON.stringify(styleStore.cssLogicTree?.length))
+  await styleStore.rebuildLogicTree(doc, ['on_page', 'internal', 'external'])
+  console.log('[createStylesheet] cssLogicTree após rebuild:', JSON.stringify(styleStore.cssLogicTree))
+  expandAll()
+}
+
 // ============================================
 // CONTEXT MENU
 // ============================================
@@ -488,6 +533,7 @@ function openContextMenu(node, event) {
         { label: 'New CSS Rule', icon: '{}', action: () => addRuleInContext(node) },
         { label: 'New At-Rule',  icon: '@',  action: () => addAtRuleInContext(node) },
         { divider: true },
+        { label: 'Rename',      icon: '✏️', action: () => renameFile(node) },
         { label: 'Import CSS',  icon: '↑', action: () => openImportModal(node) },
         { label: 'Export .css', icon: '↓', action: () => downloadSheet(fileKey) },
       ]
@@ -526,6 +572,48 @@ function openContextMenu(node, event) {
   if (items.length) contextMenu.value = { x, y, items }
 }
 
+
+/** Renomeia um nó file atualizando a Logic Tree e o atributo no iframe */
+function renameFile(fileNodeCopy) {
+  const oldName = fileNodeCopy.label ?? ''
+  const newName = window.prompt('Novo nome do arquivo CSS:', oldName)
+  if (!newName || newName.trim() === oldName) return
+
+  const trimmed = newName.trim()
+
+  // O nó do context menu é uma cópia do virtual list ({ ...node, depth })
+  // Precisamos encontrar o nó REAL na Logic Tree para mutá-lo
+  const realNode = findCssNode(toRaw(styleStore.cssLogicTree), fileNodeCopy.id)
+  if (!realNode) {
+    console.warn('[renameFile] nó não encontrado na cssLogicTree:', fileNodeCopy.id)
+    return
+  }
+
+  // 1. Atualiza o nó real na Logic Tree
+  realNode.label = trimmed
+  if (realNode.metadata) realNode.metadata.sourceName = trimmed
+
+  // 2. Propaga o novo sourceName para todas as regras filhas (usada no Inspector)
+  const walk = (nodes) => nodes?.forEach(child => {
+    if (child.metadata) child.metadata.sourceName = trimmed
+    walk(child.children)
+  })
+  walk(realNode.children)
+
+  // 3. Atualiza o data-source-name no <style> correspondente no iframe
+  const doc = editorStore.getIframeDoc()
+  if (doc) {
+    const styles = Array.from(doc.querySelectorAll('style[data-location], link[rel="stylesheet"]'))
+    const match  = styles.find(el =>
+      el.getAttribute('data-source-name') === oldName ||
+      el.getAttribute('data-label') === oldName
+    )
+    if (match) match.setAttribute('data-source-name', trimmed)
+  }
+
+  // 4. Notifica a UI
+  styleStore.notifyTreeMutation()
+}
 
 /** Adiciona regra como filho de um nó file ou at-rule específico */
 function addRuleInContext(parentNode) {
@@ -692,6 +780,7 @@ const itemsOffset = computed(() => startIndex.value * ROW_HEIGHT)
     <div
       class="flex flex-col h-full bg-white border-r border-[#d1d1d1]"
       @keydown="onContainerKeydown"
+      @click="newSheetMenu = false"
       tabindex="-1"
     >
         <!-- Header -->
@@ -703,6 +792,43 @@ const itemsOffset = computed(() => startIndex.value * ROW_HEIGHT)
                   {{ matchCount }} match{{ matchCount !== 1 ? 'es' : '' }}
                 </span>
                 <span v-else class="text-[10px] text-gray-400">{{ visibleNodes.length }} nodes</span>
+
+                <!-- New Stylesheet (+) dropdown -->
+                <div class="relative">
+                  <button
+                    @click.stop="newSheetMenu = !newSheetMenu"
+                    class="text-gray-500 hover:text-black font-bold text-sm leading-none"
+                    title="New Stylesheet"
+                  >+</button>
+                  <div
+                    v-if="newSheetMenu"
+                    class="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded shadow-lg py-1 z-50 min-w-[160px] text-[11px]"
+                    @click.stop
+                  >
+                    <div class="px-3 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Novo Stylesheet</div>
+                    <button
+                      class="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 text-left text-gray-700"
+                      @click="createStylesheet('on_page')"
+                    >
+                      <span class="text-indigo-500 font-mono">&lt;style&gt;</span>
+                      On-page
+                    </button>
+                    <button
+                      class="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 text-left text-gray-700"
+                      @click="createStylesheet('internal')"
+                    >
+                      <span class="text-blue-500 font-mono">&lt;link&gt;</span>
+                      Internal
+                    </button>
+                    <button
+                      class="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 text-left text-gray-700"
+                      @click="createStylesheet('external')"
+                    >
+                      <span class="text-orange-500 font-mono">🔗</span>
+                      External
+                    </button>
+                  </div>
+                </div>
 
                 <!-- Expand / Collapse All toggle -->
                 <button
