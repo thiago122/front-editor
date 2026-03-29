@@ -12,7 +12,8 @@ import { useStyleStore } from './StyleStore'
 import { FileAccessService } from '@/editor/css/export/FileAccessService'
 import { HtmlExportService } from '@/editor/css/export/HtmlExportService'
 import { ApiService } from '@/services/ApiService'
-import { resolveRelativeUrls } from '@/utils/resolveRelativeUrls'
+import { CssExportService } from '@/editor/css/export/CssExportService'
+import { editorHooks } from '@/editor/HookManager'
 
 export const useEditorStore = defineStore('editor', () => {
   // --- STATE ---
@@ -20,10 +21,10 @@ export const useEditorStore = defineStore('editor', () => {
   const selectedNodeId = ref(null)
   const selectedElement = ref(null) // From Inspector
   const hoveredNodeId = ref(null)
-  const inspectMode = ref(null)
-  const showBoxModel = ref(false)
-  const outlineMode  = ref(false)
-  const showEmptyPlaceholder = ref(false)
+  const inspectMode          = ref(true)   // seletor ligado por padrão
+  const showBoxModel         = ref(false)  // sem box model por padrão
+  const outlineMode          = ref(true)   // outline mode ligado por padrão
+  const showEmptyPlaceholder = ref(true)   // placeholder em vazios ligado por padrão
   const fileHandle = ref(null)
   const fileName   = ref(null)
   /** Documento atualmente aberto via API { id, title, type, path } */
@@ -35,6 +36,19 @@ export const useEditorStore = defineStore('editor', () => {
   const clipboard      = ref({ type: null, data: null }) // Clipboard tipado
 
   /**
+   * Estado do banner de confirmação de rename de seletor CSS.
+   * Mantido no store para sobreviver ao re-mount do componente CssRule
+   * que ocorre quando applyMutation recomputa as regras do inspector.
+   */
+  const selectorRenameConfirm = ref({
+    show:        false,
+    type:        null,    // 'class' | 'id'
+    oldName:     '',
+    newName:     '',
+    ruleUid:     null,    // uid da rule para validar que o banner é da rule certa
+  })
+
+  /**
    * Controla o efeito de blink visual no overlay de seleção.
    * Ativado após inserção de novo elemento para ajudar o usuário a
    * identificar onde o elemento foi inserido.
@@ -44,6 +58,84 @@ export const useEditorStore = defineStore('editor', () => {
 
   const pipeline = new Pipeline()
   pipeline.use(htmlPlugin())
+
+  // ── Hooks nativos do editor ─────────────────────────────────────────────────
+  // Prioridade 1 garante que todos estes hooks rodam ANTES de qualquer hook externo (padrão: 10).
+
+  // 1. Remove atributos internos do editor
+  editorHooks.on('document:beforeSave', (payload) => {
+    payload.html = payload.html
+      .replace(/ data-node-id="[^"]*"/g, '')   // IDs internos do editor
+      .replace(/ data-selected="[^"]*"/g, '')   // estado de seleção
+  }, 1)
+
+  // 2. Remove estilos injetados pelo editor (evita acúmulo a cada salvamento)
+  //    Apenas IDs específicos do editor são removidos.
+  //    NÃO remove data-location="on_page" pois esses são estilos legítimos do manifesto CSS.
+  editorHooks.on('document:beforeSave', (payload) => {
+    const EDITOR_STYLE_IDS = [
+      'editor-ui-styles',
+      'editor-outline-mode',
+      'editor-empty-placeholder',
+    ]
+
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(payload.html, 'text/html')
+
+    // Remove style tags do editor
+    EDITOR_STYLE_IDS.forEach((id) => doc.getElementById(id)?.remove())
+
+    // Remove cursor inline adicionado pelo useIframeEvents durante o inspectMode
+    doc.documentElement.style.removeProperty('cursor')
+    doc.body?.style.removeProperty('cursor')
+
+    // Remove atributos style que ficaram vazios após as remoções acima
+    doc.querySelectorAll('[style]').forEach((el) => {
+      if (!el.getAttribute('style').trim()) el.removeAttribute('style')
+    })
+
+    // Remove TODOS os text nodes que contêm apenas whitespace do <head>
+    // O prettier vai recolocar a indentação correta — não precisamos dos text nodes originais
+    Array.from(doc.head.childNodes).forEach((node) => {
+      if (node.nodeType === 3 && !node.textContent.trim()) {
+        node.parentNode.removeChild(node)
+      }
+    })
+
+    payload.html = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML
+  }, 1)
+
+  // 3. Formata (beautify) o HTML antes de salvar.
+  //    Prioridade 5: roda depois das limpezas (prioridade 1) e antes de hooks externos (padrão: 10).
+  editorHooks.on('document:beforeSave', async (payload) => {
+    // a) Prettier: indenta e trata whitespace do body
+    try {
+      const { format }  = await import('prettier')
+      const htmlParser  = await import('prettier/plugins/html')
+      payload.html = await format(payload.html, {
+        parser:                    'html',
+        plugins:                   [htmlParser],
+        printWidth:                120,
+        tabWidth:                  2,
+        useTabs:                   false,
+        htmlWhitespaceSensitivity: 'ignore',
+      })
+    } catch (e) {
+      console.warn('[EditorStore] Prettier beautify falhou, salvando sem formatar:', e)
+    }
+
+    // b) Após o prettier, remove whitespace text nodes SOMENTE do <head>
+    //    (o prettier adiciona blank lines entre grupos de elementos no head)
+    //    O body NÃO é tocado — útil manter espaços entre seções para legibilidade.
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(payload.html, 'text/html')
+    Array.from(doc.head.childNodes).forEach((node) => {
+      if (node.nodeType === 3 && !node.textContent.trim()) {
+        node.parentNode.removeChild(node)
+      }
+    })
+    payload.html = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML
+  }, 5)
 
   const styleStore = useStyleStore()
 
@@ -281,22 +373,17 @@ export const useEditorStore = defineStore('editor', () => {
       const docPath = (doc.path ?? doc.id).replace(/\\/g, '/') // normaliza barras do Windows
       console.log('[EditorStore] openDocument:', docPath)
 
+      await editorHooks.emitAsync('document:beforeOpen', { doc, docPath })
+
       const { html } = await ApiService.readDocument(docPath)
       console.log('[EditorStore] html recebido, length:', html?.length)
-console.log(html)
-      // Resolve URLs relativas usando assetsBaseUrl + pasta do documento
-      // Ex: docPath = 'teste-2/index.html' → docDir = 'teste-2/'
-      const assetsBaseUrl = window.__EDITOR_CONFIG__?.assetsBaseUrl ?? ''
-      const docDir        = docPath.includes('/') ? docPath.replace(/\/[^/]*$/, '') + '/' : ''
-      const pageBaseUrl   = assetsBaseUrl && docDir ? assetsBaseUrl + docDir : null
-      console.log('[EditorStore] pageBaseUrl:', pageBaseUrl)
-
-      const resolvedHtml  = pageBaseUrl ? resolveRelativeUrls(html, pageBaseUrl) : html
 
       currentDocument.value = doc
       fileName.value        = doc.title ?? docPath
-      loadHTML(resolvedHtml)
+      loadHTML(html)
       console.log('[EditorStore] loadHTML chamado, ctx:', !!ctx.value)
+
+      editorHooks.emit('document:afterOpen', { doc, docPath, html, ctx: ctx.value })
     } catch (e) {
       console.error('[EditorStore] openDocument ERRO:', e)
       throw e
@@ -305,16 +392,44 @@ console.log(html)
 
   /**
    * Salva o HTML atual via API no documento aberto.
-   * Chamado por Ctrl+S quando há currentDocument.
+   * Também salva todos os CSS internos (editáveis) para garantir
+   * que alterações de CSS não se percam.
+   * Chamado por Ctrl+S e pelo botão de salvar quando há currentDocument.
    */
   async function saveDocument() {
     const doc = currentDocument.value
     if (!doc) return false
     const iframeDoc = getIframeDoc()
     if (!iframeDoc) return false
-    const html = HtmlExportService.generateHtml(iframeDoc)
-    await ApiService.saveDocument(doc.path ?? doc.id, html)
-    console.log('[EditorStore] saveDocument: salvo', doc.path ?? doc.id)
+
+    // 1. Gera o HTML e permite que hooks o modifiquem antes de salvar.
+    //    O payload é um objeto mutável: handlers podem fazer payload.html = novoHtml.
+    const savePayload = { doc, html: HtmlExportService.generateHtml(iframeDoc) }
+
+    await editorHooks.emitAsync('document:beforeSave', savePayload)
+
+    // Usa o html possivelmente modificado pelos hooks
+    await ApiService.saveDocument(doc.path ?? doc.id, savePayload.html)
+    console.log('[EditorStore] saveDocument: HTML salvo', doc.path ?? doc.id)
+
+    // 2. Salva todos os CSS internos (ignorando on_page e externos)
+    const logicTree = styleStore.cssLogicTree
+    if (logicTree) {
+      const sheets = CssExportService.generateAll(logicTree)
+      const saves = []
+      sheets.forEach(({ origin, sourceName, css }) => {
+        if (origin !== 'internal') return // só arquivos editáveis do manifesto
+        saves.push(
+          ApiService.saveAsset(sourceName, css)
+            .then(() => console.log('[EditorStore] CSS salvo:', sourceName))
+            .catch(err => console.error('[EditorStore] Erro ao salvar CSS:', sourceName, err))
+        )
+      })
+      await Promise.all(saves)
+    }
+
+    editorHooks.emit('document:afterSave', { doc, html: savePayload.html })
+
     return true
   }
 
@@ -324,6 +439,7 @@ console.log(html)
     selectedNode,
     selectedNodeId,
     selectedElement,
+    selectorRenameConfirm,
     hoveredElement,
     hoveredNodeId,
     inspectMode,

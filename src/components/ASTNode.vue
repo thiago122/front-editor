@@ -126,6 +126,7 @@ function onSelect() {
     <!-- NODE ROW -->
     <div
       :data-ast-node-id="node.nodeId"
+      :data-tag="node.tag"
       class="node-row flex items-center h-6 cursor-pointer rounded-sm px-1.5 group transition-all duration-75"
       :class="{ 
         'bg-blue-100 text-blue-900 shadow-sm': isSelected,

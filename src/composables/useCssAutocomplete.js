@@ -119,10 +119,22 @@ export function useCssAutocomplete() {
       activeIdx.value = Math.max(activeIdx.value - 1, 0)
       return true
     }
-    if ((e.key === 'Enter' || e.key === 'Tab') && activeIdx.value >= 0) {
-      e.preventDefault()
-      accept()
-      return true
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      if (activeIdx.value >= 0) {
+        // Item explicitamente selecionado via seta → aceita
+        e.preventDefault()
+        accept()
+        return true
+      }
+      if (suggestions.value.length === 1) {
+        // Única sugestão na lista → aceita implicitamente (usabilidade)
+        // Permite valor customizado: se não quiser, continue digitando até a lista esvaziar
+        e.preventDefault()
+        accept(suggestions.value[0])
+        return true
+      }
+      // Múltiplas sugestões, nada selecionado → deixa o evento seguir (valor customizado)
+      return false
     }
     if (e.key === 'Escape') {
       e.preventDefault()

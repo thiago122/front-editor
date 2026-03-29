@@ -1,7 +1,8 @@
-// ManipulatinEngine.js
+// ManipulationEngine.js
 
 import { findNodeById, findParentAndIndex, findParentNode, cloneAndRegenerate } from '@/utils/ast'
 import { unifiedHistory as history } from './history/UnifiedHistoryManager'
+import { editorHooks } from './HookManager'
 
 export class ManipulationEngine {
   // Passamos funções que buscam os valores atuais (getters)
@@ -81,7 +82,10 @@ export class ManipulationEngine {
     const parent = findNodeById(ctx.ast, parentId)
     if (!parent || !parent.children[index]) return
 
-    const [removedNode] = parent.children.splice(index, 1)
+    const removedNode = parent.children[index]
+    editorHooks.emit('node:beforeRemove', { parentId, index, node: removedNode })
+
+    parent.children.splice(index, 1)
 
     // Sync DOM is tricky here because we only know the parent and index.
     // But removedNode has the ID we need to remove from DOM.
@@ -92,12 +96,16 @@ export class ManipulationEngine {
       type: 'insertNodeAt',
       args: [parentId, index, removedNode],
     })
+
+    editorHooks.emit('node:afterRemove', { parentId, index, node: removedNode })
   }
 
   insertNodeAt(parentId, index, node) {
     const ctx = this.getCtx()
     const parent = findNodeById(ctx.ast, parentId)
     if (!parent) return
+
+    editorHooks.emit('node:beforeInsert', { parentId, index, node })
 
     parent.children.splice(index, 0, node)
 
@@ -149,6 +157,8 @@ export class ManipulationEngine {
       type: 'removeNodeAt',
       args: [parentId, index],
     })
+
+    editorHooks.emit('node:afterInsert', { parentId, index, node })
   }
 
   moveNodeAt(parentId, fromIndex, toIndex) {
@@ -173,6 +183,8 @@ export class ManipulationEngine {
       type: 'moveNodeAt',
       args: [parentId, toIndex, fromIndex], // Swap args
     })
+
+    editorHooks.emit('node:afterMove', { parentId, fromIndex, toIndex, node: movedNode })
   }
 
   /**
@@ -486,6 +498,8 @@ export class ManipulationEngine {
         type: 'setAttribute',
         args: [nodeId, name, oldValue],
       })
+
+      editorHooks.emit('node:afterAttribute', { nodeId, name, value, oldValue })
     }
   }
 

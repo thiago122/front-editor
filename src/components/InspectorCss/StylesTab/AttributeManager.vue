@@ -1,169 +1,179 @@
 <template>
-  <div class="border-b border-gray-300 text-[11px]">
+  <div class="flex flex-col h-full overflow-hidden text-[11px] font-mono select-none">
 
-    <!-- ── Header (sempre visível) ─────────────────────────────────────── -->
-    <div
-      @click="showPanel = !showPanel"
-      class="flex items-center gap-1.5 px-2 py-1.5 cursor-pointer select-none hover:bg-gray-50"
-    >
-      <span class="font-semibold text-gray-500 uppercase tracking-wide text-[10px]">Attributes</span>
-
-      <!-- Badges de resumo -->
-      <span v-if="classBadge" class="px-1 bg-blue-100 text-blue-700 border border-blue-200 rounded text-[9px] font-mono">
-        .{{ classBadge }}
-      </span>
-      <span v-if="idBadge" class="px-1 bg-purple-100 text-purple-700 border border-purple-200 rounded text-[9px] font-mono">
-        #{{ idBadge }}
-      </span>
-      <span v-if="otherCount > 0" class="px-1 bg-gray-100 text-gray-500 border border-gray-200 rounded text-[9px]">
-        +{{ otherCount }}
-      </span>
-
-      <span class="ml-auto text-gray-400 text-[10px]">{{ showPanel ? '▲' : '▼' }}</span>
+    <!-- Empty state -->
+    <div v-if="!el" class="flex-1 flex items-center justify-center text-gray-400 text-[11px]">
+      Selecione um elemento no canvas
     </div>
 
-    <!-- ── Painel expandido ─────────────────────────────────────────────── -->
-    <div v-if="showPanel" class="px-2 pb-2 flex flex-col gap-3">
+    <div v-else class="flex flex-col h-full overflow-y-auto">
 
-      <!-- ── CLASSES ─────────────────────────────────────────────────────── -->
-      <section>
-        <div class="flex items-center justify-between mb-1">
-          <span class="font-semibold text-blue-600">class</span>
-          <button
-            @click="startAddClass"
-            class="text-blue-500 hover:text-blue-700 text-[10px]"
-            title="Adicionar classe"
-          >+ class</button>
-        </div>
+      <!-- ── CLASSES ────────────────────────────────────────────────────────── -->
+      <section class="px-3 pt-3 pb-2 border-b border-gray-100">
+        <div class="flex items-center gap-1 mb-1.5">
+          <span class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider w-[40px] shrink-0">class</span>
+          <div class="flex flex-wrap gap-1 flex-1 min-w-0">
 
-        <!-- Lista de classes -->
-        <div
-          v-for="cls in classList"
-          :key="cls"
-          class="flex items-center gap-1 py-0.5 group"
-        >
-          <!-- Modo visualização -->
-          <template v-if="editingClass !== cls">
-            <span class="font-mono text-blue-500">.{{ cls }}</span>
-            <span v-if="isClassUsedInCss(cls)" class="px-1 bg-green-100 text-green-700 border border-green-200 rounded text-[9px]">CSS ✓</span>
-            <span v-if="isClassActiveRule(cls)" class="px-1 bg-blue-600 text-white rounded text-[9px]">active</span>
-            <div class="ml-auto flex gap-1">
-              <button @click="startEditClass(cls)" class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-700 transition-opacity" title="Renomear">✎</button>
-              <button @click="removeClass(cls)" class="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity" title="Remover">✕</button>
-            </div>
-          </template>
+            <!-- Class chips -->
+            <template v-for="cls in classList" :key="cls">
+              <!-- View mode chip -->
+              <span
+                v-if="editingClass !== cls"
+                class="group inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-700 hover:border-blue-400 cursor-default transition-colors"
+              >
+                <span
+                  class="font-mono cursor-pointer hover:text-blue-900"
+                  @click="startEditClass(cls)"
+                  :title="isClassActiveRule(cls) ? 'Regra CSS ativa' : isClassUsedInCss(cls) ? 'Usado em CSS' : ''"
+                >.{{ cls }}</span>
+                <span
+                  v-if="isClassActiveRule(cls)"
+                  class="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"
+                  title="Regra ativa"
+                />
+                <span
+                  v-else-if="isClassUsedInCss(cls)"
+                  class="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0"
+                  title="Em regra CSS"
+                />
+                <button
+                  @click="removeClass(cls)"
+                  class="opacity-0 group-hover:opacity-100 text-blue-300 hover:text-red-500 transition-opacity text-[10px] leading-none"
+                  title="Remover"
+                >×</button>
+              </span>
 
-          <!-- Modo edição -->
-          <template v-else>
-            <input
-              v-model="editClassValue"
-              @keydown.enter="confirmEditClass(cls)"
-              @keydown.escape="editingClass = null"
-              class="flex-1 border border-blue-300 px-1 py-0.5 outline-none focus:border-blue-500 font-mono"
-            />
-            <button @click="confirmEditClass(cls)" class="text-blue-600 hover:text-blue-700">✓</button>
-            <button @click="editingClass = null" class="text-gray-400 hover:text-gray-600">✕</button>
-          </template>
-        </div>
+              <!-- Edit mode chip -->
+              <span v-else class="inline-flex items-center gap-0.5">
+                <input
+                  v-model="editClassValue"
+                  @keydown.enter="confirmEditClass(cls)"
+                  @keydown.escape="editingClass = null"
+                  class="w-[100px] border border-blue-400 px-1 py-0 outline-none font-mono text-blue-800 text-[11px] rounded"
+                />
+                <button @click="confirmEditClass(cls)" class="text-blue-600 hover:text-blue-800">✓</button>
+                <button @click="editingClass = null" class="text-gray-400 hover:text-gray-600">✕</button>
+              </span>
+            </template>
 
-        <!-- Input adicionar classe -->
-        <div v-if="addingClass" class="flex gap-1 mt-1">
-          <input
-            ref="addClassInput"
-            v-model="newClassName"
-            @keydown.enter="confirmAddClass"
-            @keydown.escape="addingClass = false"
-            placeholder="nome-da-classe"
-            class="flex-1 border border-blue-300 px-1 py-0.5 outline-none focus:border-blue-500 font-mono"
-          />
-          <button @click="confirmAddClass" class="px-2 bg-blue-600 text-white hover:bg-blue-700">+</button>
-          <button @click="addingClass = false" class="px-2 text-gray-400 hover:text-gray-600">✕</button>
+            <!-- Add class input -->
+            <template v-if="addingClass">
+              <span class="inline-flex items-center gap-0.5">
+                <input
+                  ref="addClassInput"
+                  v-model="newClassName"
+                  @keydown.enter="confirmAddClass"
+                  @keydown.escape="addingClass = false"
+                  placeholder="class-name"
+                  class="w-[100px] border border-blue-400 px-1 py-0 outline-none font-mono text-blue-800 text-[11px] rounded"
+                />
+                <button @click="confirmAddClass" class="text-blue-600 hover:text-blue-800">✓</button>
+                <button @click="addingClass = false" class="text-gray-400">✕</button>
+              </span>
+            </template>
+
+            <!-- + add class button -->
+            <button
+              v-if="!addingClass"
+              @click="startAddClass"
+              class="inline-flex items-center px-1.5 py-0.5 rounded border border-dashed border-gray-300 text-gray-400 hover:border-blue-400 hover:text-blue-500 transition-colors text-[10px]"
+            >+ class</button>
+          </div>
         </div>
       </section>
 
-      <!-- ── ID ────────────────────────────────────────────────────────── -->
-      <section>
-        <!-- ID existente -->
-        <div class="flex items-center gap-1 group py-0.5">
-          <span class="font-semibold text-gray-500 shrink-0">id</span>
-          <span class="text-gray-300">:</span>
+      <!-- ── ATTRIBUTE TABLE (id + outros) ─────────────────────────────────── -->
+      <section class="flex-1 overflow-y-auto">
 
-          <!-- Modo visualização -->
+        <!-- ID row -->
+        <div class="group flex items-center gap-2 px-3 py-1.5 border-b border-gray-50 hover:bg-gray-50 transition-colors">
+          <span class="text-gray-400 w-[40px] shrink-0">id</span>
+
+          <!-- View mode -->
           <template v-if="!editingId">
-            <span class="font-mono text-purple-500 truncate" :title="currentId">{{ currentId || '—' }}</span>
-            <span v-if="currentId && isIdUsedInCss(currentId)" class="px-1 bg-green-100 text-green-700 border border-green-200 rounded text-[9px]">CSS ✓</span>
-            <div class="ml-auto flex gap-1">
-              <button @click="startEditId" class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-700 transition-opacity" title="Editar ID">✎</button>
-              <button v-if="currentId" @click="removeId" class="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity" title="Remover ID">✕</button>
+            <span
+              class="flex-1 font-mono cursor-pointer min-w-0 truncate"
+              :class="currentId ? 'text-purple-600 hover:text-purple-800' : 'text-gray-300 italic'"
+              :title="currentId"
+              @click="startEditId"
+            >{{ currentId || 'null' }}</span>
+            <span
+              v-if="currentId && isIdUsedInCss(currentId)"
+              class="text-[9px] px-1 py-0.5 bg-green-100 text-green-600 rounded shrink-0"
+            >CSS</span>
+            <div class="opacity-0 group-hover:opacity-100 flex gap-1 shrink-0 transition-opacity">
+              <button @click="startEditId" class="text-gray-400 hover:text-gray-700">✎</button>
+              <button v-if="currentId" @click="removeId" class="text-gray-300 hover:text-red-500">✕</button>
             </div>
           </template>
 
-          <!-- Modo edição -->
+          <!-- Edit mode -->
           <template v-else>
             <input
               v-model="editIdValue"
               @keydown.enter="confirmEditId"
               @keydown.escape="editingId = false"
-              class="flex-1 border border-purple-300 px-1 py-0.5 outline-none focus:border-purple-500 font-mono min-w-0"
+              class="flex-1 border border-purple-300 px-1 py-0 outline-none focus:border-purple-500 font-mono text-purple-700 rounded text-[11px] min-w-0"
             />
-            <button @click="confirmEditId" class="text-blue-600 hover:text-blue-700">✓</button>
-            <button @click="editingId = false" class="text-gray-400 hover:text-gray-600">✕</button>
+            <button @click="confirmEditId" class="text-blue-600 hover:text-blue-800 shrink-0">✓</button>
+            <button @click="editingId = false" class="text-gray-400 shrink-0">✕</button>
           </template>
         </div>
-      </section>
 
-      <!-- ── OUTROS ATRIBUTOS ─────────────────────────────────────────────── -->
-      <section>
-        <span class="font-semibold text-gray-500 block mb-1">outros</span>
-
+        <!-- Generic attribute rows -->
         <div
           v-for="attr in genericAttrs"
           :key="attr.name"
-          class="flex items-center gap-1 py-0.5 group"
+          class="group flex items-center gap-2 px-3 py-1.5 border-b border-gray-50 hover:bg-gray-50 transition-colors"
         >
-          <span class="font-mono text-gray-600 shrink-0">{{ attr.name }}</span>
-          <span class="text-gray-300">:</span>
+          <span class="text-gray-500 w-[40px] shrink-0 truncate" :title="attr.name">{{ attr.name }}</span>
 
-          <!-- Modo visualização -->
-          <span
-            v-if="editingAttr !== attr.name"
-            class="font-mono text-gray-500 truncate max-w-[120px]"
-            :title="attr.value"
-          >{{ attr.value }}</span>
+          <!-- View mode -->
+          <template v-if="editingAttr !== attr.name">
+            <span
+              class="flex-1 font-mono text-gray-700 truncate cursor-pointer hover:text-gray-900 min-w-0"
+              :title="attr.value"
+              @click="startEditAttr(attr)"
+            >{{ attr.value || '""' }}</span>
+            <div class="opacity-0 group-hover:opacity-100 flex gap-1 shrink-0 transition-opacity">
+              <button @click="startEditAttr(attr)" class="text-gray-400 hover:text-gray-700">✎</button>
+              <button @click="removeGenericAttr(attr.name)" class="text-gray-300 hover:text-red-500">✕</button>
+            </div>
+          </template>
 
-          <!-- Modo edição -->
-          <input
-            v-else
-            v-model="editAttrValue"
-            @keydown.enter="confirmEditAttr(attr.name)"
-            @keydown.escape="editingAttr = null"
-            class="flex-1 border border-gray-300 px-1 py-0.5 outline-none focus:border-blue-500 font-mono min-w-0"
-          />
-
-          <div class="ml-auto flex gap-1 shrink-0">
-            <button v-if="editingAttr !== attr.name" @click="startEditAttr(attr)" class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-700 transition-opacity" title="Editar">✎</button>
-            <button v-if="editingAttr === attr.name" @click="confirmEditAttr(attr.name)" class="text-blue-600 hover:text-blue-700">✓</button>
-            <button @click="removeGenericAttr(attr.name)" class="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity" title="Remover">✕</button>
-          </div>
+          <!-- Edit mode -->
+          <template v-else>
+            <input
+              v-model="editAttrValue"
+              @keydown.enter="confirmEditAttr(attr.name)"
+              @keydown.escape="editingAttr = null"
+              class="flex-1 border border-blue-300 px-1 py-0 outline-none focus:border-blue-500 font-mono text-gray-800 rounded text-[11px] min-w-0"
+            />
+            <button @click="confirmEditAttr(attr.name)" class="text-blue-600 hover:text-blue-800 shrink-0">✓</button>
+            <button @click="editingAttr = null" class="text-gray-400 shrink-0">✕</button>
+          </template>
         </div>
 
-        <!-- Form de adicionar sempre visível ao final -->
-        <div class="flex gap-1 mt-1">
+        <!-- ── ADD ATTRIBUTE ──────────────────────────────────────────────── -->
+        <div class="flex items-center gap-1 px-3 py-2 bg-gray-50 border-t border-gray-100 sticky bottom-0">
           <input
             v-model="newAttrName"
             @keydown.enter="$refs.newAttrValueInput?.focus()"
-            placeholder="atributo"
-            class="w-[80px] border border-gray-200 px-1 py-0.5 outline-none focus:border-blue-400 font-mono text-gray-600 bg-gray-50"
+            placeholder="attribute"
+            class="w-[90px] border border-gray-200 px-1.5 py-1 outline-none focus:border-blue-400 font-mono text-gray-600 bg-white rounded text-[11px]"
           />
-          <span class="text-gray-300 self-center">:</span>
+          <span class="text-gray-300">=</span>
           <input
             ref="newAttrValueInput"
             v-model="newAttrValue"
             @keydown.enter="confirmAddAttr"
-            placeholder="valor"
-            class="flex-1 border border-gray-200 px-1 py-0.5 outline-none focus:border-blue-400 font-mono text-gray-600 bg-gray-50 min-w-0"
+            placeholder="value"
+            class="flex-1 border border-gray-200 px-1.5 py-1 outline-none focus:border-blue-400 font-mono text-gray-600 bg-white rounded min-w-0 text-[11px]"
           />
-          <button @click="confirmAddAttr" class="px-2 text-gray-400 hover:text-gray-700" title="Adicionar">+</button>
+          <button
+            @click="confirmAddAttr"
+            class="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-[11px] shrink-0"
+          >+</button>
         </div>
       </section>
 
@@ -175,12 +185,13 @@
 import { computed, ref, nextTick } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
 import { useStyleStore } from '@/stores/StyleStore'
+import { EDITOR_IGNORED_ATTRS } from '@/editor/html/constants'
 
 const editorStore = useEditorStore()
 const styleStore  = useStyleStore()
 
 // ── UI state ──────────────────────────────────────────────────────────────────
-const showPanel   = ref(false)
+const showPanel   = ref(true)
 const mutationTick = ref(0)  // incrementado após cada mutação para forçar re-compute
 
 const addingClass   = ref(false)
@@ -203,7 +214,7 @@ const editingAttr  = ref(null)  // nome do atributo em edição
 const editAttrValue = ref('')
 
 // ── Atributos internos que não devem ser exibidos ─────────────────────────────
-const HIDDEN_ATTRS = new Set(['data-node-id', 'data-editor-hovered'])
+// Importados de /editor/html/constants.js — edite lá para adicionar/remover.
 
 // ── Computeds base ─────────────────────────────────────────────────────────────
 
@@ -225,7 +236,7 @@ const genericAttrs = computed(() => {
   mutationTick.value
   if (!el.value) return []
   return Array.from(el.value.attributes)
-    .filter(a => a.name !== 'class' && a.name !== 'id' && !HIDDEN_ATTRS.has(a.name))
+    .filter(a => a.name !== 'class' && a.name !== 'id' && !EDITOR_IGNORED_ATTRS.has(a.name))
     .map(a => ({ name: a.name, value: a.value }))
 })
 

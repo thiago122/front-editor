@@ -26,12 +26,15 @@ export class CssInjector {
   }
 
   /**
-   * Build CSS selectors from location names
+   * Build CSS selectors from location names.
+   * Never targets data-location="ignore" — those links are left untouched.
    * @param {string[]} locations - Location names
    * @returns {string[]} CSS selectors
    */
   buildSelectors(locations) {
-    return locations.map(loc => `link[rel="stylesheet"][data-location="${loc}"]`)
+    return locations
+      .filter(loc => loc !== 'ignore')
+      .map(loc => `link[rel="stylesheet"][data-location="${loc}"]`)
   }
 
   /**
@@ -47,10 +50,11 @@ export class CssInjector {
 
     const href = linkElement.href
     try {
-      const cssText = await this.fetchCssContent(href)
+      const cssText  = await this.fetchCssContent(href)
       const uniqueId = this.generateUniqueId(href)
       const location = linkElement.getAttribute('data-location') || 'unknown'
-      const styleElement = this.createStyleElement(cssText, location, href, uniqueId)
+      const manifestPath = linkElement.getAttribute('data-manifest-path') || ''
+      const styleElement = this.createStyleElement(cssText, location, href, uniqueId, manifestPath)
       this.replaceLink(linkElement, styleElement)
     } catch (error) {
       this.handleError(href, error)
@@ -98,12 +102,13 @@ export class CssInjector {
    * @param {string} uniqueId - Unique element ID
    * @returns {HTMLStyleElement} Created style element
    */
-  createStyleElement(cssText, location, href, uniqueId) {
+  createStyleElement(cssText, location, href, uniqueId, manifestPath = '') {
     const styleEl = this.targetDoc.createElement('style')
     styleEl.id = uniqueId
     styleEl.setAttribute('data-location', location)
     styleEl.setAttribute('data-source', href)
     styleEl.setAttribute('data-captured', 'true')
+    if (manifestPath) styleEl.setAttribute('data-manifest-path', manifestPath)
     styleEl.textContent = cssText
     
     return styleEl
@@ -143,11 +148,21 @@ export class CssInjector {
 
   /**
    * Process on_page styles (inline <style> blocks)
-   * Assigns stable IDs to allow editing/referencing
+   * Assigns stable IDs to allow editing/referencing.
+   * Skips style tags owned by the editor itself.
    */
   processOnPageStyles() {
+    // IDs de style tags injetados pelo editor — não devem ser tratados como CSS do documento
+    const EDITOR_STYLE_IDS = new Set([
+      'editor-ui-styles',
+      'editor-outline-mode',
+      'editor-empty-placeholder',
+    ])
+
     const styleElements = Array.from(this.targetDoc.querySelectorAll('style'))
-    const onPageStyles = styleElements.filter(el => !el.hasAttribute('data-location'))
+    const onPageStyles = styleElements.filter(el =>
+      !el.hasAttribute('data-location') && !EDITOR_STYLE_IDS.has(el.id)
+    )
     if (onPageStyles.length === 0) return
 
     let hasEditable = !!this.targetDoc.getElementById('on_page')

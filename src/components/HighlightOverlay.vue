@@ -19,10 +19,25 @@ const layoutTick = ref(0)
 
 // ── Listeners no iframe ───────────────────────────────────────────────────────
 
-let iframeWin      = null
-let resizeObserver = null
+let iframeWin         = null
+let resizeObserver    = null   // observa o iframe (viewport resize)
+let elResizeObserver  = null   // observa o elemento selecionado/hovereado (CSS layout)
+let mutationObserver  = null   // observa o body do iframe (DOM mutations)
+let rafDebounce       = null   // id do requestAnimationFrame pendente
 
-function onLayout() { layoutTick.value++ }
+/**
+ * Pede atualização na próxima pintura do browser.
+ * Usando rAF em vez de setTimeout para sincronizar com o ciclo de layout.
+ */
+function scheduleLayout() {
+  if (rafDebounce) return
+  rafDebounce = requestAnimationFrame(() => {
+    rafDebounce = null
+    layoutTick.value++
+  })
+}
+
+function onLayout() { scheduleLayout() }
 
 function attachScrollListener(iframe) {
   try { iframeWin?.removeEventListener('scroll', onLayout) } catch { /* ignore */ }
@@ -32,6 +47,30 @@ function attachScrollListener(iframe) {
     iframeWin?.addEventListener('scroll', onLayout, { passive: true })
     // Ctrl+Space: foco pode estar no iframe, então escuta lá também
     iframeWin?.addEventListener('keydown', handleGlobalKeydown)
+
+    // ── MutationObserver no body do iframe ─────────────────────────────────
+    // Detecta: adições/remoções de nós, mudanças de atributos (class, style...),
+    // e alterações em style tags (CSS changes → layout reflow)
+    mutationObserver?.disconnect()
+    const iframeDoc = iframe.contentDocument
+    if (iframeDoc?.body) {
+      mutationObserver = new MutationObserver(onLayout)
+      // body: DOM mutations (childList, attributes)
+      mutationObserver.observe(iframeDoc.body, {
+        childList:     true,
+        subtree:       true,
+        attributes:    true,
+        characterData: false,
+      })
+      // head: CSS text changes (style tag textContent changes)
+      if (iframeDoc.head) {
+        mutationObserver.observe(iframeDoc.head, {
+          childList:     true,
+          subtree:       true,
+          characterData: true,  // detecta mudanças no texto dos <style> tags
+        })
+      }
+    }
   } catch { /* cross-origin */ }
 }
 
@@ -48,8 +87,10 @@ function detachIframeListeners() {
   try { iframeWin?.removeEventListener('scroll', onLayout) } catch { /* ignore */ }
   try { iframeWin?.removeEventListener('keydown', handleGlobalKeydown) } catch { /* ignore */ }
   iframeWin = null
-  resizeObserver?.disconnect()
-  resizeObserver = null
+  resizeObserver?.disconnect();   resizeObserver  = null
+  elResizeObserver?.disconnect(); elResizeObserver = null
+  mutationObserver?.disconnect(); mutationObserver = null
+  if (rafDebounce) { cancelAnimationFrame(rafDebounce); rafDebounce = null }
 }
 
 watch(() => EditorStore.iframe, (iframe) => {
@@ -61,6 +102,20 @@ watch(() => EditorStore.previewContainer, (container) => {
   if (!container) return
   container.addEventListener('scroll', onLayout, { passive: true })
 }, { immediate: true })
+
+// ── ResizeObserver no elemento selecionado/hovereado ─────────────────────────
+// Detecta mudanças de TAMANHO causadas por CSS (sem depender do MutationObserver)
+// Isso cobre casos onde o CSS muda width/height/padding/margin do próprio elemento.
+watch(
+  () => props.mode === 'hover' ? EditorStore.hoveredElement : EditorStore.selectedElement,
+  (el) => {
+    elResizeObserver?.disconnect()
+    if (!el) return
+    elResizeObserver = new ResizeObserver(onLayout)
+    elResizeObserver.observe(el)
+  },
+  { immediate: true },
+)
 
 onBeforeUnmount(detachIframeListeners)
 
@@ -117,9 +172,10 @@ function selectParent() {
   if (selParent.value) EditorStore.selectParent()
 }
 
-function moveUp()   { if (canMoveUp.value)   NodeDispatcher.moveNode(selNodeId.value, -1) }
-function moveDown() { if (canMoveDown.value) NodeDispatcher.moveNode(selNodeId.value,  1) }
-function deleteNode() { if (selNodeId.value) NodeDispatcher.deleteNode(selNodeId.value) }
+function moveUp()        { if (canMoveUp.value)   NodeDispatcher.moveNode(selNodeId.value, -1) }
+function moveDown()      { if (canMoveDown.value) NodeDispatcher.moveNode(selNodeId.value,  1) }
+function deleteNode()    { if (selNodeId.value) NodeDispatcher.deleteNode(selNodeId.value) }
+function duplicateNode() { if (selNodeId.value) NodeDispatcher.duplicateNode(selNodeId.value) }
 
 // ── Autocomplete de tags (botões + e ↳) ──────────────────────────────────────
 
@@ -331,6 +387,13 @@ const boxSpacing = computed(() => {
             class="px-1.5 py-0.5 hover:bg-blue-700 transition-colors font-bold"
             title="Inserir tag dentro como último filho (Ctrl+Shift+Space)"
           >↳</button>
+
+          <!-- Duplicar -->
+          <button
+            @click.stop="duplicateNode"
+            class="px-1.5 py-0.5 hover:bg-blue-700 transition-colors"
+            title="Duplicar elemento"
+          >⧉</button>
 
           <!-- Deletar -->
           <button

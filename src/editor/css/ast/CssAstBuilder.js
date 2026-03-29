@@ -57,8 +57,12 @@ export class CssAstBuilder {
    * Check if sheet should be ignored
    */
   shouldIgnoreSheet(owner) {
-    return owner.id === 'vite-plugin-vue-devtools' || 
-           owner.id === 'editor-ui-styles'
+    // Editor runtime styles
+    if (owner.id === 'vite-plugin-vue-devtools') return true
+    if (owner.id === 'editor-ui-styles') return true
+    // data-location="ignore" → leave completely untouched by the editor
+    if (owner.getAttribute?.('data-location') === 'ignore') return true
+    return false
   }
 
   /**
@@ -66,21 +70,27 @@ export class CssAstBuilder {
    */
   detectOrigin(owner) {
     let origin = 'internal'
-    let sourceName = owner.id || null  // Use existing ID if available
 
     // Check for data-location attribute (from CssInjector)
     if (owner.getAttribute('data-location')) {
       origin = owner.getAttribute('data-location').toLowerCase()
-    } 
+    }
     // Otherwise, it's an on_page style (legacy/fallback)
     else if (owner.tagName === 'STYLE') {
       origin = 'on_page'
     }
 
-    // Fallback: ensure sourceName is never null
-    if (!sourceName) {
-      sourceName = owner.id || 'style'
-    }
+    // sourceName: usado como chave para salvar o arquivo.
+    // Prioridade:
+    //   1. data-manifest-path — path relativo real do arquivo (ex: 'css/global.css')
+    //   2. data-source-name   — nome definido manualmente
+    //   3. owner.id           — legado
+    //   4. 'style'            — fallback final
+    const sourceName =
+      owner.getAttribute('data-manifest-path') ||
+      owner.getAttribute('data-source-name') ||
+      owner.id ||
+      'style'
 
     return { origin, sourceName }
   }
@@ -89,18 +99,30 @@ export class CssAstBuilder {
    * Extract CSS text from stylesheet
    */
   extractCssText(sheet, owner, sourceName) {
-    // Try getting text from owner first (good for internal/injected styles)
+    // 1. <style> tags: lê diretamente o textContent
     if (owner.tagName === 'STYLE' && owner.textContent.trim().length > 0) {
       return owner.textContent
     }
 
-    // Try reading rules (necessary for <link> tags and some injected styles)
+    // 2. <link> tags: tenta ler cssRules (pode falhar por CORS em arquivos externos)
     try {
       const rules = sheet.cssRules || sheet.rules
       if (rules) {
         return Array.from(rules).map(r => r.cssText).join('\n')
       }
     } catch (e) {
+      // 3. Fallback: usa o texto já fetched via fetch() (disponível para arquivos externos
+      //    mesmo com CORS, desde que o servidor não bloqueie o método fetch)
+      const href = owner.href || ''
+      const fetchedText = this.cssContentMap.get(href)
+      if (fetchedText?.trim()) {
+        this.handleCorsError(sheet, sourceName, e)
+        // Marca o owner como readonly para que o inspector não permita edições
+        if (owner && !owner.hasAttribute('data-readonly')) {
+          owner.setAttribute('data-readonly', 'true')
+        }
+        return fetchedText
+      }
       this.handleCorsError(sheet, sourceName, e)
     }
 

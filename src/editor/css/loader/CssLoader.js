@@ -13,8 +13,11 @@ export class CssLoader {
    * @returns {Promise<void>}
    */
   async waitCssFilesLoad(locations = ['external']) {
-    // Build selector for specified locations
-    const selectors = locations.map(loc => `link[rel="stylesheet"][data-location="${loc}"]`).join(', ')
+    // Build selector for specified locations, excluding data-location="ignore"
+    const selectors = locations
+      .filter(loc => loc !== 'ignore')
+      .map(loc => `link[rel="stylesheet"][data-location="${loc}"]:not([data-location="ignore"])`)
+      .join(', ')
     const links = this.doc.querySelectorAll(selectors)
     
     if (links.length === 0) {
@@ -32,23 +35,27 @@ export class CssLoader {
           return
         }
 
+        let timer = null
+
         // Wait for load event
         link.addEventListener('load', () => {
+          clearTimeout(timer)
           console.log(`[CssLoader] ✅ Loaded: ${link.href}`)
           resolve()
         })
 
         // Handle errors gracefully
         link.addEventListener('error', () => {
+          clearTimeout(timer)
           console.warn(`[CssLoader] ⚠️ Failed to load: ${link.href}`)
           resolve() // Resolve anyway to not block
         })
 
-        // Timeout fallback (10 seconds max)
-        setTimeout(() => {
+        // Timeout fallback (5 seconds max) — só loga se ainda não carregou
+        timer = setTimeout(() => {
           console.warn(`[CssLoader] ⏱️ Timeout: ${link.href}`)
           resolve()
-        }, 10000)
+        }, 5000)
       })
     })
 
@@ -61,8 +68,11 @@ export class CssLoader {
    * @returns {Promise<Map<string, string>>} - Map of href -> CSS content
    */
   async fetchCssFileContent(locations = ['internal']) {
-    // Build selector for specified locations
-    const selectors = locations.map(loc => `link[rel="stylesheet"][data-location="${loc}"]`).join(', ')
+    // Build selector for specified locations, excluding data-location="ignore"
+    const selectors = locations
+      .filter(loc => loc !== 'ignore')
+      .map(loc => `link[rel="stylesheet"][data-location="${loc}"]:not([data-location="ignore"])`)
+      .join(', ')
     const links = this.doc.querySelectorAll(selectors)
     const cssContentMap = new Map()
     

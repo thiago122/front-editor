@@ -4,6 +4,7 @@ import { useEditorStore } from '@/stores/EditorStore'
 import { CssLogicTreeService } from '@/editor/css/tree/CssLogicTreeService'
 import { findCssNode } from '@/utils/astHelpers'
 import { toRaw } from 'vue'
+import { ApiService } from '@/services/ApiService'
 
 /**
  * useCssDragDrop
@@ -149,6 +150,16 @@ export function useCssDragDrop() {
             const finalIdx = position === 'before' ? newIdx : newIdx + 1
             sourceParent.children.splice(finalIdx, 0, dragged)
             moved = true
+
+            // Persiste a nova ordem no manifesto
+            const paths = sourceParent.children
+              .map(n => n.metadata?.sourceName)
+              .filter(Boolean)
+            if (paths.length > 0) {
+              ApiService.reorderAssets(paths).catch(err =>
+                console.error('[useCssDragDrop] reorderAssets falhou:', err)
+              )
+            }
           }
         }
       }

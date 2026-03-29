@@ -12,6 +12,7 @@ import CssContextMenu from './CssContextMenu.vue'
 import CssImportModal from './CssImportModal.vue'
 import { useCssDragDrop } from '@/composables/useCssDragDrop'
 import { parse } from 'css-tree'
+import { ApiService } from '@/services/ApiService'
 
 const styleStore = useStyleStore()
 const editorStore = useEditorStore()
@@ -393,48 +394,168 @@ function addFile() {
   createAndEdit(fileNode)
 }
 
+// — Remover arquivo CSS (move para lixeira no backend) —
+async function deleteFile(fileNodeCopy) {
+  const realNode = findCssNode(toRaw(styleStore.cssLogicTree), fileNodeCopy.id)
+  if (!realNode) { console.warn('[deleteFile] nó não encontrado'); return }
+  const sourceName = realNode.metadata?.sourceName
+  const label      = realNode.label
+
+  /** Verifica se um elemento DOM corresponde ao arquivo pelo sourceName/label */
+  function matches(el) {
+    const vals = [
+      el.getAttribute('href'),
+      el.getAttribute('data-manifest-path'),
+      el.getAttribute('data-source-name'),
+      el.id,
+    ].filter(Boolean)
+    for (const v of vals) {
+      if (v === label || v === sourceName) return true
+      if (label     && (v.endsWith(label)      || label.endsWith(v)))      return true
+      if (sourceName && (v.endsWith(sourceName) || sourceName.endsWith(v))) return true
+    }
+    return false
+  }
+
+  // 1. Chama o backend para mover o arquivo para a lixeira
+  let trashId = null
+  if (sourceName) {
+    try {
+      const res = await ApiService.trashAsset(sourceName)
+      trashId = res.trashId
+    } catch (err) {
+      console.warn('[deleteFile] trashAsset falhou (arquivo pode não estar no servidor):', err.message)
+      // Continua mesmo sem backend (arquivo pode ser on_page ou não ter sido salvo)
+    }
+  }
+
+  // 2. Remove a <style> ou <link> correspondente do iframe
+  const doc = editorStore.getIframeDoc()
+  if (doc) {
+    const allEls = Array.from(
+      doc.querySelectorAll('style[data-location], link[rel="stylesheet"]')
+    )
+    const tag = allEls.find(matches)
+    if (tag) {
+      tag.remove()
+    } else {
+      const basename = label?.split('/').pop()
+      const fallback = allEls.find(el =>
+        (el.getAttribute('href') ?? '').includes(basename) ||
+        (el.getAttribute('data-manifest-path') ?? '').includes(basename)
+      )
+      fallback?.remove()
+    }
+  }
+
+  // 3. Remove o nó da Logic Tree
+  findAndRemoveFromLogicTree(toRaw(styleStore.cssLogicTree), realNode.id)
+
+  // 4. Rebuilda a árvore
+  await styleStore.rebuildLogicTree(doc)
+
+  // 5. Toast de desfazer (só se foi para a lixeira no backend)
+  if (trashId) showUndoToast(trashId, label?.split('/').pop() ?? label)
+}
+
 // — Criar novo stylesheet (on_page / internal / external) —
 // Injeta o elemento HTML no iframe e rebuilda a Logic Tree
 const newSheetMenu = ref(false)
+// Estado para input inline (evita window.prompt que é bloqueado por browsers)
+const newSheetInputType  = ref(null)    // null | 'internal' | 'external'
+const newSheetInputValue = ref('')       // valor digitado
 
-async function createStylesheet(type) {
-  console.log('[createStylesheet] chamado com type:', type)
-  newSheetMenu.value = false
+function requestNewSheet(type) {
+  if (type === 'on_page') {
+    newSheetMenu.value = false
+    createStylesheet('on_page', null)
+    return
+  }
+  newSheetInputType.value  = type
+  newSheetInputValue.value = type === 'internal' ? 'styles.css' : 'https://'
+}
+
+async function confirmCreateStylesheet() {
+  const type = newSheetInputType.value
+  const href = newSheetInputValue.value?.trim()
+  // Reset antes de qualquer await
+  newSheetInputType.value  = null
+  newSheetInputValue.value = ''
+  newSheetMenu.value       = false
+  if (!href) return
+  await createStylesheet(type, href)
+}
+
+async function createStylesheet(type, href = null) {
   const doc = editorStore.getIframeDoc()
-  console.log('[createStylesheet] iframeDoc:', doc)
   if (!doc) { console.warn('[createStylesheet] doc é null — abortando'); return }
 
   if (type === 'on_page') {
+    // Sem arquivo no disco — apenas injeta <style> no iframe
     const el = doc.createElement('style')
     el.setAttribute('data-location', 'on_page')
-    el.textContent = ':root {}'    // seletor real → garante file node no TreeBuilder
+    el.textContent = ':root {}'
     doc.head.appendChild(el)
-    console.log('[createStylesheet] <style> on_page adicionado. styles no head:', doc.head.querySelectorAll('style').length)
 
   } else if (type === 'internal') {
-    const href = window.prompt('Nome do arquivo CSS interno (ex: styles.css):', 'styles.css')
-    if (!href) { console.log('[createStylesheet] cancelou prompt'); return }
+    // 1. Cria o arquivo físico no disco e atualiza o manifest.json
+    let finalPath = href
+    try {
+      const res  = await ApiService.createAsset(href, 'css')
+      finalPath  = res.path ?? href
+    } catch (err) {
+      // Arquivo já existe → usa o existente sem recriar
+      console.warn('[createStylesheet] createAsset:', err.message)
+    }
+
+    // 2. Injeta <style data-location="internal"> no iframe para o editor reconhecer
     const el = doc.createElement('style')
     el.setAttribute('data-location', 'internal')
-    el.setAttribute('data-source-name', href.trim())
-    el.textContent = ':root {}'    // seletor real → garante file node no TreeBuilder
+    el.setAttribute('data-source-name', finalPath)
+    el.textContent = ':root {}'
     doc.head.appendChild(el)
-    console.log('[createStylesheet] <style> internal adicionado:', href)
 
   } else if (type === 'external') {
-    const href = window.prompt('URL do arquivo CSS externo (ex: https://...):', 'https://')
-    if (!href) { console.log('[createStylesheet] cancelou prompt'); return }
+    // Sem arquivo no disco — apenas injeta <link> no iframe
     const el = doc.createElement('link')
     el.rel  = 'stylesheet'
-    el.href = href.trim()
+    el.href = href
     el.setAttribute('data-location', 'external')
+
+    // Define um nome legível para o explorer:
+    //   - Se a URL aponta para um arquivo .css → usa o nome do arquivo (ex: "normalize.css")
+    //   - Senão → usa o hostname (ex: "fonts.googleapis.com")
+    let sourceName = href
+    try {
+      const url      = new URL(href)
+      const filename = url.pathname.split('/').filter(Boolean).pop() || ''
+      sourceName = /\.(css|less|scss)$/i.test(filename) ? filename : url.hostname
+    } catch { /* mantém href */ }
+    el.setAttribute('data-source-name', sourceName)
+
     doc.head.appendChild(el)
-    console.log('[createStylesheet] <link> external adicionado:', href)
+
+    // Atualiza o contexto do pipeline para que o HTML Explorer
+    // e o save pelo pipeline reflitam o novo <link>
+    const pipelineCtx = editorStore.ctx
+    if (pipelineCtx) {
+      pipelineCtx.headHTML = doc.head.innerHTML
+      // Adiciona um nó simples no ctx.ast (head node) para o HTML Explorer
+      const headNode = pipelineCtx.ast?.children?.find(c => c.tag === 'head')
+      if (headNode) {
+        const { generateId } = await import('@/utils/ids')
+        headNode.children.push({
+          nodeId: generateId(),
+          type:   'element',
+          tag:    'link',
+          attrs:  { rel: 'stylesheet', href, 'data-location': 'external', 'data-source-name': sourceName },
+          children: [],
+        })
+      }
+    }
   }
 
-  console.log('[createStylesheet] cssLogicTree antes do rebuild:', JSON.stringify(styleStore.cssLogicTree?.length))
   await styleStore.rebuildLogicTree(doc, ['on_page', 'internal', 'external'])
-  console.log('[createStylesheet] cssLogicTree após rebuild:', JSON.stringify(styleStore.cssLogicTree))
   expandAll()
 }
 
@@ -443,6 +564,29 @@ async function createStylesheet(type) {
 // ============================================
 
 const contextMenu = ref(null) // { x, y, items }
+
+// ── Toast de desfazer ──────────────────────────────────────────────────────────
+const undoToast = ref(null) // { message, trashId } | null
+let undoTimer = null
+
+function showUndoToast(trashId, filename) {
+  clearTimeout(undoTimer)
+  undoToast.value = { message: `"${filename}" movido para a lixeira`, trashId }
+  undoTimer = setTimeout(() => { undoToast.value = null }, 8000)
+}
+
+async function undoTrash() {
+  const toast = undoToast.value
+  if (!toast) return
+  undoToast.value = null
+  clearTimeout(undoTimer)
+  try {
+    await ApiService.restoreFromTrash(toast.trashId)
+    await styleStore.rebuildLogicTree(editorStore.getIframeDoc())
+  } catch (err) {
+    console.error('[CssExplorer] falha ao restaurar da lixeira:', err)
+  }
+}
 
 // ─── CSS Import ───────────────────────────────────────────────────────────────
 
@@ -533,9 +677,14 @@ function openContextMenu(node, event) {
         { label: 'New CSS Rule', icon: '{}', action: () => addRuleInContext(node) },
         { label: 'New At-Rule',  icon: '@',  action: () => addAtRuleInContext(node) },
         { divider: true },
+        { label: 'Move Up',     icon: '↑',  action: () => moveFileInManifest(node, 'up') },
+        { label: 'Move Down',   icon: '↓',  action: () => moveFileInManifest(node, 'down') },
+        { divider: true },
         { label: 'Rename',      icon: '✏️', action: () => renameFile(node) },
         { label: 'Import CSS',  icon: '↑', action: () => openImportModal(node) },
         { label: 'Export .css', icon: '↓', action: () => downloadSheet(fileKey) },
+        { divider: true },
+        { label: 'Remover arquivo', icon: '✕', action: () => deleteFile(node), danger: true },
       ]
     }
   } else if (node.type === 'at-rule') {
@@ -613,6 +762,50 @@ function renameFile(fileNodeCopy) {
 
   // 4. Notifica a UI
   styleStore.notifyTreeMutation()
+}
+
+/**
+ * Reordena arquivos CSS internos movendo o arquivo alvo para cima ou para baixo.
+ * Lê os data-manifest-path dos <style data-location="internal"> no iframe (na ordem atual),
+ * aplica o movimento e persiste via ApiService.reorderAssets().
+ *
+ * @param {Object} fileNode - nó file do CssExplorer (cópia do virtual list)
+ * @param {'up'|'down'} direction
+ */
+async function moveFileInManifest(fileNode, direction) {
+  const doc = editorStore.getIframeDoc()
+  if (!doc) return
+
+  // 1. Coletar todos os <style data-location="internal"> em ordem DOM
+  const styleEls = Array.from(
+    doc.querySelectorAll('style[data-location="internal"][data-manifest-path]')
+  )
+  if (styleEls.length < 2) return
+
+  // 2. Montar a lista de paths na ordem atual
+  const paths = styleEls.map(el => el.getAttribute('data-manifest-path'))
+
+  // 3. Identificar índice do arquivo alvo via sourceName == el.id
+  const targetPath = styleEls.find(el => el.id === fileNode.metadata?.sourceName)
+    ?.getAttribute('data-manifest-path')
+    ?? fileNode.metadata?.sourceName  // fallback
+
+  const idx = paths.indexOf(targetPath)
+  if (idx === -1) return
+
+  const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+  if (swapIdx < 0 || swapIdx >= paths.length) return
+
+  // 4. Trocar posições
+  ;[paths[idx], paths[swapIdx]] = [paths[swapIdx], paths[idx]]
+
+  // 5. Persistir no manifesto
+  try {
+    await ApiService.reorderAssets(paths)
+    console.log('[CssExplorer] reorderAssets OK:', paths)
+  } catch (err) {
+    console.error('[CssExplorer] reorderAssets falhou:', err)
+  }
 }
 
 /** Adiciona regra como filho de um nó file ou at-rule específico */
@@ -802,31 +995,60 @@ const itemsOffset = computed(() => startIndex.value * ROW_HEIGHT)
                   >+</button>
                   <div
                     v-if="newSheetMenu"
-                    class="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded shadow-lg py-1 z-50 min-w-[160px] text-[11px]"
+                    class="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded shadow-lg py-1 z-50 min-w-[180px] text-[11px]"
                     @click.stop
                   >
                     <div class="px-3 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Novo Stylesheet</div>
-                    <button
-                      class="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 text-left text-gray-700"
-                      @click="createStylesheet('on_page')"
-                    >
-                      <span class="text-indigo-500 font-mono">&lt;style&gt;</span>
-                      On-page
-                    </button>
-                    <button
-                      class="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 text-left text-gray-700"
-                      @click="createStylesheet('internal')"
-                    >
-                      <span class="text-blue-500 font-mono">&lt;link&gt;</span>
-                      Internal
-                    </button>
-                    <button
-                      class="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 text-left text-gray-700"
-                      @click="createStylesheet('external')"
-                    >
-                      <span class="text-orange-500 font-mono">🔗</span>
-                      External
-                    </button>
+
+                    <!-- Input inline (substitui window.prompt) -->
+                    <div v-if="newSheetInputType" class="px-2 pb-2">
+                      <div class="text-[10px] text-gray-500 mb-1 px-1">
+                        {{ newSheetInputType === 'internal' ? 'Nome do arquivo:' : 'URL externa:' }}
+                      </div>
+                      <input
+                        v-model="newSheetInputValue"
+                        :placeholder="newSheetInputType === 'internal' ? 'styles.css' : 'https://cdn.example.com/x.css'"
+                        class="w-full border border-gray-300 rounded px-2 py-1 text-[11px] outline-none focus:border-blue-400 mb-1"
+                        @keydown.enter.prevent="confirmCreateStylesheet"
+                        @keydown.escape.prevent="newSheetInputType = null"
+                        autofocus
+                      />
+                      <div class="flex gap-1">
+                        <button
+                          @click.stop="confirmCreateStylesheet"
+                          class="flex-1 bg-blue-500 text-white rounded px-2 py-1 text-[10px] font-medium hover:bg-blue-600"
+                        >Criar</button>
+                        <button
+                          @click.stop="newSheetInputType = null"
+                          class="flex-1 bg-gray-100 text-gray-600 rounded px-2 py-1 text-[10px] hover:bg-gray-200"
+                        >Cancelar</button>
+                      </div>
+                    </div>
+
+                    <!-- Botões de tipo -->
+                    <template v-else>
+                      <button
+                        class="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 text-left text-gray-700"
+                        @click.stop="requestNewSheet('on_page')"
+                      >
+                        <span class="text-indigo-500 font-mono">&lt;style&gt;</span>
+                        On-page
+                      </button>
+                      <button
+                        class="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 text-left text-gray-700"
+                        @click.stop="requestNewSheet('internal')"
+                      >
+                        <span class="text-blue-500 font-mono">&lt;link&gt;</span>
+                        Internal
+                      </button>
+                      <button
+                        class="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 text-left text-gray-700"
+                        @click.stop="requestNewSheet('external')"
+                      >
+                        <span class="text-orange-500 font-mono">🔗</span>
+                        External
+                      </button>
+                    </template>
                   </div>
                 </div>
 
@@ -943,7 +1165,29 @@ const itemsOffset = computed(() => startIndex.value * ROW_HEIGHT)
           @import="handleCssImport"
           @close="importModal.open = false"
         />
+
+        <!-- Toast de desfazer (lixeira) -->
+        <Transition name="toast">
+          <div
+            v-if="undoToast"
+            style="
+              position: absolute; bottom: 10px; left: 8px; right: 8px;
+              background: #1e293b; color: white; border-radius: 8px;
+              padding: 8px 10px; font-size: 11px; display: flex;
+              align-items: center; justify-content: space-between;
+              gap: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 100;
+            "
+          >
+            <span style="opacity:.85">🗑 {{ undoToast.message }}</span>
+            <button
+              @click="undoTrash"
+              style="background:#4f46e5; border:none; color:white; padding:3px 10px;
+                     border-radius:5px; cursor:pointer; font-size:11px; font-weight:600; flex-shrink:0"
+            >Desfazer</button>
+          </div>
+        </Transition>
     </div>
+
 </template>
 
 <style scoped>

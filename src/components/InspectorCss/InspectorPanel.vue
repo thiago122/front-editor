@@ -11,34 +11,61 @@
       </button>
     </div>
 
-    <!-- Rule Creator Drawer -->
-    <RuleCreator />
 
-    <!-- Empty State -->
-    <InspectorEmptyState v-if="!editorStore.selectedElement" />
-
-    <div v-else class="flex-1 overflow-y-auto font-mono leading-normal bg-white custom-scrollbar">
-
-      <!-- STYLES TAB -->
-      <template v-if="activeTab === 'Styles'">
-        <AttributeManager />
-
-        <PseudoStateTabBar />
-
-        <div class="overflow-y-auto no-scrollbar">
-          <TargetRuleGroup v-if="targetGroup" :group="targetGroup" />
-
-          <InheritedRuleGroup
-            v-for="(group, gIdx) in inheritedGroups"
-            :key="group.id || gIdx"
-            :group="group"
-          />
+    <!-- Banner: confirmar rename de .class / #id no elemento -->
+    <Transition name="rename-banner">
+      <div v-if="editorStore.selectorRenameConfirm.show" class="rename-banner">
+        <span class="rename-banner__text">
+          Renomear
+          <code>{{ editorStore.selectorRenameConfirm.type === 'class' ? '.' : '#' }}{{ editorStore.selectorRenameConfirm.oldName }}</code>
+          para
+          <code>{{ editorStore.selectorRenameConfirm.type === 'class' ? '.' : '#' }}{{ editorStore.selectorRenameConfirm.newName }}</code>
+          no elemento?
+        </span>
+        <div class="rename-banner__actions">
+          <button class="rename-banner__btn rename-banner__btn--yes" @click="applyAttrRename">Sim</button>
+          <button class="rename-banner__btn rename-banner__btn--no" @click="editorStore.selectorRenameConfirm.show = false">Não</button>
         </div>
-      </template>
+      </div>
+    </Transition>
 
-      <!-- COMPUTED TAB -->
-      <ComputedTab v-else-if="activeTab === 'Computed'" />
-    </div>
+    <!-- HEAD TAB (sempre acessível, independente de elemento selecionado) -->
+    <template v-if="activeTab === 'Head'">
+      <HeadManager class="flex-1 overflow-hidden" />
+    </template>
+
+    <!-- STYLES / COMPUTED TABS (só para elementos do body) -->
+    <template v-else>
+      <!-- Empty State -->
+      <InspectorEmptyState v-if="!editorStore.selectedElement" />
+
+      <div v-else class="flex-1 overflow-y-auto font-mono leading-normal bg-white custom-scrollbar">
+
+        <!-- STYLES TAB -->
+        <template v-if="activeTab === 'Styles'">
+          <!-- Rule Creator Drawer -->
+          <RuleCreator />
+
+          <PseudoStateTabBar />
+
+          <div class="overflow-y-auto no-scrollbar">
+            <TargetRuleGroup v-if="targetGroup" :group="targetGroup" />
+
+            <InheritedRuleGroup
+              v-for="(group, gIdx) in inheritedGroups"
+              :key="group.id || gIdx"
+              :group="group"
+            />
+          </div>
+        </template>
+
+        <!-- ATTRIBUTES TAB -->
+        <AttributeManager v-else-if="activeTab === 'Attributes'" />
+
+        <!-- COMPUTED TAB -->
+        <ComputedTab v-else-if="activeTab === 'Computed'" />
+      </div>
+    </template>
   </div>
 </template>
 
@@ -54,12 +81,32 @@ import AttributeManager from '@/components/InspectorCss/StylesTab/AttributeManag
 import PseudoStateTabBar from '@/components/InspectorCss/StylesTab/PseudoStateTabBar.vue'
 import TargetRuleGroup from '@/components/InspectorCss/StylesTab/TargetRuleGroup.vue'
 import InheritedRuleGroup from '@/components/InspectorCss/StylesTab/InheritedRuleGroup.vue'
+import HeadManager from '@/components/InspectorCss/HeadManager.vue'
 
-const TABS = ['Styles', 'Computed']
+const TABS = ['Styles', 'Attributes', 'Computed', 'Head']
 const activeTab = ref('Styles')
 
 const editorStore = useEditorStore()
 const styleStore = useStyleStore()
+
+/** Aplica o rename do atributo de .class ou #id no elemento selecionado. */
+function applyAttrRename() {
+  const rc    = editorStore.selectorRenameConfirm
+  rc.show     = false
+  const { type, oldName, newName } = rc
+  const nodeId = editorStore.selectedNodeId
+  if (!nodeId || !editorStore.manipulation) return
+  if (type === 'class') {
+    const el     = editorStore.selectedElement
+    const merged = (el?.className ?? '')
+      .split(/\s+/).filter(Boolean)
+      .map(c => c === oldName ? newName : c)
+      .join(' ')
+    editorStore.manipulation.setAttribute(nodeId, 'class', merged)
+  } else {
+    editorStore.manipulation.setAttribute(nodeId, 'id', newName)
+  }
+}
 
 // ── Rule groups ───────────────────────────────────────────────────────────────
 
@@ -108,4 +155,36 @@ onBeforeUnmount(() => {
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #6d1414; border-radius: 4px; }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #ccc; }
+
+/* Banner de rename de seletor CSS */
+.rename-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 8px;
+  background: #fffbeb;
+  border-bottom: 1px solid #fcd34d;
+  font-size: 11px;
+  color: #92400e;
+  flex-shrink: 0;
+}
+.rename-banner__text { flex: 1; line-height: 1.4; }
+.rename-banner__text code {
+  font-family: monospace;
+  background: #fef3c7;
+  padding: 0 3px;
+  border-radius: 3px;
+}
+.rename-banner__actions { display: flex; gap: 4px; flex-shrink: 0; }
+.rename-banner__btn {
+  padding: 2px 8px; border-radius: 4px; border: none;
+  cursor: pointer; font-size: 11px; font-weight: 600;
+}
+.rename-banner__btn--yes { background: #d97706; color: white; }
+.rename-banner__btn--yes:hover { background: #b45309; }
+.rename-banner__btn--no  { background: #f3f4f6; color: #374151; }
+.rename-banner__btn--no:hover  { background: #e5e7eb; }
+.rename-banner-enter-active, .rename-banner-leave-active { transition: opacity .2s; }
+.rename-banner-enter-from, .rename-banner-leave-to { opacity: 0; }
 </style>

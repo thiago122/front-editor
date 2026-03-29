@@ -129,4 +129,38 @@ export const ApiService = {
   deleteAsset(path) {
     return call('deleteAsset', { body: { path } })
   },
+
+  /**
+   * Reordena os assets CSS salvando a nova sequência no manifesto.
+   * @param {string[]} paths
+   */
+  reorderAssets(paths) {
+    return call('reorderAssets', { body: { paths } })
+  },
+
+  /**
+   * Move um asset CSS para a lixeira (em vez de apagar definitivamente).
+   * @param {string} path - Caminho relativo ao rootDir
+   * @returns {Promise<{ok: boolean, trashId: string}>}
+   */
+  trashAsset(path) {
+    return call('trashAsset', { body: { path } })
+  },
+
+  /**
+   * Restaura um arquivo da lixeira para seu local original.
+   * @param {string} trashId - ID retornado por trashAsset()
+   * @returns {Promise<{ok: boolean, path: string}>}
+   */
+  restoreFromTrash(trashId) {
+    return call('restoreFromTrash', { body: { trashId } })
+  },
+
+  /**
+   * Lista todos os itens na lixeira.
+   * @returns {Promise<Array<{id, originalPath, trashedAt}>>}
+   */
+  listTrash() {
+    return call('listTrash')
+  },
 }

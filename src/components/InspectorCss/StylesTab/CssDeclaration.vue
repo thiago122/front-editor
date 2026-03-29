@@ -22,7 +22,7 @@
       @input="onPropInput"
       @blur="onPropBlur"
       @keydown.enter.prevent="onFocusValue"
-      @keydown.tab.prevent="onFocusValue"
+      @keydown.tab.prevent="onTabProp"
       @keydown.escape.prevent="onEscapeProp"
     />
 
@@ -40,7 +40,7 @@
         @input="onValueInput"
         @blur="onValueBlur"
         @keydown.enter.prevent="onFocusNextDecl"
-        @keydown.tab.prevent="onFocusNextDecl"
+        @keydown.tab.prevent="onTabValue"
         @keydown.escape.prevent="onEscapeValue"
       />
     </div>
@@ -116,11 +116,11 @@ function onPropInput(e) {
 }
 
 function onPropBlur(e) {
-  // Pequeno delay para permitir mousedown no dropdown antes de fechar
+  const typed = e.target.value  // captura AGORA — dentro do setTimeout Vue pode ter re-renderizado e revertido el.value
   setTimeout(() => {
     ac.close()
     acTarget.value = null
-    updateDeclaration(props.rule, props.decl, 'prop', e.target.value)
+    updateDeclaration(props.rule, props.decl, 'prop', typed)
   }, 120)
 }
 
@@ -168,21 +168,76 @@ function onValueBlur(e) {
 // ── Navigation ────────────────────────────────────────────────────────────────
 
 function onFocusValue(e) {
-  if (ac.isActive.value && ac.activeIdx.value >= 0) return // Enter aceita sugestão via ac.onKeydown
+  // Cede controle ao autocomplete se: item selecionado OU único item na lista (implicit accept)
+  if (ac.isActive.value && (ac.activeIdx.value >= 0 || ac.suggestions.value.length === 1)) return
   e.target.closest('.decl')?.querySelector('.prop-value')?.focus()
 }
 
 function onFocusNextDecl(e) {
-  if (ac.isActive.value && ac.activeIdx.value >= 0) return
+  // Cede controle ao autocomplete se: item selecionado OU único item na lista (implicit accept)
+  if (ac.isActive.value && (ac.activeIdx.value >= 0 || ac.suggestions.value.length === 1)) return
   const currentDecl = e.target.closest('.decl')
   const nextDecl    = currentDecl?.nextElementSibling
   e.target.blur()
   if (nextDecl?.classList.contains('decl')) {
-    // Há uma declaração abaixo → navega normalmente
     nextDecl.querySelector('.prop-name')?.focus()
   } else {
-    // Última declaração → pede ao pai (CssRule) para criar uma nova
     emit('request-new-decl')
+  }
+}
+
+// ── Shift+Tab navigation ─────────────────────────────────────────────────────
+
+/**
+ * Tab / Shift+Tab no input de PROP.
+ *   Tab       → foca o value (mesma declaração) — comportamento atual
+ *   Shift+Tab → foca o value da declaração ANTERIOR
+ *               Se for a 1ª declaração → foca o selector da rule
+ */
+function onTabProp(e) {
+  if (e.shiftKey) {
+    // Fecha autocomplete se aberto
+    if (ac.isActive.value) { ac.close() }
+    const currentDecl = e.target.closest('.decl')
+    const prevDecl    = currentDecl?.previousElementSibling
+    e.preventDefault()
+    if (prevDecl?.classList.contains('decl')) {
+      // Há uma declaração acima → foca o value dela
+      e.target.blur()
+      prevDecl.querySelector('.prop-value')?.focus()
+    } else {
+      // 1ª declaração → foca o selector da rule (contenteditable)
+      const selector = e.target.closest('.rule')?.querySelector('.rule__selector')
+      if (selector) {
+        e.target.blur()
+        selector.focus()
+        // Seleciona todo o texto do selector
+        const range = document.createRange()
+        range.selectNodeContents(selector)
+        const sel = window.getSelection()
+        sel?.removeAllRanges()
+        sel?.addRange(range)
+      }
+    }
+  } else {
+    onFocusValue(e)
+  }
+}
+
+/**
+ * Tab / Shift+Tab no input de VALUE.
+ *   Tab       → foca o prop da próxima declaração — comportamento atual
+ *   Shift+Tab → foca o prop da MESMA declaração
+ */
+function onTabValue(e) {
+  if (e.shiftKey) {
+    if (ac.isActive.value) { ac.close() }
+    e.preventDefault()
+    e.target.blur()
+    propInput.value?.focus()
+    propInput.value?.select()
+  } else {
+    onFocusNextDecl(e)
   }
 }
 

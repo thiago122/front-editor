@@ -50,15 +50,18 @@ import IconOpen from '@/components/icons/IconOpen.vue'
 import BreakpointeControl from '@/components/icons/BreakpointeControl.vue'
 import CssOutputModal from '@/components/CssOutputModal.vue'
 import HtmlImportModal from '@/components/HtmlImportModal.vue'
+import PixelPerfectOverlay from '@/components/PixelPerfectOverlay.vue'
+import PixelPerfectPanel from '@/components/PixelPerfectPanel.vue'
+import { usePixelPerfect } from '@/composables/usePixelPerfect'
 
 import { CssLogicTreeService } from '@/editor/css/tree/CssLogicTreeService.js'
 import { HtmlExportService } from '@/editor/css/export/HtmlExportService.js'
 import { AutoSaveService, AUTOSAVE_INTERVAL_MS } from '@/editor/css/export/AutoSaveService.js'
 import AutoSaveRecoveryBanner from '@/components/AutoSaveRecoveryBanner.vue'
 import { useColumnResize } from '@/composables/useColumnResize.js'
-import { resolveRelativeUrls } from '@/utils/resolveRelativeUrls.js'
 
 const { startResize, isResizing } = useColumnResize()
+const pixelPerfect = usePixelPerfect()
 
 // ─── Larguras das colunas redimensionáveis (em px) ──────────────────────────
 const layerWidth     = ref(280)  // col-layer    (HTML Explorer)
@@ -151,21 +154,6 @@ watch(() => styleStore.explorerScrollRequest, (v) => {
 
 const handleHtmlLoad = (newHtml) => {
   input.value = newHtml
-}
-
-const TEST_PAGE_URL = 'http://editor.test/assets/teste-2'
-
-const loadExternalTestPage = async () => {
-  try {
-    const response = await fetch(TEST_PAGE_URL)
-    if (response.ok) {
-      const html = await response.text()
-      // response.url é a URL final após redirects do servidor
-      input.value = resolveRelativeUrls(html, response.url)
-    }
-  } catch (e) {
-    console.error('Failed to fetch remote HTML:', e)
-  }
 }
 
 
@@ -449,8 +437,8 @@ watch(
         <!-- Salvar (Ctrl+S) -->
         <IconSidebarButton
           title="Salvar (Ctrl+S)"
-          @click="EditorStore.fileAccessSupported ? EditorStore.saveFile() : downloadHtml()"
-          :class="EditorStore.fileHandle ? 'text-green-600 hover:bg-green-50' : 'text-gray-400'"
+          @click="EditorStore.currentDocument ? EditorStore.saveDocument() : EditorStore.fileAccessSupported ? EditorStore.saveFile() : downloadHtml()"
+          :class="EditorStore.currentDocument ? 'text-green-600 hover:bg-green-50' : EditorStore.fileHandle ? 'text-green-600 hover:bg-green-50' : 'text-gray-400'"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
@@ -480,6 +468,27 @@ watch(
         <IconSidebarButton title="Download HTML" @click="downloadHtml" class="text-blue-500 hover:bg-blue-50">
           <IconHTML class="w-5 h-5" />
         </IconSidebarButton>
+
+        <!-- Pixel Perfect: abre o painel de controles -->
+        <IconSidebarButton
+          title="Pixel Perfect — sobrepor imagem de referência"
+          @click="activeExplorer = activeExplorer === 'pixelPerfect' ? null : 'pixelPerfect'"
+          :class="activeExplorer === 'pixelPerfect' ? 'bg-violet-100 text-violet-600' : (pixelPerfect.enabled.value ? 'text-violet-500' : '')"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+          </svg>
+        </IconSidebarButton>
+
+        <!-- Input oculto para selecionar arquivo de imagem -->
+        <input
+          ref="pixelPerfectFileInput"
+          type="file"
+          accept="image/*"
+          style="display:none"
+          @change="e => pixelPerfect.loadImage(e.target.files?.[0])"
+        />
       </IconSidebar>
 
       <!-- col-layer: HTML Explorer -->
@@ -497,6 +506,21 @@ watch(
           class="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-blue-400/40 transition-colors z-50"
           title="Arrastar para redimensionar"
           @mousedown="startLayerResize"
+        />
+      </template>
+
+      <!-- col-pixelPerfect: painel de controles do Pixel Perfect -->
+      <template v-if="activeExplorer === 'pixelPerfect'">
+        <AsidePanel
+          title="Pixel Perfect"
+          :style="{ width: '220px', minWidth: '200px', maxWidth: '280px' }"
+          style2="position: relative; z-index: var(--z-panel)"
+        >
+          <PixelPerfectPanel :containerEl="previewContainerEl" />
+        </AsidePanel>
+        <div
+          class="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-blue-400/40 transition-colors z-50"
+          @mousedown="e => startResize(e, ref(220), { min: 200, max: 280 })"
         />
       </template>
 
@@ -532,6 +556,8 @@ watch(
             <HighlightOverlay mode="selection" />
             <Preview :html="EditorStore.ctx?.output" class="w-full h-full bg-gray-200 transition-all duration-300 border border-gray-300 "
               :style="{ width: previewWidth + previewUnit }" />
+            <!-- Pixel Perfect overlay + painel de controles -->
+            <PixelPerfectOverlay :containerEl="previewContainerEl" />
           </div>
           <div class="shrink-0 max-w-full" style="position: relative;">
               <Breadcrumbs />

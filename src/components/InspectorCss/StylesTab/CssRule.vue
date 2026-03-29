@@ -72,8 +72,9 @@
           <span
             :class="['rule__selector', !editable ? 'rule__selector--readonly' : '']"
             :contenteditable="rule.selector !== 'element.style' && editable"
-            @blur="(e) => updateRule(rule, e.target.innerText)"
-            @keydown.enter.prevent="(e) => e.target.blur()"
+            @blur="onSelectorBlur"
+            @keydown.enter.prevent="onSelectorConfirm"
+            @keydown.tab.prevent="onSelectorConfirm"
           >{{ rule.selector }}</span>
           <span class="rule__brace">{</span>
         </div>
@@ -94,6 +95,26 @@
 
       <div class="rule__brace-close">}</div>
     </div>
+
+    <!-- Banner de confirmação: sincronizar atributo do elemento -->
+    <Transition name="rename-banner">
+      <div
+        v-if="editorStore.selectorRenameConfirm.show && editorStore.selectorRenameConfirm.ruleUid === rule.uid"
+        class="rule__rename-banner"
+      >
+        <span class="rule__rename-text">
+          Renomear
+          <code>{{ editorStore.selectorRenameConfirm.type === 'class' ? '.' : '#' }}{{ editorStore.selectorRenameConfirm.oldName }}</code>
+          para
+          <code>{{ editorStore.selectorRenameConfirm.type === 'class' ? '.' : '#' }}{{ editorStore.selectorRenameConfirm.newName }}</code>
+          no elemento?
+        </span>
+        <div class="rule__rename-actions">
+          <button class="rule__rename-btn rule__rename-btn--yes" @click.stop="applyAttrRename">Sim</button>
+          <button class="rule__rename-btn rule__rename-btn--no" @click.stop="editorStore.selectorRenameConfirm.show = false">Não</button>
+        </div>
+      </div>
+    </Transition>
 
     <!-- Rule Action Footer -->
     <div v-if="editable" class="rule__footer">
@@ -118,8 +139,10 @@ import { updateRule } from '@/editor/css/actions/cssRuleActions'
 import { createAtRule, updateAtRule } from '@/editor/css/actions/cssAtRuleActions'
 import { addDeclaration, deleteDeclaration } from '@/editor/css/actions/cssDeclarationActions'
 import { useStyleStore } from '@/stores/StyleStore'
+import { useEditorStore } from '@/stores/EditorStore'
 
-const styleStore = useStyleStore()
+const styleStore  = useStyleStore()
+const editorStore = useEditorStore()
 
 const props = defineProps({
   rule: { type: Object, required: true },
@@ -146,6 +169,90 @@ function onAddDeclaration() {
       const last = propNames[propNames.length - 1]
       last.focus()
       last.select()
+    }
+  })
+}
+
+/**
+ * Extrai tipo e nome de um token simples de seletor CSS.
+ * Retorna { type: 'class'|'id', name: string } ou null para seletores complexos.
+ */
+function parseSingleToken(selector) {
+  const s = (selector ?? '').trim()
+  if (/^\.([a-zA-Z_-][\w-]*)$/.test(s)) return { type: 'class', name: s.slice(1) }
+  if (/^#([a-zA-Z_-][\w-]*)$/.test(s))  return { type: 'id',    name: s.slice(1) }
+  return null
+}
+
+// ── Estado do banner (store — persiste durante re-mounts causados pelo applyMutation) ──
+// confirmRename é agora editorStore.selectorRenameConfirm
+
+function onSelectorBlur(e) {
+  const oldSelector = props.rule.selector
+  const newSelector = e.target.innerText.trim()
+
+  updateRule(props.rule, newSelector)
+
+  if (oldSelector === newSelector) return
+
+  const oldToken = parseSingleToken(oldSelector)
+  const newToken = parseSingleToken(newSelector)
+  if (!oldToken || !newToken || oldToken.type !== newToken.type) return
+
+  const el = editorStore.selectedElement
+  if (!el) return
+
+  const elHasToken =
+    oldToken.type === 'class'
+      ? el.classList.contains(oldToken.name)
+      : el.id === oldToken.name
+
+  if (!elHasToken) return
+
+  // Grava no store — não é destruido quando CssRule remonta
+  editorStore.selectorRenameConfirm.show    = true
+  editorStore.selectorRenameConfirm.type    = oldToken.type
+  editorStore.selectorRenameConfirm.oldName = oldToken.name
+  editorStore.selectorRenameConfirm.newName = newToken.name
+  editorStore.selectorRenameConfirm.ruleUid = props.rule.uid
+}
+
+function applyAttrRename() {
+  const rc    = editorStore.selectorRenameConfirm
+  rc.show     = false
+  const { type, oldName, newName } = rc
+  const nodeId = editorStore.selectedNodeId
+  if (!nodeId || !editorStore.manipulation) return
+
+  if (type === 'class') {
+    const el     = editorStore.selectedElement
+    const merged = (el?.className ?? '')
+      .split(/\s+/)
+      .filter(Boolean)
+      .map(c => c === oldName ? newName : c)
+      .join(' ')
+    editorStore.manipulation.setAttribute(nodeId, 'class', merged)
+  } else {
+    editorStore.manipulation.setAttribute(nodeId, 'id', newName)
+  }
+}
+
+/**
+ * Enter / Tab no selector → salva a edição e navega para o 1º prop.
+ * Se não houver nenhuma declaração, cria uma (igual ao botão "+ Prop").
+ */
+function onSelectorConfirm(e) {
+  e.target.blur() // dispara @blur → salva + detecta rename
+  nextTick(() => {
+    // Verifica pelo dado (não pelo DOM, que pode estar stale após re-mount)
+    if (props.rule.declarations?.length > 0) {
+      // Já tem declarações → foca o primeiro prop pelo DOM
+      const firstProp = ruleEl.value?.querySelector('.prop-name')
+      firstProp?.focus()
+      firstProp?.select()
+    } else {
+      // Rule vazia → cria a primeira declaração
+      onAddDeclaration()
     }
   })
 }
@@ -303,4 +410,44 @@ function onRemoveIfEmpty(decl) {
   width: 12px;
   height: 12px;
 }
+
+/* Banner de confirmação de rename de .class / #id */
+.rule__rename-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  margin: 2px 0;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 5px;
+  font-size: 11px;
+  color: #92400e;
+}
+.rule__rename-text { flex: 1; }
+.rule__rename-text code {
+  font-family: monospace;
+  background: #fef3c7;
+  padding: 0 3px;
+  border-radius: 3px;
+}
+.rule__rename-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.rule__rename-btn {
+  padding: 2px 10px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+}
+.rule__rename-btn--yes { background: #d97706; color: white; }
+.rule__rename-btn--yes:hover { background: #b45309; }
+.rule__rename-btn--no  { background: #f3f4f6; color: #374151; }
+.rule__rename-btn--no:hover  { background: #e5e7eb; }
+/* Transition */
+.rename-banner-enter-active,
+.rename-banner-leave-active { transition: opacity .2s, transform .2s; }
+.rename-banner-enter-from,
+.rename-banner-leave-to { opacity: 0; transform: translateY(-4px); }
 </style>

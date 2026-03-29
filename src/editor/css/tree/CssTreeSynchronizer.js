@@ -57,10 +57,21 @@ export class CssTreeSynchronizer {
    * @param {string} sourceName
    */
   findOrCreateStyleElement(targetDoc, origin, sourceName) {
-    // Try to find by ID (all styles now have unique IDs)
+    // 1. Busca pelo ID canônico
     let styleEl = targetDoc.getElementById(sourceName)
-    
-    // Create if not found
+
+    // 2. Fallback: busca por data-manifest-path (evita duplicar elementos já capturados de <link>)
+    //    Ex: <style id="assets_css__reset.css" data-manifest-path="css/reset.css"> deve ser
+    //    reusado quando o manifest tenta criar um <style id="css/reset.css">
+    if (!styleEl) {
+      styleEl = targetDoc.querySelector(`style[data-manifest-path="${sourceName}"]`)
+      if (styleEl) {
+        // Normaliza o id para que buscas futuras pelo ID canônico funcionem
+        styleEl.id = sourceName
+      }
+    }
+
+    // 3. Cria se não encontrado
     if (!styleEl) {
       styleEl = targetDoc.createElement('style')
       styleEl.id = sourceName
@@ -69,7 +80,7 @@ export class CssTreeSynchronizer {
       targetDoc.head.appendChild(styleEl)
       console.log(`Created new <style> for ${origin}/${sourceName}`)
     }
-    
+
     return styleEl
   }
 
