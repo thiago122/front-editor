@@ -1,16 +1,16 @@
 <template>
   <div ref="ruleEl" class="rule">
       <!-- Source file / origin — acima do seletor -->
-      <div>
+      <div class="rule__meta">
         <!-- ícone: revelar esta regra no CSS Explorer -->
         <button
           v-if="rule.selector !== 'element.style'"
-          class="rule__reveal-btn"
+          class="rule__meta-btn"
           title="Revelar no CSS Explorer"
           @click.stop="styleStore.navigateToRule(rule.uid)"
         >
           <!-- document-search icon -->
-          <svg class="rule__reveal-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="rule__meta-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586
                  a1 1 0 01.707.293l5.414 5.414A1 1 0 0119 9.414V19a2 2 0
@@ -19,6 +19,37 @@
         </button>
         <div class="rule__origin">
           <span class="rule__origin-label">{{ originLabel }}</span>
+        </div>
+
+        <!-- Botões de clipboard -->
+        <div class="rule__clipboard-btns">
+          <!-- Colar estilo (só aparece quando há estilo copiado) -->
+          <button
+            v-if="styleStore.copiedStyle && styleStore.copiedStyle.declarations.length"
+            class="rule__meta-btn rule__meta-btn--paste"
+            :title="`Colar ${styleStore.copiedStyle.declarations.length} propriedade(s) nesta regra`"
+            @click.stop="onPasteStyle"
+          >
+            <!-- paste icon -->
+            <svg class="rule__meta-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+          </button>
+          <!-- Copiar estilo -->
+          <button
+            v-if="rule.declarations.length"
+            class="rule__meta-btn"
+            :class="{ 'rule__meta-btn--active': isCopied }"
+            :title="isCopied ? 'Estilo copiado!' : 'Copiar declarações desta regra'"
+            @click.stop="onCopyStyle"
+          >
+            <!-- copy icon -->
+            <svg class="rule__meta-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+          </button>
         </div>
       </div>
     <!-- At-Rules hierárquicas: cada nível indenta o próximo -->
@@ -137,7 +168,7 @@ import { ref, computed, nextTick } from 'vue'
 import CssDeclaration from './CssDeclaration.vue'
 import { updateRule } from '@/editor/css/actions/cssRuleActions'
 import { createAtRule, updateAtRule } from '@/editor/css/actions/cssAtRuleActions'
-import { addDeclaration, deleteDeclaration } from '@/editor/css/actions/cssDeclarationActions'
+import { addDeclaration, deleteDeclaration, pasteDeclarations } from '@/editor/css/actions/cssDeclarationActions'
 import { useStyleStore } from '@/stores/StyleStore'
 import { useEditorStore } from '@/stores/EditorStore'
 
@@ -160,6 +191,24 @@ const originLabel = computed(() => {
   // external / internal → exibe o nome real do arquivo (ex: assets_teste-2__styles.css)
   return props.rule.sourceName || props.rule.origin || 'style'
 })
+
+// ── Clipboard de estilo ───────────────────────────────────────────────────────
+
+/** Indica se é esta rule que está com o estilo copiado (feedback visual) */
+const isCopied = computed(() =>
+  styleStore.copiedStyle?._sourceUid === props.rule.uid
+)
+
+function onCopyStyle() {
+  styleStore.copyStyle(props.rule.declarations, props.rule.uid)
+}
+
+function onPasteStyle() {
+  const copied = styleStore.copiedStyle
+  if (!copied?.declarations?.length) return
+  pasteDeclarations(props.rule, copied.declarations)
+  styleStore.clearCopiedStyle()
+}
 
 function onAddDeclaration() {
   addDeclaration(props.rule, ruleEl.value)
@@ -345,31 +394,55 @@ function onRemoveIfEmpty(decl) {
   font-size: 10px;
   color: #9ca3af;
   letter-spacing: 0.01em;
+  flex: 1;
 }
 .rule__origin-label { font-weight: 600; }
 
-/* Reveal-in-Explorer button */
-.rule__reveal-btn {
+/* Meta row (origin + clipboard buttons) */
+.rule__meta {
+  display: flex;
+  align-items: center;
+}
+.rule__clipboard-btns {
+  display: none;
+  align-items: center;
+  gap: 1px;
+  margin-left: auto;
+  padding-right: 4px;
+}
+.rule:hover .rule__clipboard-btns {
+  display: flex;
+}
+
+/* Shared meta button (reveal + copy + paste) */
+.rule__meta-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
-  margin-left: 6px;
+  width: 16px;
+  height: 16px;
   padding: 0;
   background: none;
   border: none;
   cursor: pointer;
   color: #9ca3af;
-  vertical-align: middle;
   border-radius: 3px;
   transition: color 0.15s, background 0.15s;
+  flex-shrink: 0;
 }
-.rule__reveal-btn:hover {
+.rule__meta-btn:hover {
   color: #2563eb;
   background: #eff6ff;
 }
-.rule__reveal-icon {
+.rule__meta-btn--active {
+  color: #16a34a;
+  background: #dcfce7;
+}
+.rule__meta-btn--paste:hover {
+  color: #7c3aed;
+  background: #ede9fe;
+}
+.rule__meta-icon {
   width: 11px;
   height: 11px;
 }

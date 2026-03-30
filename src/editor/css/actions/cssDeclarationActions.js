@@ -119,3 +119,51 @@ export function addDeclaration(rule, ruleEl = null, prop = null, val = null) {
     unifiedHistory.commitCss(styleStore.cssLogicTree)
   }
 }
+
+/**
+ * Paste a list of declarations into a target rule.
+ * Existing properties with the same name are overwritten; new ones are added.
+ * Supports both Logic Tree rules and inline styles (element.style).
+ *
+ * @param {Object} rule - Target inspector rule object
+ * @param {Array<{prop: string, value: string, important: boolean}>} declarations
+ */
+export function pasteDeclarations(rule, declarations) {
+  if (!declarations?.length) return
+
+  const editorStore = useEditorStore()
+
+  // ── Inline style ──────────────────────────────────────────────────────────
+  if (rule.selector === INLINE) {
+    const element = editorStore.selectedElement
+    if (!element) return
+    declarations.forEach(({ prop, value, important }) => {
+      element.style.removeProperty(prop)
+      element.style.setProperty(prop, value, important ? 'important' : '')
+    })
+    // MutationObserver no InspectorPanel vai detectar e chamar updateRules
+    return
+  }
+
+  // ── Logic Tree rule ───────────────────────────────────────────────────────
+  const styleStore = useStyleStore()
+  const applyFn = () => styleStore.applyMutation(editorStore.getIframeDoc())
+
+  unifiedHistory.snapshotCss(styleStore.cssLogicTree, applyFn)
+
+  declarations.forEach(({ prop, value, important }) => {
+    // Se já existe a propriedade na rule, atualiza; se não, cria
+    const existing = rule.declarations?.find(d => d.prop === prop && !d.disabled)
+    if (existing) {
+      CssLogicTreeService.updateDeclaration(existing, 'value', value)
+      if (important !== existing.important) {
+        CssLogicTreeService.updateDeclaration(existing, 'important', important)
+      }
+    } else {
+      CssLogicTreeService.createDeclaration(rule, prop, value)
+    }
+  })
+
+  styleStore.applyMutation(editorStore.getIframeDoc())
+  unifiedHistory.commitCss(styleStore.cssLogicTree)
+}

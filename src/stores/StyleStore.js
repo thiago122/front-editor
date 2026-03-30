@@ -65,6 +65,12 @@ export const useStyleStore = defineStore('style', () => {
   /** Increment this after any Logic Tree mutation to trigger Vue reactivity. */
   const astMutationKey = ref(0)
 
+  /**
+   * Copied style clipboard — declarações copiadas de uma rule para colar em outra.
+   * Shape: { declarations: [{prop, value, important}] } | null
+   */
+  const copiedStyle = ref(null)
+
   /** CSS rule groups shown in the Inspector. Updated by updateInspectorRules(). */
   const ruleGroups = ref([])
 
@@ -82,6 +88,21 @@ export const useStyleStore = defineStore('style', () => {
 
   function notifyTreeMutation() {
     astMutationKey.value++
+  }
+
+  /** Copia as declarações de uma rule para o clipboard de estilo. */
+  function copyStyle(declarations, sourceUid = null) {
+    copiedStyle.value = {
+      _sourceUid: sourceUid,
+      declarations: declarations
+        .filter(d => !d.disabled)
+        .map(d => ({ prop: d.prop, value: d.value, important: d.important ?? false }))
+    }
+  }
+
+  /** Limpa o clipboard de estilo. */
+  function clearCopiedStyle() {
+    copiedStyle.value = null
   }
 
   /** Switch the active pseudo-state/element tab and refresh inspector rules. */
@@ -185,6 +206,7 @@ export const useStyleStore = defineStore('style', () => {
     ruleGroups,
     activePseudoTab,
     inspectorSource,
+    copiedStyle,
     notifyTreeMutation,
     selectRule,
     navigateToRule,
@@ -193,5 +215,7 @@ export const useStyleStore = defineStore('style', () => {
     applyMutation,
     rebuildLogicTree,
     updateInspectorRules,
+    copyStyle,
+    clearCopiedStyle,
   }
 })
