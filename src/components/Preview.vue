@@ -82,6 +82,10 @@ onMounted(() => {
     iframeEvents.setup()
     inlineEdit.setup()
 
+    // Registra o trigger de edição inline no store para que
+    // componentes externos (ex: HighlightOverlay) possam iniciá-la.
+    EditorStore.triggerInlineEdit = inlineEdit.start
+
     // Sincroniza estado inicial se houver
     if (EditorStore.selectedNodeId) iframeEvents.applySelection(EditorStore.selectedNodeId)
     injectStyle()

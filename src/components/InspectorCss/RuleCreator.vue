@@ -1,11 +1,12 @@
 <template>
   <div class="p-2 border-b border-gray-300">
-    <label class="text-[12px] font-semibold text-gray-600 cursor-pointer mb-1" @click="showForm = !showForm">Create Selector +</label>
+    <label class="text-[12px] font-semibold text-gray-600 cursor-pointer mb-1" @click="toggle">Create Selector +</label>
     <div v-if="showForm">
       <div class="flex items-center mb-2">
         <input
+          ref="selectorInput"
           v-model="customSelector"
-          @keydown.enter="createRule"
+          @keydown="onInputKeydown"
           type="text"
           placeholder="Ex: .meu-card:hover"
           class="bg-white border border-[#d1d1d1] px-1 py-0.5 text-[11px] outline-none focus:border-blue-500 block w-full"
@@ -13,7 +14,9 @@
       </div>
       <div class="flex items-center mb-2 gap-2">
         <select
+          ref="sourceSelect"
           v-model="selectedSource"
+          @keydown="onSelectKeydown"
           class="bg-white border border-[#d1d1d1] px-1 py-0.5 text-[11px] outline-none focus:border-blue-500 block w-full truncate"
           title="Target Source">
           <option :value="null">Select Source (required)</option>
@@ -21,9 +24,11 @@
             {{ source.name }}
           </option>
         </select>
-        <button @mousedown.prevent="createRule"
-              class="h-[22px] px-4 py-0.5 bg-blue-600 text-white text-[11px] hover:bg-blue-700 transition-all tracking-tighter">
-              add
+        <button
+          @mousedown.prevent
+          @click="createRule"
+          class="h-[22px] px-4 py-0.5 bg-blue-600 text-white text-[11px] hover:bg-blue-700 transition-all tracking-tighter">
+          add
         </button>
       </div>
     </div>
@@ -31,7 +36,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
 import { useStyleStore } from '@/stores/StyleStore'
 import { createRule as createCssRule } from '@/editor/css/actions/cssRuleActions'
@@ -42,6 +47,9 @@ const styleStore = useStyleStore()
 const customSelector = ref('')
 const selectedSource = ref(null)
 const showForm = ref(false)
+
+const selectorInput = ref(null)
+const sourceSelect  = ref(null)
 
 const selectedElement = computed(() => editorStore.selectedElement)
 
@@ -70,6 +78,64 @@ const availableSources = computed(() => {
 watch(availableSources, sources => {
   if (!selectedSource.value && sources.length > 0) selectedSource.value = sources[0]
 }, { immediate: true })
+
+// ── Teclado no input de seletor ──────────────────────────────────────────────
+function onInputKeydown(e) {
+  if (e.key === 'Escape') {
+    e.preventDefault()
+    close()
+    return
+  }
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    // Se só há uma fonte disponível, cria direto; senão foca o select
+    if (availableSources.value.length <= 1) {
+      createRule()
+    } else {
+      sourceSelect.value?.focus()
+    }
+    return
+  }
+}
+
+// ── Teclado no select de arquivo ─────────────────────────────────────────────
+function onSelectKeydown(e) {
+  if (e.key === 'Escape') {
+    e.preventDefault()
+    close()
+    return
+  }
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    createRule()
+    return
+  }
+}
+
+// ── Ciclo de vida do form ─────────────────────────────────────────────────────
+function toggle() {
+  if (showForm.value) {
+    close()
+  } else {
+    open()
+  }
+}
+
+function close() {
+  showForm.value = false
+  customSelector.value = ''
+}
+
+/**
+ * Abre o form e foca o input de seletor.
+ * Pode receber um seletor inicial (ex: tag do elemento recém-inserido).
+ * Exposto via defineExpose para InspectorPanel chamar via ref.
+ */
+function open(initialSelector = '') {
+  showForm.value = true
+  customSelector.value = initialSelector
+  nextTick(() => selectorInput.value?.focus())
+}
 
 /**
  * Apply simple selectors (.class, #id) to the selected element automatically.
@@ -118,8 +184,13 @@ function createRule() {
   const newNode = createCssRule(selector, origin, sourceName)
 
   if (newNode) {
-    customSelector.value = ''
     applyRuleToElement(selector)
+    emit('rule-added', newNode)
+    close()
   }
 }
+
+const emit = defineEmits(['rule-added'])
+
+defineExpose({ open, close })
 </script>

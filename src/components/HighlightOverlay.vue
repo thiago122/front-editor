@@ -4,6 +4,7 @@ import { useEditorStore } from '@/stores/EditorStore'
 import { NodeDispatcher } from '@/editor/dispatchers/NodeDispatcher'
 import TagAutocomplete from '@/components/TagAutocomplete.vue'
 import { tagToHtml } from '@/editor/html/htmlTags'
+import { TEXT_EDITABLE_TAGS } from '@/editor/html/htmlConstants'
 
 const props = defineProps({
   mode: {
@@ -176,6 +177,29 @@ function moveUp()        { if (canMoveUp.value)   NodeDispatcher.moveNode(selNod
 function moveDown()      { if (canMoveDown.value) NodeDispatcher.moveNode(selNodeId.value,  1) }
 function deleteNode()    { if (selNodeId.value) NodeDispatcher.deleteNode(selNodeId.value) }
 function duplicateNode() { if (selNodeId.value) NodeDispatcher.duplicateNode(selNodeId.value) }
+
+// ── Edição de texto inline (botão "T") ────────────────────────────────────────
+
+/** True se a tag selecionada suporta edição de texto inline */
+const canEditText = computed(() => {
+  const el = EditorStore.selectedElement
+  if (!el) return false
+  return TEXT_EDITABLE_TAGS.includes(el.tagName.toLowerCase())
+})
+
+/**
+ * Inicia a edição inline no elemento selecionado.
+ * Delega ao useInlineEdit via a função registrada no store pelo Preview.vue.
+ * Desativa o inspectMode para que o clickHandler do iframe não interfira durante a edição.
+ */
+function startTextEdit() {
+  const el = EditorStore.selectedElement
+  if (!el) return
+  const trigger = EditorStore.triggerInlineEdit
+  if (typeof trigger === 'function') {
+    trigger(el)
+  }
+}
 
 // ── Autocomplete de tags (botões + e ↳) ──────────────────────────────────────
 
@@ -394,6 +418,14 @@ const boxSpacing = computed(() => {
             class="px-1.5 py-0.5 hover:bg-blue-700 transition-colors"
             title="Duplicar elemento"
           >⧉</button>
+
+          <!-- Editar texto inline -->
+          <button
+            v-if="canEditText"
+            @click.stop="startTextEdit"
+            class="px-1.5 py-0.5 hover:bg-blue-700 transition-colors font-bold font-mono"
+            title="Editar texto do elemento"
+          >T</button>
 
           <!-- Deletar -->
           <button

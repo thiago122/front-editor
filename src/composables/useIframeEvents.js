@@ -43,6 +43,11 @@ export function useIframeEvents(iframeRef, EditorStore) {
   function attachInspectListeners(doc) {
     clickHandler = (e) => {
       if (!EditorStore.inspectMode) return
+
+      // Não intercepta se houver edição inline ativa (contenteditable)
+      const editingEl = e.currentTarget.querySelector('[data-editing]')
+      if (editingEl) return
+
       e.preventDefault()
       e.stopPropagation()
 

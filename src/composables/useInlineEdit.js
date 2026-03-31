@@ -14,6 +14,7 @@
 import { ref } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
 import { TEXT_EDITABLE_TAGS } from '@/editor/html/htmlConstants'
+
 import {
   wrapSelection,
   unwrapNearestTag,
@@ -22,6 +23,7 @@ import {
 
 export function useInlineEdit(iframeRef) {
   const EditorStore = useEditorStore()
+
 
   // ── Estado interno de edição ──────────────────────────────────────────────
   // Usamos variáveis simples (não reativas) porque o Vue não precisa

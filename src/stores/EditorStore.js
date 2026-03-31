@@ -36,6 +36,12 @@ export const useEditorStore = defineStore('editor', () => {
   const clipboard      = ref({ type: null, data: null }) // Clipboard tipado
 
   /**
+   * Função registrada pelo Preview.vue que inicia a edição inline num elemento do iframe.
+   * Null até o Preview inicializar. Chamada pelo botão "T" do HighlightOverlay.
+   */
+  const triggerInlineEdit = ref(null)
+
+  /**
    * Estado do banner de confirmação de rename de seletor CSS.
    * Mantido no store para sobreviver ao re-mount do componente CssRule
    * que ocorre quando applyMutation recomputa as regras do inspector.
@@ -434,6 +440,7 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   return {
+    triggerInlineEdit,
     ctx,
     selectNode,
     selectedNode,

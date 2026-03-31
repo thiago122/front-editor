@@ -44,7 +44,7 @@
         <!-- STYLES TAB -->
         <template v-if="activeTab === 'Styles'">
           <!-- Rule Creator Drawer -->
-          <RuleCreator />
+          <RuleCreator ref="ruleCreatorRef" />
 
           <PseudoStateTabBar />
 
@@ -70,9 +70,10 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
 import { useStyleStore } from '@/stores/StyleStore'
+import { editorHooks } from '@/editor/HookManager'
 
 import ComputedTab from './ComputedTab/ComputedTab.vue'
 import RuleCreator from '@/components/InspectorCss/RuleCreator.vue'
@@ -88,6 +89,54 @@ const activeTab = ref('Styles')
 
 const editorStore = useEditorStore()
 const styleStore = useStyleStore()
+
+// ── Quick Selector (Ctrl+K e auto-open após inserção) ───────────────────────────
+
+const ruleCreatorRef = ref(null)
+
+/**
+ * Muda para a aba Styles e abre o RuleCreator com foco no input de seletor.
+ * Chamado pelo Ctrl+K e automaticamente após inserir tag.
+ */
+function openRuleCreator() {
+  activeTab.value = 'Styles'
+  nextTick(() => ruleCreatorRef.value?.open())
+}
+
+// Alt+K global → abre Quick Selector
+function onKeydown(e) {
+  if (e.altKey && e.key === 'k') {
+    e.preventDefault()
+    openRuleCreator()
+  }
+}
+
+onMounted(()      => window.addEventListener('keydown', onKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+
+// Escuta Alt+K também no iframe (foco vai para o iframe após clicar em elemento)
+let _iframeWin = null
+function attachIframeKeydown(iframe) {
+  if (_iframeWin) _iframeWin.removeEventListener('keydown', onKeydown)
+  _iframeWin = iframe?.contentWindow ?? null
+  _iframeWin?.addEventListener('keydown', onKeydown)
+}
+
+watch(() => editorStore.iframe, (iframe) => {
+  if (!iframe) return
+  attachIframeKeydown(iframe)
+  iframe.addEventListener('load', () => attachIframeKeydown(iframe))
+}, { immediate: true })
+
+onBeforeUnmount(() => {
+  if (_iframeWin) _iframeWin.removeEventListener('keydown', onKeydown)
+})
+
+// Auto-open após qualquer inserção de nó (tag inserida pelo usuário)
+editorHooks.on('node:afterInsert', () => {
+  // nextTick duplo: 1º para o AST/DOM atualizar, 2º para o Vue renderizar o elemento
+  nextTick(() => nextTick(() => openRuleCreator()))
+})
 
 /** Aplica o rename do atributo de .class ou #id no elemento selecionado. */
 function applyAttrRename() {
