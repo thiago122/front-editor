@@ -695,6 +695,8 @@ function openContextMenu(node, event) {
         { label: 'New CSS Rule inside', icon: '{}', action: () => addRuleInContext(node) },
         { label: 'New At-Rule inside',  icon: '@',  action: () => addAtRuleInContext(node) },
         { divider: true },
+        { label: 'Duplicate',           icon: '⧉',  action: () => duplicateNode(node) },
+        { divider: true },
         { label: 'Delete', icon: '✕', action: () => deleteNode(node), danger: true },
       ]
     }
@@ -704,6 +706,8 @@ function openContextMenu(node, event) {
     } else {
       items = [
         { label: 'New Declaration', icon: ':', action: () => addDeclaration(node) },
+        { divider: true },
+        { label: 'Duplicate Rule',  icon: '⧉', action: () => duplicateNode(node) },
         { divider: true },
         { label: 'Delete', icon: '✕', action: () => deleteNode(node), danger: true },
       ]

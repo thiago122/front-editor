@@ -161,13 +161,25 @@ export class CssRuleService {
     const clonedAst = CssAstService.createNode(`${original.label} {}`, 'Rule')
     if (!clonedAst) return null
 
-    const srcDecls = toRaw(original.metadata.astNode)?.block?.children
-    if (srcDecls) {
-      srcDecls.forEach(d => {
-        const declClone = CssAstService.createNode(`${d.property}: ${d.value?.value ?? ''}`, 'declaration')
-        if (declClone) safeAppend(clonedAst.block.children, declClone)
+    // Clone both the Logic Tree children and the AST declarations in lock-step
+    const clonedChildren = []
+    const srcChildren = original.children ?? []
+
+    srcChildren.forEach(child => {
+      if (child.type !== 'declaration') return
+
+      const prop = child.label ?? ''
+      const val  = child.value ?? ''
+      const declClone = CssAstService.createNode(`${prop}: ${val}`, 'declaration')
+      if (!declClone) return
+
+      safeAppend(clonedAst.block.children, declClone)
+      clonedChildren.push({
+        ...child,
+        id:       generateId(),
+        metadata: { ...child.metadata, astNode: declClone },
       })
-    }
+    })
 
     const clone = {
       id: generateId(),
@@ -179,13 +191,14 @@ export class CssRuleService {
         astNode:     clonedAst,
         specificity: original.metadata.specificity,
       },
-      children: [],
+      children: clonedChildren,
     }
 
     const idx = parent.children.indexOf(original)
     parent.children.splice(idx + 1, 0, clone)
     return clone
   }
+
 
   // ─── Query ─────────────────────────────────────────────────────────────────
 
