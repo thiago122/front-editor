@@ -33,7 +33,8 @@ export const useEditorStore = defineStore('editor', () => {
   const previewContainer = ref(null) // wrapper do <Preview> — base para position:absolute do overlay
   const viewport = ref({ width: window.innerWidth, height: window.innerHeight })
   const manipulation = ref(null)
-  const clipboard      = ref({ type: null, data: null }) // Clipboard tipado
+  const clipboard         = ref({ type: null, data: null }) // Clipboard tipado
+  const showCssExplorer   = ref(false)                      // CSS Explorer visível ao lado do inspector
 
   /**
    * Função registrada pelo Preview.vue que inicia a edição inline num elemento do iframe.
@@ -441,6 +442,7 @@ export const useEditorStore = defineStore('editor', () => {
 
   return {
     triggerInlineEdit,
+    showCssExplorer,
     ctx,
     selectNode,
     selectedNode,

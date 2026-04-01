@@ -981,115 +981,134 @@ const itemsOffset = computed(() => startIndex.value * ROW_HEIGHT)
       tabindex="-1"
     >
         <!-- Header -->
-        <div class="px-3 py-2 bg-[#f3f3f3] border-b border-[#d1d1d1] flex items-center justify-between shrink-0">
-            <span class="text-xs font-bold text-gray-700">CSS Explorer</span>
-            <div class="flex items-center gap-2">
-                <!-- Match counter when search is active -->
-                <span v-if="searchQuery.trim()" class="text-[10px] text-blue-500 font-medium">
-                  {{ matchCount }} match{{ matchCount !== 1 ? 'es' : '' }}
-                </span>
-                <span v-else class="text-[10px] text-gray-400">{{ visibleNodes.length }} nodes</span>
+        <div class="px-2 py-1.5 bg-gradient-to-b from-gray-100 to-gray-50 border-b border-gray-200 flex items-center gap-1 shrink-0">
 
-                <!-- New Stylesheet (+) dropdown -->
-                <div class="relative">
-                  <button
-                    @click.stop="newSheetMenu = !newSheetMenu"
-                    class="text-gray-500 hover:text-black font-bold text-sm leading-none"
-                    title="New Stylesheet"
-                  >+</button>
-                  <div
-                    v-if="newSheetMenu"
-                    class="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded shadow-lg py-1 z-50 min-w-[180px] text-[11px]"
-                    @click.stop
-                  >
-                    <div class="px-3 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Novo Stylesheet</div>
+          <!-- Título + contador -->
+          <div class="flex items-center gap-1.5 min-w-0 mr-auto">
+            <svg class="w-3 h-3 text-blue-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10M5 3h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/>
+            </svg>
+            <span class="text-[11px] font-semibold text-gray-600 tracking-wide truncate">CSS</span>
+            <span v-if="searchQuery.trim()" class="text-[10px] text-blue-500 font-medium shrink-0">
+              {{ matchCount }} match{{ matchCount !== 1 ? 'es' : '' }}
+            </span>
+            <span v-else class="text-[10px] text-gray-400 tabular-nums shrink-0">{{ visibleNodes.length }}</span>
+          </div>
 
-                    <!-- Input inline (substitui window.prompt) -->
-                    <div v-if="newSheetInputType" class="px-2 pb-2">
-                      <div class="text-[10px] text-gray-500 mb-1 px-1">
-                        {{ newSheetInputType === 'internal' ? 'Nome do arquivo:' : 'URL externa:' }}
-                      </div>
-                      <input
-                        v-model="newSheetInputValue"
-                        :placeholder="newSheetInputType === 'internal' ? 'styles.css' : 'https://cdn.example.com/x.css'"
-                        class="w-full border border-gray-300 rounded px-2 py-1 text-[11px] outline-none focus:border-blue-400 mb-1"
-                        @keydown.enter.prevent="confirmCreateStylesheet"
-                        @keydown.escape.prevent="newSheetInputType = null"
-                        autofocus
-                      />
-                      <div class="flex gap-1">
-                        <button
-                          @click.stop="confirmCreateStylesheet"
-                          class="flex-1 bg-blue-500 text-white rounded px-2 py-1 text-[10px] font-medium hover:bg-blue-600"
-                        >Criar</button>
-                        <button
-                          @click.stop="newSheetInputType = null"
-                          class="flex-1 bg-gray-100 text-gray-600 rounded px-2 py-1 text-[10px] hover:bg-gray-200"
-                        >Cancelar</button>
-                      </div>
-                    </div>
+          <!-- Botões de ação -->
+          <div class="flex items-center gap-0.5">
 
-                    <!-- Botões de tipo -->
-                    <template v-else>
-                      <button
-                        class="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 text-left text-gray-700"
-                        @click.stop="requestNewSheet('on_page')"
-                      >
-                        <span class="text-indigo-500 font-mono">&lt;style&gt;</span>
-                        On-page
-                      </button>
-                      <button
-                        class="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 text-left text-gray-700"
-                        @click.stop="requestNewSheet('internal')"
-                      >
-                        <span class="text-blue-500 font-mono">&lt;link&gt;</span>
-                        Internal
-                      </button>
-                      <button
-                        class="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 text-left text-gray-700"
-                        @click.stop="requestNewSheet('external')"
-                      >
-                        <span class="text-orange-500 font-mono">🔗</span>
-                        External
-                      </button>
-                    </template>
+            <!-- Search toggle -->
+            <button
+              @click="searchActive ? clearSearch() : openSearch()"
+              class="w-6 h-6 flex items-center justify-center rounded transition-colors"
+              :class="searchActive ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-200'"
+              title="Buscar (Ctrl+F)"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 111 11a6 6 0 0116 0z"/>
+              </svg>
+            </button>
+
+            <!-- Expand / Collapse All -->
+            <button
+              @click="isFullyExpanded ? collapseAll() : expandAll()"
+              class="w-6 h-6 flex items-center justify-center rounded transition-colors text-gray-400 hover:text-gray-700 hover:bg-gray-200"
+              :title="isFullyExpanded ? 'Recolher tudo' : 'Expandir tudo'"
+            >
+              <svg v-if="isFullyExpanded" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 14l7-7m0 0V3m0 4H7M20 10l-7 7m0 0v4m0-4h4"/>
+              </svg>
+              <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+              </svg>
+            </button>
+
+            <!-- Refresh -->
+            <button
+              @click="refresh"
+              class="w-6 h-6 flex items-center justify-center rounded transition-colors text-gray-400 hover:text-gray-700 hover:bg-gray-200"
+              title="Recarregar árvore CSS"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+              </svg>
+            </button>
+
+            <!-- Separador -->
+            <div class="w-px h-4 bg-gray-200 mx-0.5"></div>
+
+            <!-- New Stylesheet (+) dropdown -->
+            <div class="relative">
+              <button
+                @click.stop="newSheetMenu = !newSheetMenu"
+                class="w-6 h-6 flex items-center justify-center rounded transition-colors text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                title="Novo stylesheet"
+              >
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+              </button>
+              <div
+                v-if="newSheetMenu"
+                class="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded shadow-lg py-1 z-50 min-w-[180px] text-[11px]"
+                @click.stop
+              >
+                <div class="px-3 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Novo Stylesheet</div>
+
+                <!-- Input inline (substitui window.prompt) -->
+                <div v-if="newSheetInputType" class="px-2 pb-2">
+                  <div class="text-[10px] text-gray-500 mb-1 px-1">
+                    {{ newSheetInputType === 'internal' ? 'Nome do arquivo:' : 'URL externa:' }}
+                  </div>
+                  <input
+                    v-model="newSheetInputValue"
+                    :placeholder="newSheetInputType === 'internal' ? 'styles.css' : 'https://cdn.example.com/x.css'"
+                    class="w-full border border-gray-300 rounded px-2 py-1 text-[11px] outline-none focus:border-blue-400 mb-1"
+                    @keydown.enter.prevent="confirmCreateStylesheet"
+                    @keydown.escape.prevent="newSheetInputType = null"
+                    autofocus
+                  />
+                  <div class="flex gap-1">
+                    <button
+                      @click.stop="confirmCreateStylesheet"
+                      class="flex-1 bg-blue-500 text-white rounded px-2 py-1 text-[10px] font-medium hover:bg-blue-600"
+                    >Criar</button>
+                    <button
+                      @click.stop="newSheetInputType = null"
+                      class="flex-1 bg-gray-100 text-gray-600 rounded px-2 py-1 text-[10px] hover:bg-gray-200"
+                    >Cancelar</button>
                   </div>
                 </div>
 
-                <!-- Expand / Collapse All toggle -->
-                <button
-                  @click="isFullyExpanded ? collapseAll() : expandAll()"
-                  class="text-gray-500 hover:text-black"
-                  :title="isFullyExpanded ? 'Collapse All' : 'Expand All'"
-                >
-                  <!-- Collapse icon (shown when fully expanded — click to collapse) -->
-                  <svg v-if="isFullyExpanded" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M4 14l7-7m0 0V3m0 4H7M20 10l-7 7m0 0v4m0-4h4"/>
-                  </svg>
-                  <!-- Expand icon (shown when collapsed — click to expand) -->
-                  <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
-                  </svg>
-                </button>
-
-                <!-- Search toggle -->
-                <button
-                  @click="searchActive ? clearSearch() : openSearch()"
-                  class="text-gray-500 hover:text-black"
-                  :class="searchActive ? 'text-blue-500' : ''"
-                  title="Search (Ctrl+F)"
-                >
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 111 11a6 6 0 0116 0z"/>
-                  </svg>
-                </button>
-
-                <button @click="refresh" class="text-gray-500 hover:text-black" title="Refresh AST">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                </button>
+                <!-- Botões de tipo -->
+                <template v-else>
+                  <button
+                    class="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 text-left text-gray-700"
+                    @click.stop="requestNewSheet('on_page')"
+                  >
+                    <span class="text-indigo-500 font-mono">&lt;style&gt;</span>
+                    On-page
+                  </button>
+                  <button
+                    class="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 text-left text-gray-700"
+                    @click.stop="requestNewSheet('internal')"
+                  >
+                    <span class="text-blue-500 font-mono">&lt;link&gt;</span>
+                    Internal
+                  </button>
+                  <button
+                    class="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 text-left text-gray-700"
+                    @click.stop="requestNewSheet('external')"
+                  >
+                    <span class="text-orange-500 font-mono">🔗</span>
+                    External
+                  </button>
+                </template>
+              </div>
             </div>
+
+          </div>
         </div>
 
         <!-- Search bar -->

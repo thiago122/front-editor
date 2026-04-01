@@ -2,12 +2,25 @@
   <div class="h-full flex flex-col bg-white text-[12px] text-gray-900 select-none font-mono">
 
     <!-- Header with Tab Navigation -->
-    <div class="flex border-b border-gray-200 bg-gray-50">
-      <button v-for="tab in TABS" :key="tab"
-        @click="activeTab = tab"
-        :class="['px-4 py-2 text-[11px] font-medium transition-colors',
-          activeTab === tab ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-800']">
-        {{ tab }}
+    <div class="flex items-center border-b border-gray-200 bg-gray-50 min-w-0">
+      <!-- Abas: overflow-hidden para não vazar quando a coluna for estreita -->
+      <div class="flex overflow-hidden min-w-0">
+        <button v-for="tab in TABS" :key="tab"
+          @click="activeTab = tab"
+          :class="['px-3 py-2 text-[11px] font-medium transition-colors shrink-0',
+            activeTab === tab ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-800']">
+          {{ tab }}
+        </button>
+      </div>
+
+      <!-- Botão toggle CSS Explorer: shrink-0 para nunca desaparecer -->
+      <button
+        class="shrink-0 ml-auto mr-1 w-6 h-6 flex items-center justify-center rounded transition-colors"
+        :class="editorStore.showCssExplorer ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-200'"
+        title="CSS Explorer (mostrar/ocultar)"
+        @click="editorStore.showCssExplorer = !editorStore.showCssExplorer"
+      >
+        <IconCSS class="w-3.5 h-3.5" />
       </button>
     </div>
 
@@ -83,6 +96,7 @@ import PseudoStateTabBar from '@/components/InspectorCss/StylesTab/PseudoStateTa
 import TargetRuleGroup from '@/components/InspectorCss/StylesTab/TargetRuleGroup.vue'
 import InheritedRuleGroup from '@/components/InspectorCss/StylesTab/InheritedRuleGroup.vue'
 import HeadManager from '@/components/InspectorCss/HeadManager.vue'
+import IconCSS from '@/components/icons/IconCSS.vue'
 
 const TABS = ['Styles', 'Attributes', 'Computed', 'Head']
 const activeTab = ref('Styles')

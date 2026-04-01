@@ -70,9 +70,10 @@ const inspectorWidth = ref(300)  // col-panel-inspector
 
 // No template, Vue faz auto-unwrap de refs (layerWidth → 280).
 // Usar funções no script garante que o ref correto é passado ao composable.
-function startLayerResize(e)     { startResize(e, layerWidth,     { min: 160, max: 520 }) }
-function startCssResize(e)       { startResize(e, cssWidth,       { min: 220, max: 680 }) }
-function startInspectorResize(e) { startResize(e, inspectorWidth, { min: 200, max: 520, direction: -1 }) }
+function startLayerResize(e)        { startResize(e, layerWidth,     { min: 160, max: 520 }) }
+function startCssResize(e)          { startResize(e, cssWidth,       { min: 220, max: 680 }) }
+function startCssRightResize(e)     { startResize(e, cssWidth,       { min: 220, max: 680, direction: -1 }) }
+function startInspectorResize(e)    { startResize(e, inspectorWidth, { min: 200, max: 520, direction: -1 }) }
 
 const isSaveModalOpen  = ref(false)
 const isImportModalOpen = ref(false)
@@ -402,10 +403,6 @@ watch(
           :class="activeExplorer === 'html' ? 'bg-gray-200' : ''">
           <IconLayer />
         </IconSidebarButton>
-        <IconSidebarButton title="CSS" @click="activeExplorer = activeExplorer === 'css' ? null : 'css'"
-          :class="activeExplorer === 'css' ? 'bg-gray-200' : ''">
-          <IconCSS />
-        </IconSidebarButton>
 
         <IconSidebarButton title="HTML">
           <IconHTML />
@@ -524,23 +521,7 @@ watch(
         />
       </template>
 
-      <!-- col-css: CSS Explorer -->
-      <template v-if="activeExplorer === 'css'">
-        <AsidePanel
-          id="col-css"
-          title="CSS Explorer"
-          :style="{ width: cssWidth + 'px', minWidth: '220px', maxWidth: '680px' }"
-          style2="position: relative; z-index: var(--z-panel)"
-        >
-          <CssExplorer />
-        </AsidePanel>
-        <!-- Handle de resize: col-css -->
-        <div
-          class="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-blue-400/40 transition-colors z-50"
-          title="Arrastar para redimensionar"
-          @mousedown="startCssResize"
-        />
-      </template>
+      <!-- col-css: CSS Explorer (REMOVIDO DA ESQUERDA — agora fica à direita do canvas) -->
 
       <!-- col-main: canvas (absorve diferenças via flex-1) -->
       <div class="flex flex-col h-full w-full overflow-hidden gap-3" id="col-main">
@@ -564,6 +545,23 @@ watch(
           </div>
     
       </div>
+
+      <!-- col-css-right: CSS Explorer à direita do canvas (redimensionável, independente do inspector) -->
+      <template v-if="EditorStore.showCssExplorer">
+        <!-- Handle de resize: col-css-right (handle à esquerda — arrastar esquerda aumenta) -->
+        <div
+          class="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-blue-400/40 transition-colors z-50 border-l border-gray-300"
+          title="Arrastar para redimensionar"
+          @mousedown="startCssRightResize"
+        />
+        <div
+          id="col-css-right"
+          :style="{ width: cssWidth + 'px', minWidth: '220px', maxWidth: '680px' }"
+          
+        >
+          <CssExplorer />
+        </div>
+      </template>
 
       <!-- Handle de resize: col-panel-inspector (direção invertida: arrastar para esquerda aumenta) -->
       <div
