@@ -540,9 +540,7 @@ watch(
           <div ref="previewContainerEl"
                class="grow shrink-0 overflow-auto flex justify-center overflow-hidden"
                style="position: relative">
-            <HighlightOverlay mode="hover" />
-            <HighlightOverlay mode="selection" />
-            <div class="relative shrink-0 flex items-stretch"
+            <div class="relative shrink-0 flex items-stretch z-0"
                  :style="{ width: previewWidth + previewUnit, transition: isResizing ? 'none' : 'width 0.3s' }">
               <Preview :html="EditorStore.ctx?.output" class="w-full h-full bg-gray-200 border-0" />
               <!-- Handle Direita -->
@@ -560,8 +558,14 @@ watch(
                 <div class="w-1 h-8 bg-gray-400/50 rounded-full group-hover:bg-blue-600"></div>
               </div>
             </div>
+            
+            <div class="absolute inset-0 pointer-events-none z-10">
+              <HighlightOverlay mode="hover" />
+              <HighlightOverlay mode="selection" />
+            </div>
+
             <!-- Pixel Perfect overlay + painel de controles -->
-            <PixelPerfectOverlay :containerEl="previewContainerEl" />
+            <PixelPerfectOverlay :containerEl="previewContainerEl" class="z-20" />
           </div>
           <div class="shrink-0 max-w-full" style="position: relative;">
               <Breadcrumbs />

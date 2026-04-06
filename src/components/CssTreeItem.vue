@@ -123,7 +123,17 @@ function saveEdit() {
 const handleClick = (e) => {
   if (props.node.type === 'root') return
 
-  // Ctrl+Click → inline edit
+  // Ctrl + Shift + Click → força edição no Inspector
+  if (e.ctrlKey && e.shiftKey) {
+    e.stopPropagation()
+    console.log('[CssTreeItem] Ctrl+Shift+Click acionado!', props.node.type, props.node.id)
+    if (props.node.type === 'selector' || props.node.type === 'at-rule') {
+      styleStore.selectRule(props.node.id, 'explorer')
+    }
+    return
+  }
+
+  // Ctrl + Click → Inline edit local
   if (e.ctrlKey && isEditable.value) {
     e.stopPropagation()
     startEdit()

@@ -188,6 +188,9 @@ export const useEditorStore = defineStore('editor', () => {
       selectedElement.value = null
     }
     // inspectMode não é alterado aqui — quem controla é o usuário via IconInspect
+
+    // Reseta a fonte do Inspector de volta para o elemento caso estivesse forçada pelo CssExplorer
+    styleStore.setInspectorSource('element')
   }
 
   /** Inicia o blink do overlay de seleção por 5 segundos. */

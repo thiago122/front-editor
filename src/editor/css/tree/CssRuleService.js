@@ -30,7 +30,7 @@ export class CssRuleService {
    * @param {string|null} parentId   - ID of an at-rule node to insert into, or null
    * @returns {Object|null} The new logic node, or null on failure
    */
-  static create(logicTree, selector, origin = 'on_page', sourceName = 'style', parentId = null) {
+  static create(logicTree, selector, origin = 'on_page', sourceName = 'style', parentId = null, insertIndex = -1) {
     const astNode = CssAstService.createNode(`${selector} {}`, 'Rule')
     if (!astNode) {
       console.error(`[CssRuleService] Failed to create AST node for selector: "${selector}"`)
@@ -58,15 +58,25 @@ export class CssRuleService {
         console.error(`[CssRuleService] parentId "${parentId}" not found or not an at-rule`)
         return null
       }
-      parentNode.children.push(newNode)
+      if (insertIndex >= 0) {
+        parentNode.children.splice(insertIndex, 0, newNode)
+      } else {
+        parentNode.children.push(newNode)
+      }
       const block = toRaw(parentNode.metadata.astNode)?.block
-      if (block?.children) safeAppend(block.children, astNode)
+      if (block?.children) safeAppend(block.children, astNode, false, insertIndex)
       return newNode
     }
 
     const root     = findOrCreateRoot(logicTree, origin)
     const fileNode = findOrCreateFile(root, sourceName, origin)
-    fileNode.children.push(newNode)
+    
+    if (insertIndex >= 0) {
+      fileNode.children.splice(insertIndex, 0, newNode)
+    } else {
+      fileNode.children.push(newNode)
+    }
+    
     return newNode
   }
 

@@ -50,7 +50,7 @@
     <!-- STYLES / COMPUTED TABS (só para elementos do body) -->
     <template v-else>
       <!-- Empty State -->
-      <InspectorEmptyState v-if="!editorStore.selectedElement" />
+      <InspectorEmptyState v-if="!editorStore.selectedElement && !(styleStore.inspectorSource === 'explorer' && styleStore.ruleGroups.length)" />
 
       <div v-else class="flex-1 overflow-y-auto font-mono leading-normal bg-white custom-scrollbar">
 
@@ -180,6 +180,7 @@ const inheritedGroups = computed(() => styleStore.ruleGroups.filter(g => !g.isTa
 // ── Refresh ───────────────────────────────────────────────────────────────────
 
 function refresh() {
+  console.log('[InspectorPanel] refresh() rodando. inspectorSource:', styleStore.inspectorSource, 'selectedRuleId:', styleStore.selectedRuleId)
   styleStore.updateInspectorRules(
     editorStore.selectedElement,
     editorStore.viewport,
@@ -191,6 +192,8 @@ watch(() => editorStore.selectedElement, refresh)
 watch(() => styleStore.astMutationKey, refresh)
 watch(() => editorStore.viewport, refresh)
 watch(() => styleStore.activePseudoTab, refresh)
+watch(() => styleStore.inspectorSource, refresh)
+watch(() => styleStore.selectedRuleId, refresh)
 
 // ── MutationObserver ──────────────────────────────────────────────────────────
 // Watches class/id/style on the selected element directly in the DOM.

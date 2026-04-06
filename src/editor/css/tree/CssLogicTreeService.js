@@ -91,8 +91,8 @@ export class CssLogicTreeService {
   // ─── Rules  →  CssRuleService ──────────────────────────────────────────────
 
   /** @see CssRuleService.create */
-  static createRule(logicTree, selector, origin, sourceName, parentId) {
-    return CssRuleService.create(logicTree, selector, origin, sourceName, parentId)
+  static createRule(logicTree, selector, origin, sourceName, parentId, insertIndex) {
+    return CssRuleService.create(logicTree, selector, origin, sourceName, parentId, insertIndex)
   }
 
   /** @see CssRuleService.update */
@@ -128,8 +128,8 @@ export class CssLogicTreeService {
   // ─── At-rules  →  CssAtRuleService ────────────────────────────────────────
 
   /** @see CssAtRuleService.create */
-  static createAtRule(logicTree, ruleUid, type, condition, origin, sourceName, parentId) {
-    return CssAtRuleService.create(logicTree, ruleUid, type, condition, origin, sourceName, parentId)
+  static createAtRule(logicTree, ruleUid, type, condition, origin, sourceName, parentId, insertIndex) {
+    return CssAtRuleService.create(logicTree, ruleUid, type, condition, origin, sourceName, parentId, insertIndex)
   }
 
   /** @see CssAtRuleService.update */

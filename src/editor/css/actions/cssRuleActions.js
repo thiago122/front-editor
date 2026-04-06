@@ -20,13 +20,15 @@ import { unifiedHistory } from '@/editor/history/UnifiedHistoryManager'
  * @param {string} selector
  * @param {string} origin - 'on_page' | 'internal'
  * @param {string} sourceName - e.g. 'style' or 'custom.css'
+ * @param {string|null} parentId - ID of parent node
+ * @param {number} insertIndex - insert position
  * @returns {Object|null} The new Logic Tree node
  */
-export function createRule(selector, origin = 'on_page', sourceName = 'style') {
+export function createRule(selector, origin = 'on_page', sourceName = 'style', parentId = null, insertIndex = -1) {
   const styleStore = useStyleStore()
   const applyFn = () => styleStore.applyMutation(useEditorStore().getIframeDoc())
   unifiedHistory.snapshotCss(styleStore.cssLogicTree, applyFn)
-  const newNode = CssLogicTreeService.createRule(toRaw(styleStore.cssLogicTree), selector, origin, sourceName)
+  const newNode = CssLogicTreeService.createRule(toRaw(styleStore.cssLogicTree), selector, origin, sourceName, parentId, insertIndex)
   if (newNode) {
     styleStore.applyMutation(useEditorStore().getIframeDoc())
     unifiedHistory.commitCss(styleStore.cssLogicTree)

@@ -25,6 +25,16 @@ export function safeAppend(list, data, prepend = false, index = -1) {
 
     // css-tree List type with createItem
     if (list.prepend && list.append) {
+      if (index >= 0) {
+        let item = list.head
+        for (let i = 0; i < index && item; i++) {
+          item = item.next
+        }
+        if (item) {
+          list.insert(list.createItem(data), item)
+          return
+        }
+      }
       if (prepend) list.prepend(list.createItem(data))
       else list.append(list.createItem(data))
       return
@@ -32,6 +42,16 @@ export function safeAppend(list, data, prepend = false, index = -1) {
 
     // css-tree List with Data methods
     if (list.prependData && list.appendData) {
+      if (index >= 0) {
+        let item = list.head
+        for (let i = 0; i < index && item; i++) {
+          item = item.next
+        }
+        if (item) {
+          list.insertData(data, item)
+          return
+        }
+      }
       if (prepend) list.prependData(data)
       else list.appendData(data)
     } else if (list.insertData) {

@@ -67,7 +67,8 @@ onBeforeUnmount(() => {
           @click="() => { if (!item.disabled) { item.action?.(); close() } }"
         >
           <span v-if="item.icon" class="text-[10px] w-3 text-gray-400">{{ item.icon }}</span>
-          <span>{{ item.label }}</span>
+          <span class="flex-1">{{ item.label }}</span>
+          <span v-if="item.shortcut" class="ml-4 text-[10px] text-gray-400 tracking-wide">{{ item.shortcut }}</span>
         </button>
       </template>
     </div>

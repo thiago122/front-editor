@@ -21,6 +21,7 @@ function buildInspectorRule(selectorNode) {
       disabled: isDisabled,
       overridden: false,
       astNode: d.metadata?.astNode,
+      logicNode: d,
     })
   })
   return {
@@ -34,6 +35,7 @@ function buildInspectorRule(selectorNode) {
     active: true,
     loc: selectorNode.metadata?.line || '?',
     astNode: selectorNode.metadata?.astNode,
+    logicNode: selectorNode,
   }
 }
 

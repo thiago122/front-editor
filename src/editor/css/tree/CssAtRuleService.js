@@ -32,7 +32,7 @@ export class CssAtRuleService {
    * @param {string|null} [parentId]  - ID of a parent at-rule to nest inside, or null
    * @returns {Object|null} The new at-rule logic node, or null on failure
    */
-  static create(logicTree, ruleUid, type, condition, origin = 'on_page', sourceName = 'style', parentId = null) {
+  static create(logicTree, ruleUid, type, condition, origin = 'on_page', sourceName = 'style', parentId = null, insertIndex = -1) {
     const condStr = condition ?? (type === 'media' ? '(min-width: 0px)' : 'name')
 
     const atRuleAst = {
@@ -80,15 +80,25 @@ export class CssAtRuleService {
         console.error(`[CssAtRuleService] parentId "${parentId}" not found or not an at-rule`)
         return null
       }
-      parentNode.children.push(atRuleNode)
+      if (insertIndex >= 0) {
+        parentNode.children.splice(insertIndex, 0, atRuleNode)
+      } else {
+        parentNode.children.push(atRuleNode)
+      }
       const block = toRaw(parentNode.metadata.astNode)?.block
-      if (block?.children) safeAppend(block.children, atRuleAst)
+      if (block?.children) safeAppend(block.children, atRuleAst, false, insertIndex)
       return atRuleNode
     }
 
     const root     = findOrCreateRoot(logicTree, origin)
     const fileNode = findOrCreateFile(root, sourceName, origin)
-    fileNode.children.push(atRuleNode)
+    
+    if (insertIndex >= 0) {
+      fileNode.children.splice(insertIndex, 0, atRuleNode)
+    } else {
+      fileNode.children.push(atRuleNode)
+    }
+    
     return atRuleNode
   }
 

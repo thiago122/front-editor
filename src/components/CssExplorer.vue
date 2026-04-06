@@ -3,7 +3,7 @@ import { computed, ref, watch, nextTick, onMounted, onUnmounted, toRaw, watchEff
 import { useEditorStore } from '@/stores/EditorStore'
 import { useStyleStore } from '@/stores/StyleStore'
 import { CssLogicTreeService } from '@/editor/css/tree/CssLogicTreeService'
-import { findOrCreateRoot, findCssNode } from '@/editor/css/tree/_logicTreeHelpers.js'
+import { findOrCreateRoot, findCssNode, findParent } from '@/editor/css/tree/_logicTreeHelpers.js'
 import { findAndRemoveFromLogicTree } from '@/utils/astHelpers.js'
 
 import { generateId } from '@/utils/ids.js'
@@ -203,6 +203,7 @@ const updateDimensions = () => {
 }
 
 // Ctrl+F anywhere in the explorer opens the search bar
+// + atalhos de teclado para ações do CSS Explorer
 function onContainerKeydown(e) {
   if (e.key === 'f' && (e.ctrlKey || e.metaKey)) {
     e.preventDefault()
@@ -211,6 +212,65 @@ function onContainerKeydown(e) {
   }
   if (e.key === 'Escape' && searchActive.value) {
     clearSearch()
+    return
+  }
+
+  // ── Atalhos sobre o nó selecionado ──────────────────────────────────────
+  const node = selectedNode.value
+  if (!node || node.metadata?.origin === 'external') return
+
+  const key = e.key.toLowerCase()
+
+  // Ctrl+D → Duplicar (antes de Enter simples)
+  if (key === 'd' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault()
+    duplicateNode(node)
+    return
+  }
+
+  // Ctrl+M → Wrap com @media (selector only)
+  if (key === 'm' && (e.ctrlKey || e.metaKey) && node.type === 'selector') {
+    e.preventDefault()
+    wrapWithAtRule(node)
+    return
+  }
+
+  // Ctrl+Enter → ação contextual por tipo
+  if (key === 'enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault()
+    if (node.type === 'selector')  { addDeclaration(node); return }
+    if (node.type === 'at-rule')   { addRuleInContext(node); return }
+    if (node.type === 'file')      { addRuleInContext(node); return }
+    return
+  }
+
+  // Alt+↑ → Add Rule Before (selector / at-rule)
+  if (key === 'arrowup' && e.altKey && (node.type === 'selector' || node.type === 'at-rule')) {
+    e.preventDefault()
+    addRuleBeforeNode(node)
+    return
+  }
+
+  // Alt+↓ → Add Rule After (selector / at-rule)
+  if (key === 'arrowdown' && e.altKey && (node.type === 'selector' || node.type === 'at-rule')) {
+    e.preventDefault()
+    addRuleAfterNode(node)
+    return
+  }
+
+  // Delete / Backspace → Deletar nó
+  if (key === 'delete' || key === 'backspace') {
+    e.preventDefault()
+    deleteNode(node)
+    return
+  }
+
+  // F2 / Enter (sem modifier) → Editar inline
+  if (key === 'f2' || (key === 'enter' && !e.ctrlKey && !e.metaKey && !e.altKey)) {
+    e.preventDefault()
+    pendingEditId.value = node.id
+    setTimeout(() => { pendingEditId.value = null }, 200)
+    return
   }
 }
 
@@ -674,17 +734,17 @@ function openContextMenu(node, event) {
       items = [{ label: 'External — read only', icon: '🔒', disabled: true }]
     } else {
       items = [
-        { label: 'New CSS Rule', icon: '{}', action: () => addRuleInContext(node) },
+        { label: 'New CSS Rule', icon: '{}', action: () => addRuleInContext(node), shortcut: 'Ctrl+Enter' },
         { label: 'New At-Rule',  icon: '@',  action: () => addAtRuleInContext(node) },
         { divider: true },
         { label: 'Move Up',     icon: '↑',  action: () => moveFileInManifest(node, 'up') },
         { label: 'Move Down',   icon: '↓',  action: () => moveFileInManifest(node, 'down') },
         { divider: true },
-        { label: 'Rename',      icon: '✏️', action: () => renameFile(node) },
+        { label: 'Rename',      icon: '✏️', action: () => renameFile(node), shortcut: 'F2' },
         { label: 'Import CSS',  icon: '↑', action: () => openImportModal(node) },
         { label: 'Export .css', icon: '↓', action: () => downloadSheet(fileKey) },
         { divider: true },
-        { label: 'Remover arquivo', icon: '✕', action: () => deleteFile(node), danger: true },
+        { label: 'Remover arquivo', icon: '✕', action: () => deleteFile(node), danger: true, shortcut: 'Del' },
       ]
     }
   } else if (node.type === 'at-rule') {
@@ -692,12 +752,15 @@ function openContextMenu(node, event) {
       items = [{ label: 'External — read only', icon: '🔒', disabled: true }]
     } else {
       items = [
-        { label: 'New CSS Rule inside', icon: '{}', action: () => addRuleInContext(node) },
+        { label: 'New CSS Rule inside', icon: '{}', action: () => addRuleInContext(node), shortcut: 'Ctrl+Enter' },
         { label: 'New At-Rule inside',  icon: '@',  action: () => addAtRuleInContext(node) },
         { divider: true },
-        { label: 'Duplicate',           icon: '⧉',  action: () => duplicateNode(node) },
+        { label: 'Add Rule Before',     icon: '↑{}', action: () => addRuleBeforeNode(node), shortcut: 'Alt+↑' },
+        { label: 'Add Rule After',      icon: '↓{}', action: () => addRuleAfterNode(node), shortcut: 'Alt+↓' },
         { divider: true },
-        { label: 'Delete', icon: '✕', action: () => deleteNode(node), danger: true },
+        { label: 'Duplicate',           icon: '⧉',  action: () => duplicateNode(node), shortcut: 'Ctrl+D' },
+        { divider: true },
+        { label: 'Delete', icon: '✕', action: () => deleteNode(node), danger: true, shortcut: 'Del' },
       ]
     }
   } else if (node.type === 'selector') {
@@ -705,11 +768,16 @@ function openContextMenu(node, event) {
       items = [{ label: 'External — read only', icon: '🔒', disabled: true }]
     } else {
       items = [
-        { label: 'New Declaration', icon: ':', action: () => addDeclaration(node) },
+        { label: 'New Declaration', icon: ':', action: () => addDeclaration(node), shortcut: 'Ctrl+Enter' },
         { divider: true },
-        { label: 'Duplicate Rule',  icon: '⧉', action: () => duplicateNode(node) },
+        { label: 'Add Rule Before', icon: '↑{}', action: () => addRuleBeforeNode(node), shortcut: 'Alt+↑' },
+        { label: 'Add Rule After',  icon: '↓{}', action: () => addRuleAfterNode(node), shortcut: 'Alt+↓' },
         { divider: true },
-        { label: 'Delete', icon: '✕', action: () => deleteNode(node), danger: true },
+        { label: `Wrap @media (${Math.round(editorStore.viewport?.width ?? 768)}px)`, icon: '@', action: () => wrapWithAtRule(node), shortcut: 'Ctrl+M' },
+        { divider: true },
+        { label: 'Duplicate Rule',  icon: '⧉', action: () => duplicateNode(node), shortcut: 'Ctrl+D' },
+        { divider: true },
+        { label: 'Delete', icon: '✕', action: () => deleteNode(node), danger: true, shortcut: 'Del' },
       ]
     }
   } else if (node.type === 'declaration') {
@@ -717,7 +785,7 @@ function openContextMenu(node, event) {
       items = [{ label: 'External — read only', icon: '🔒', disabled: true }]
     } else {
       items = [
-        { label: 'Delete', icon: '✕', action: () => deleteNode(node), danger: true },
+        { label: 'Delete', icon: '✕', action: () => deleteNode(node), danger: true, shortcut: 'Del' },
       ]
     }
   }
@@ -830,6 +898,53 @@ function addAtRuleInContext(parentNode) {
   createAndEdit(CssLogicTreeService.createAtRule(
     styleStore.cssLogicTree, null, 'media', '(min-width: 0px)', origin, sourceName, parentId
   ))
+}
+
+/**
+ * Resolve o parentNode e o índice de um nó dentro da Logic Tree.
+ * Retorna { parentNode, index, origin, sourceName, parentId }
+ */
+function resolveNodePosition(node) {
+  const tree       = toRaw(styleStore.cssLogicTree)
+  const parentNode = findParent(tree, node.id)
+  if (!parentNode) return null
+  const index      = parentNode.children.findIndex(n => n.id === node.id)
+  const origin     = node.metadata?.origin     ?? resolveTarget().origin
+  const sourceName = node.metadata?.sourceName ?? resolveTarget().sourceName
+  // parentId só se o pai for um at-rule; se for file passamos null
+  const parentId   = parentNode.type === 'at-rule' ? parentNode.id : null
+  return { parentNode, index, origin, sourceName, parentId }
+}
+
+/** Insere uma nova CSS Rule ANTES do nó informado (mesmo pai, mesmo índice) */
+function addRuleBeforeNode(node) {
+  const pos = resolveNodePosition(node)
+  if (!pos) return
+  createAndEdit(CssLogicTreeService.createRule(
+    styleStore.cssLogicTree, '.nova-regra', pos.origin, pos.sourceName, pos.parentId, pos.index
+  ))
+}
+
+/** Insere uma nova CSS Rule DEPOIS do nó informado (mesmo pai, índice + 1) */
+function addRuleAfterNode(node) {
+  const pos = resolveNodePosition(node)
+  if (!pos) return
+  createAndEdit(CssLogicTreeService.createRule(
+    styleStore.cssLogicTree, '.nova-regra', pos.origin, pos.sourceName, pos.parentId, pos.index + 1
+  ))
+}
+
+/** Envolve uma regra selector com um @media usando a largura atual do viewport */
+function wrapWithAtRule(node) {
+  if (!node || node.type !== 'selector' || !styleStore.cssLogicTree) return
+  const vw = editorStore.viewport?.width ?? editorStore.previewBreakpoint?.width ?? 768
+  const condition = `(min-width: ${Math.round(vw)}px)`
+  const atRuleNode = CssLogicTreeService.createAtRule(
+    styleStore.cssLogicTree, node.id, 'media', condition
+  )
+  if (!atRuleNode) return
+  styleStore.applyMutation(editorStore.getIframeDoc())
+  expandToNode(node.id)
 }
 
 const refresh = async () => {
