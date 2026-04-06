@@ -1,5 +1,28 @@
 /* [data-selected] styles reserved for future use */
 
+/* ── Scrollbar vertical oculta no preview (Chrome/Safari/Edge) ───────────────
+   Quando webkit estiliza ::-webkit-scrollbar, entra em "modo customizado":
+   todos os componentes da barra precisam ser definidos explicitamente ou
+   ficam invisíveis — mesmo que o overflow exista.
+
+   Solução: width:0  → vertical some (não rouba largura do viewport)
+            height:8px → horizontal permanece visível (detecta overflow)
+            thumb explícito → sem isso o webkit não renderiza o handle.    */
+html::-webkit-scrollbar {
+  width:  0;    /* vertical: invisível — não afeta o viewport width */
+  height: 8px;  /* horizontal: visível — overflow horizontal detectável */
+}
+html::-webkit-scrollbar-thumb:horizontal {
+  background: #3b82f6; /* blue-500 */
+  border-radius: 4px;
+}
+html::-webkit-scrollbar-track:horizontal {
+  background: rgba(59, 130, 246, 0.08); /* blue-500 @ 8% */
+}
+/* Firefox: scrollbar-width não suporta eixo individual.
+   Não aplicamos nada — viewport fica ~9 px menor (scrollbar fina nativa),
+   mas ambas as barras permanecem visíveis e funcionais.                   */
+
 
 #__ast-overlay__ {
   position: fixed;

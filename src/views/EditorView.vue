@@ -150,7 +150,7 @@ onUnmounted(() => window.removeEventListener('keydown', handleGlobalKeydown))
 
 // Auto-open CSS Explorer when a rule navigation is requested from the Inspector
 watch(() => styleStore.explorerScrollRequest, (v) => {
-  if (v > 0) activeExplorer.value = 'css'
+  if (v > 0) EditorStore.showCssExplorer = true
 })
 
 const handleHtmlLoad = (newHtml) => {
@@ -217,7 +217,13 @@ onMounted(() => {
 const previewWidth = ref(1280)
 const previewUnit = ref('px')
 
-// outros
+function startPreviewResizeRight(e) { previewUnit.value = 'px'; startResize(e, previewWidth, { min: 320, max: 4000, direction: 1, multiplier: 2 }) }
+function startPreviewResizeLeft(e)  { previewUnit.value = 'px'; startResize(e, previewWidth, { min: 320, max: 4000, direction: -1, multiplier: 2 }) }
+
+watch([previewWidth, previewUnit], ([w, u]) => {
+  EditorStore.setPreviewBreakpoint(w, u)
+})
+
 const pipeline = new Pipeline()
 pipeline.use(htmlPlugin())
 
@@ -301,6 +307,7 @@ watch(
           (e) => {
             previewWidth = e.width
             previewUnit = e.unit
+            EditorStore.setPreviewBreakpoint(e.width, e.unit)
           }
         " />
       </div>
@@ -535,8 +542,24 @@ watch(
                style="position: relative">
             <HighlightOverlay mode="hover" />
             <HighlightOverlay mode="selection" />
-            <Preview :html="EditorStore.ctx?.output" class="w-full h-full bg-gray-200 transition-all duration-300 border border-gray-300 "
-              :style="{ width: previewWidth + previewUnit }" />
+            <div class="relative shrink-0 flex items-stretch"
+                 :style="{ width: previewWidth + previewUnit, transition: isResizing ? 'none' : 'width 0.3s' }">
+              <Preview :html="EditorStore.ctx?.output" class="w-full h-full bg-gray-200 border-0" />
+              <!-- Handle Direita -->
+              <div
+                class="absolute right-0 top-0 bottom-0 w-3 -mr-1.5 cursor-col-resize hover:bg-blue-500/30 z-50 flex items-center justify-center group"
+                @mousedown="startPreviewResizeRight"
+              >
+                <div class="w-1 h-8 bg-gray-400/50 rounded-full group-hover:bg-blue-600"></div>
+              </div>
+              <!-- Handle Esquerda -->
+              <div
+                class="absolute left-0 top-0 bottom-0 w-3 -ml-1.5 cursor-col-resize hover:bg-blue-500/30 z-50 flex items-center justify-center group"
+                @mousedown="startPreviewResizeLeft"
+              >
+                <div class="w-1 h-8 bg-gray-400/50 rounded-full group-hover:bg-blue-600"></div>
+              </div>
+            </div>
             <!-- Pixel Perfect overlay + painel de controles -->
             <PixelPerfectOverlay :containerEl="previewContainerEl" />
           </div>

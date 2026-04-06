@@ -31,7 +31,8 @@ export const useEditorStore = defineStore('editor', () => {
   const currentDocument = ref(null)
   const iframe = ref(null)
   const previewContainer = ref(null) // wrapper do <Preview> — base para position:absolute do overlay
-  const viewport = ref({ width: window.innerWidth, height: window.innerHeight })
+  const viewport         = ref({ width: window.innerWidth, height: window.innerHeight })
+  const previewBreakpoint = ref({ width: 1280, unit: 'px' }) // breakpoint selecionado pelo usuário
   const manipulation = ref(null)
   const clipboard         = ref({ type: null, data: null }) // Clipboard tipado
   const showCssExplorer   = ref(false)                      // CSS Explorer visível ao lado do inspector
@@ -298,6 +299,9 @@ export const useEditorStore = defineStore('editor', () => {
   function setViewport(width, height) {
     viewport.value = { width, height }
   }
+  function setPreviewBreakpoint(width, unit) {
+    previewBreakpoint.value = { width, unit }
+  }
   function handleHover({ id, source }) {
     hoveredNodeId.value = id
 
@@ -467,6 +471,8 @@ export const useEditorStore = defineStore('editor', () => {
     loadHTML,
     viewport,
     setViewport,
+    previewBreakpoint,
+    setPreviewBreakpoint,
     selectParent,
     iframe,
     previewContainer,

@@ -55,6 +55,16 @@
     >
       <IconBreakpoint2XL /><span class="text-[10px]">full</span>
     </div>
+
+    <div class="ml-1 flex items-center bg-gray-100 rounded px-1.5 focus-within:bg-white focus-within:ring-1 focus-within:ring-blue-400 group h-full py-1">
+      <input
+        type="number"
+        class="w-10 text-right bg-transparent text-[11px] outline-none font-mono text-gray-700"
+        :value="previewWidth"
+        @change="(e) => update(Number(e.target.value), 'px')"
+      />
+      <span class="text-[10px] text-gray-400 ml-0.5">px</span>
+    </div>
   </div>
 </template>
 

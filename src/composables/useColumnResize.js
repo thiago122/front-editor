@@ -29,12 +29,13 @@ export function useColumnResize() {
   let _min       = 0
   let _max       = Infinity
   let _direction = 1 // +1 = handle à direita da coluna, -1 = handle à esquerda
+  let _multiplier = 1
 
   // ─── Handlers de documento ────────────────────────────────────────────────
 
   function onMouseMove(e) {
     if (!_widthRef) return
-    const delta     = (e.clientX - _startX) * _direction
+    const delta     = (e.clientX - _startX) * _direction * _multiplier
     const newWidth  = Math.min(_max, Math.max(_min, _startW + delta))
     _widthRef.value = newWidth
   }
@@ -59,8 +60,9 @@ export function useColumnResize() {
    * @param {number} [options.min=100]      - Largura mínima em px
    * @param {number} [options.max=Infinity] - Largura máxima em px
    * @param {number} [options.direction=1]  - +1 se handle à direita, -1 se à esquerda
+   * @param {number} [options.multiplier=1] - Fator de multiplicação do movimento do mouse
    */
-  function startResize(e, widthRef, { min = 100, max = Infinity, direction = 1 } = {}) {
+  function startResize(e, widthRef, { min = 100, max = Infinity, direction = 1, multiplier = 1 } = {}) {
     e.preventDefault()
 
     _widthRef  = widthRef
@@ -69,6 +71,7 @@ export function useColumnResize() {
     _min       = min
     _max       = max
     _direction = direction
+    _multiplier = multiplier
 
     isResizing.value             = true
     document.body.style.cursor   = 'col-resize'
