@@ -18,6 +18,7 @@ window.__EDITOR_CONFIG__ = {
     renameAsset:      { method: 'POST',   url: 'http://editor.test/api/?action=rename_asset'        },
     deleteAsset:      { method: 'DELETE', url: 'http://editor.test/api/?action=delete_asset'        },
     reorderAssets:    { method: 'POST',   url: 'http://editor.test/api/?action=reorder_assets'      },
+    saveManifest:     { method: 'POST',   url: 'http://editor.test/api/?action=save_manifest'       },
     trashAsset:       { method: 'POST',   url: 'http://editor.test/api/?action=trash_asset'         },
     restoreFromTrash: { method: 'POST',   url: 'http://editor.test/api/?action=restore_from_trash'  },
     listTrash:        { method: 'GET',    url: 'http://editor.test/api/?action=list_trash'          },

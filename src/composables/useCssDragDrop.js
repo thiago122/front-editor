@@ -151,11 +151,16 @@ export function useCssDragDrop() {
             sourceParent.children.splice(finalIdx, 0, dragged)
             moved = true
 
-            // Persiste a nova ordem no manifesto
+            // Atualiza o cssManifest no StyleStore preservando types
             const paths = sourceParent.children
               .map(n => n.metadata?.sourceName)
               .filter(Boolean)
             if (paths.length > 0) {
+              const currentManifest = styleStore.getManifest()
+              const byPath = Object.fromEntries(currentManifest.map(e => [e.path, e]))
+              const newManifest = paths.map(p => byPath[p] ?? { path: p, type: 'internal' })
+              styleStore.setManifest(newManifest)
+
               ApiService.reorderAssets(paths).catch(err =>
                 console.error('[useCssDragDrop] reorderAssets falhou:', err)
               )

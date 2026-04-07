@@ -89,7 +89,10 @@ const isFullyExpanded = computed(() => {
 // When the selected rule changes, expand all its ancestors so it becomes
 // visible in the tree — works at any nesting depth (root > file > @media > selector).
 watch(() => styleStore.selectedRuleId, (id) => {
-  if (id) expandToNode(id)
+  if (id) {
+    expandToNode(id)
+    selectedTreeNodeId.value = id
+  }
 })
 
 // When navigateToRule() is called from the Inspector, expand ancestors of the
@@ -188,6 +191,8 @@ const matchCount = computed(() => {
 // ============================================
 
 const containerRef = ref(null)
+const explorerRef = ref(null)
+const selectedTreeNodeId = ref(null)
 const scrollTop = ref(0)
 const containerHeight = ref(400)
 const ROW_HEIGHT = 22
@@ -202,9 +207,26 @@ const updateDimensions = () => {
   }
 }
 
-// Ctrl+F anywhere in the explorer opens the search bar
-// + atalhos de teclado para ações do CSS Explorer
-function onContainerKeydown(e) {
+/** Gerencia a seleção local do CssExplorer quando um nó é clicado */
+function onNodeSelect(node) {
+  if (!node) return
+  selectedTreeNodeId.value = node.id
+}
+
+/**
+ * Listener global de teclado — atalhos do CSS Explorer.
+ * Não depende de foco no container; basta o Explorer estar visível
+ * e um nó estar selecionado.
+ */
+function onExplorerKeydown(e) {
+  // Só funciona quando o Explorer está visível
+  if (!editorStore.showCssExplorer) return
+
+  // Não interceptar eventos de input/textarea/contenteditable
+  const tag = e.target.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable) return
+
+  // Ctrl+F → Busca
   if (e.key === 'f' && (e.ctrlKey || e.metaKey)) {
     e.preventDefault()
     openSearch()
@@ -221,7 +243,7 @@ function onContainerKeydown(e) {
 
   const key = e.key.toLowerCase()
 
-  // Ctrl+D → Duplicar (antes de Enter simples)
+  // Ctrl+D → Duplicar
   if (key === 'd' && (e.ctrlKey || e.metaKey)) {
     e.preventDefault()
     duplicateNode(node)
@@ -277,9 +299,7 @@ function onContainerKeydown(e) {
 onMounted(() => {
   updateDimensions()
   window.addEventListener('resize', updateDimensions)
-  // Se o painel foi aberto por navigateToRule(), o watcher de explorerScrollRequest
-  // já disparou antes do componente estar montado. Reaplicar aqui garante que o
-  // primeiro clique funcione corretamente.
+  window.addEventListener('keydown', onExplorerKeydown)
   if (styleStore.explorerHighlightId) {
     scrollToHighlighted()
   }
@@ -287,6 +307,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', updateDimensions)
+  window.removeEventListener('keydown', onExplorerKeydown)
 })
 
 // ============================================
@@ -296,9 +317,9 @@ onUnmounted(() => {
 // ID do nó que deve abrir em modo de edição inline após ser criado.
 const pendingEditId = ref(null)
 
-/** Nó atualmente selecionado na árvore (via styleStore.selectedRuleId) */
+/** Nó atualmente selecionado na árvore (via seleção local do Explorer) */
 const selectedNode = computed(() => {
-  const id = styleStore.selectedRuleId
+  const id = selectedTreeNodeId.value
   if (!id || !styleStore.cssLogicTree) return null
   return findCssNode(toRaw(styleStore.cssLogicTree), id) ?? null
 })
@@ -461,6 +482,10 @@ async function deleteFile(fileNodeCopy) {
   const sourceName = realNode.metadata?.sourceName
   const label      = realNode.label
 
+  // Remove do cssManifest no StyleStore antes do trash
+  const updatedManifest = styleStore.getManifest().filter(e => e.path !== sourceName && e.path !== label)
+  styleStore.setManifest(updatedManifest)
+
   /** Verifica se um elemento DOM corresponde ao arquivo pelo sourceName/label */
   function matches(el) {
     const vals = [
@@ -551,14 +576,14 @@ async function createStylesheet(type, href = null) {
   if (!doc) { console.warn('[createStylesheet] doc é null — abortando'); return }
 
   if (type === 'on_page') {
-    // Sem arquivo no disco — apenas injeta <style> no iframe
+    // Sem arquivo no disco — apenas injeta <style> no iframe (não vai no manifesto)
     const el = doc.createElement('style')
     el.setAttribute('data-location', 'on_page')
     el.textContent = ':root {}'
     doc.head.appendChild(el)
 
   } else if (type === 'internal') {
-    // 1. Cria o arquivo físico no disco e atualiza o manifest.json
+    // 1. Cria o arquivo físico no disco (o backend adiciona ao manifest.json)
     let finalPath = href
     try {
       const res  = await ApiService.createAsset(href, 'css')
@@ -568,23 +593,29 @@ async function createStylesheet(type, href = null) {
       console.warn('[createStylesheet] createAsset:', err.message)
     }
 
-    // 2. Injeta <style data-location="internal"> no iframe para o editor reconhecer
+    // 2. Atualiza o cssManifest no StyleStore (fonte de verdade no frontend)
+    const manifest = styleStore.getManifest()
+    const alreadyInManifest = manifest.some(e => e.path === finalPath)
+    if (!alreadyInManifest) {
+      styleStore.setManifest([...manifest, { path: finalPath, type: 'internal' }])
+    }
+
+    // 3. Injeta <style data-location="internal"> no iframe para o editor reconhecer
     const el = doc.createElement('style')
     el.setAttribute('data-location', 'internal')
+    el.setAttribute('data-manifest-path', finalPath)
     el.setAttribute('data-source-name', finalPath)
     el.textContent = ':root {}'
     doc.head.appendChild(el)
 
   } else if (type === 'external') {
-    // Sem arquivo no disco — apenas injeta <link> no iframe
+    // Sem arquivo no disco — injeta <link> no iframe e adiciona ao manifesto
     const el = doc.createElement('link')
     el.rel  = 'stylesheet'
     el.href = href
     el.setAttribute('data-location', 'external')
 
-    // Define um nome legível para o explorer:
-    //   - Se a URL aponta para um arquivo .css → usa o nome do arquivo (ex: "normalize.css")
-    //   - Senão → usa o hostname (ex: "fonts.googleapis.com")
+    // Define um nome legível para o explorer
     let sourceName = href
     try {
       const url      = new URL(href)
@@ -595,12 +626,17 @@ async function createStylesheet(type, href = null) {
 
     doc.head.appendChild(el)
 
-    // Atualiza o contexto do pipeline para que o HTML Explorer
-    // e o save pelo pipeline reflitam o novo <link>
+    // Atualiza o cssManifest no StyleStore
+    const manifest = styleStore.getManifest()
+    const alreadyInManifest = manifest.some(e => e.path === href)
+    if (!alreadyInManifest) {
+      styleStore.setManifest([...manifest, { path: href, type: 'external' }])
+    }
+
+    // Atualiza o contexto do pipeline para que o HTML Explorer reflita o novo <link>
     const pipelineCtx = editorStore.ctx
     if (pipelineCtx) {
       pipelineCtx.headHTML = doc.head.innerHTML
-      // Adiciona um nó simples no ctx.ast (head node) para o HTML Explorer
       const headNode = pipelineCtx.ast?.children?.find(c => c.tag === 'head')
       if (headNode) {
         const { generateId } = await import('@/utils/ids')
@@ -845,33 +881,27 @@ function renameFile(fileNodeCopy) {
  * @param {'up'|'down'} direction
  */
 async function moveFileInManifest(fileNode, direction) {
-  const doc = editorStore.getIframeDoc()
-  if (!doc) return
+  // 1. Trabalha diretamente com o cssManifest do StyleStore (fonte de verdade)
+  const manifest = styleStore.getManifest()
+  if (manifest.length < 2) return
 
-  // 1. Coletar todos os <style data-location="internal"> em ordem DOM
-  const styleEls = Array.from(
-    doc.querySelectorAll('style[data-location="internal"][data-manifest-path]')
-  )
-  if (styleEls.length < 2) return
-
-  // 2. Montar a lista de paths na ordem atual
-  const paths = styleEls.map(el => el.getAttribute('data-manifest-path'))
-
-  // 3. Identificar índice do arquivo alvo via sourceName == el.id
-  const targetPath = styleEls.find(el => el.id === fileNode.metadata?.sourceName)
-    ?.getAttribute('data-manifest-path')
-    ?? fileNode.metadata?.sourceName  // fallback
-
-  const idx = paths.indexOf(targetPath)
+  // 2. Identifica o path do arquivo alvo
+  const targetPath = fileNode.metadata?.sourceName ?? fileNode.label
+  const idx = manifest.findIndex(e => e.path === targetPath)
   if (idx === -1) return
 
   const swapIdx = direction === 'up' ? idx - 1 : idx + 1
-  if (swapIdx < 0 || swapIdx >= paths.length) return
+  if (swapIdx < 0 || swapIdx >= manifest.length) return
 
-  // 4. Trocar posições
-  ;[paths[idx], paths[swapIdx]] = [paths[swapIdx], paths[idx]]
+  // 3. Trocar posições (preservando os objetos {path, type})
+  const newManifest = [...manifest]
+  ;[newManifest[idx], newManifest[swapIdx]] = [newManifest[swapIdx], newManifest[idx]]
 
-  // 5. Persistir no manifesto
+  // 4. Atualiza o StyleStore
+  styleStore.setManifest(newManifest)
+
+  // 5. Persiste no backend (envia apenas os paths, o backend preserva os types)
+  const paths = newManifest.map(e => e.path)
   try {
     await ApiService.reorderAssets(paths)
     console.log('[CssExplorer] reorderAssets OK:', paths)
@@ -1090,10 +1120,9 @@ const itemsOffset = computed(() => startIndex.value * ROW_HEIGHT)
 
 <template>
     <div
+      ref="explorerRef"
       class="flex flex-col h-full bg-white border-r border-[#d1d1d1]"
-      @keydown="onContainerKeydown"
       @click="newSheetMenu = false"
-      tabindex="-1"
     >
         <!-- Header -->
         <div class="px-2 py-1.5 bg-gradient-to-b from-gray-100 to-gray-50 border-b border-gray-200 flex items-center gap-1 shrink-0">
@@ -1273,6 +1302,7 @@ const itemsOffset = computed(() => startIndex.value * ROW_HEIGHT)
                         :searchQuery="node.searchQuery"
                         :isActive="node.isActive"
                         :inactiveReason="node.inactiveReason"
+                        :selectedNodeId="selectedTreeNodeId"
                         style="height: 22px;"
                         @dragstart="onDragStart"
                         @dragover="onDragOver"
@@ -1280,6 +1310,7 @@ const itemsOffset = computed(() => startIndex.value * ROW_HEIGHT)
                         @dragend="onDragEnd"
                         @contextmenu="openContextMenu"
                         @import-css="openImportModal"
+                        @select="onNodeSelect"
                     />
                 </div>
             </div>

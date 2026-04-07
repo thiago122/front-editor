@@ -13,6 +13,7 @@ import { FileAccessService } from '@/editor/css/export/FileAccessService'
 import { HtmlExportService } from '@/editor/css/export/HtmlExportService'
 import { ApiService } from '@/services/ApiService'
 import { CssExportService } from '@/editor/css/export/CssExportService'
+import { DocumentNormalizer } from '@/editor/css/export/DocumentNormalizer'
 import { editorHooks } from '@/editor/HookManager'
 
 export const useEditorStore = defineStore('editor', () => {
@@ -379,7 +380,8 @@ export const useEditorStore = defineStore('editor', () => {
 
   /**
    * Abre um documento via API e carrega o HTML no editor.
-   * Resolve URLs relativas (CSS, imagens, JS) para absolutas usando assetsBaseUrl do config.js.
+   * Recebe { html, manifest, baseUrl } do backend.
+   * O DocumentNormalizer injeta os <link> com URLs absolutas antes de carregar no iframe.
    * @param {{ id, title, type, path }} doc
    */
   async function openDocument(doc) {
@@ -389,15 +391,21 @@ export const useEditorStore = defineStore('editor', () => {
 
       await editorHooks.emitAsync('document:beforeOpen', { doc, docPath })
 
-      const { html } = await ApiService.readDocument(docPath)
+      const { html, manifest, baseUrl } = await ApiService.readDocument(docPath)
       console.log('[EditorStore] html recebido, length:', html?.length)
+
+      // Armazena o manifesto como fonte de verdade no StyleStore
+      styleStore.setManifest(manifest ?? [])
+
+      // Injeta <link> com URLs absolutas para o iframe renderizar os CSS
+      const preparedHtml = DocumentNormalizer.prepareForEditor(html, manifest ?? [], baseUrl ?? '')
 
       currentDocument.value = doc
       fileName.value        = doc.title ?? docPath
-      loadHTML(html)
+      loadHTML(preparedHtml)
       console.log('[EditorStore] loadHTML chamado, ctx:', !!ctx.value)
 
-      editorHooks.emit('document:afterOpen', { doc, docPath, html, ctx: ctx.value })
+      editorHooks.emit('document:afterOpen', { doc, docPath, html: preparedHtml, ctx: ctx.value })
     } catch (e) {
       console.error('[EditorStore] openDocument ERRO:', e)
       throw e
@@ -406,9 +414,11 @@ export const useEditorStore = defineStore('editor', () => {
 
   /**
    * Salva o HTML atual via API no documento aberto.
-   * Também salva todos os CSS internos (editáveis) para garantir
-   * que alterações de CSS não se percam.
-   * Chamado por Ctrl+S e pelo botão de salvar quando há currentDocument.
+   * 1. Gera HTML do iframe e aplica hooks (limpeza de atributos, prettier)
+   * 2. DocumentNormalizer.prepareForSave() injeta <link> relativos limpos
+   * 3. Salva HTML no backend (file_put_contents puro)
+   * 4. Salva todos os CSS internos editáveis
+   * 5. Salva o manifesto atual
    */
   async function saveDocument() {
     const doc = currentDocument.value
@@ -422,11 +432,16 @@ export const useEditorStore = defineStore('editor', () => {
 
     await editorHooks.emitAsync('document:beforeSave', savePayload)
 
-    // Usa o html possivelmente modificado pelos hooks
-    await ApiService.saveDocument(doc.path ?? doc.id, savePayload.html)
-    console.log('[EditorStore] saveDocument: HTML salvo', doc.path ?? doc.id)
+    // 2. Normaliza o HTML: remove estilos do editor, injeta <link> relativos limpos
+    const docPath = doc.path ?? doc.id
+    const manifest = styleStore.getManifest()
+    savePayload.html = DocumentNormalizer.prepareForSave(savePayload.html, manifest, docPath)
 
-    // 2. Salva todos os CSS internos (ignorando on_page e externos)
+    // 3. Salva HTML no backend
+    await ApiService.saveDocument(docPath, savePayload.html)
+    console.log('[EditorStore] saveDocument: HTML salvo', docPath)
+
+    // 4. Salva todos os CSS internos (ignorando on_page e externos)
     const logicTree = styleStore.cssLogicTree
     if (logicTree) {
       const sheets = CssExportService.generateAll(logicTree)
@@ -441,6 +456,11 @@ export const useEditorStore = defineStore('editor', () => {
       })
       await Promise.all(saves)
     }
+
+    // 5. Salva o manifesto atualizado
+    await ApiService.saveManifest(manifest)
+      .then(() => console.log('[EditorStore] Manifesto salvo'))
+      .catch(err => console.error('[EditorStore] Erro ao salvar manifesto:', err))
 
     editorHooks.emit('document:afterSave', { doc, html: savePayload.html })
 

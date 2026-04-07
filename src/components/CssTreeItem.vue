@@ -14,13 +14,14 @@ const props = defineProps({
   searchQuery:    { type: String,  default: '' },
   isActive:       { type: Boolean, default: true },
   inactiveReason: { type: String,  default: null },
+  selectedNodeId: { type: String,  default: null },
 })
 
-const emit = defineEmits(['dragstart', 'dragover', 'drop', 'dragend', 'contextmenu', 'import-css'])
+const emit = defineEmits(['dragstart', 'dragover', 'drop', 'dragend', 'contextmenu', 'import-css', 'select'])
 
 const hasChildren   = computed(() => props.node.children?.length > 0)
 const isExpanded    = computed(() => props.node.isExpanded ?? false)
-const isSelected    = computed(() => styleStore.selectedRuleId === props.node.id)
+const isSelected    = computed(() => props.selectedNodeId === props.node.id)
 const isHighlighted = computed(() => styleStore.explorerHighlightId === props.node.id)
 const isDraggable   = computed(() => props.node.type !== 'root')
 
@@ -126,10 +127,10 @@ const handleClick = (e) => {
   // Ctrl + Shift + Click → força edição no Inspector
   if (e.ctrlKey && e.shiftKey) {
     e.stopPropagation()
-    console.log('[CssTreeItem] Ctrl+Shift+Click acionado!', props.node.type, props.node.id)
     if (props.node.type === 'selector' || props.node.type === 'at-rule') {
       styleStore.selectRule(props.node.id, 'explorer')
     }
+    emit('select', props.node)
     return
   }
 
@@ -141,6 +142,11 @@ const handleClick = (e) => {
   }
 
   if (hasChildren.value) props.node.onToggle?.()
+
+  // Seleciona no explorer (todos os tipos de nó)
+  emit('select', props.node)
+
+  // Sincroniza com inspector (apenas selector/at-rule)
   if (props.node.type === 'selector' || props.node.type === 'at-rule') {
     styleStore.selectRule(props.node.id)
   }
@@ -186,7 +192,7 @@ function highlightSegments(text, query) {
     class="relative font-mono text-[11px] select-none border-b border-gray-50/50"
     :class="[
       rowClass,
-      isSelected    ? 'bg-blue-50 !border-blue-200' :
+      isSelected    ? 'bg-blue-100 !border-blue-300 ring-1 ring-inset ring-blue-400/40' :
       isHighlighted ? 'bg-amber-50 !border-amber-300 ring-1 ring-amber-300 ring-inset' :
       (node.type !== 'root' ? 'hover:bg-gray-50' : ''),
       isDragging   ? 'opacity-40' : '',

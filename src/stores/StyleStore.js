@@ -73,6 +73,13 @@ export const useStyleStore = defineStore('style', () => {
    */
   const copiedStyle = ref(null)
 
+  /**
+   * Manifesto CSS atual — [{path, type}] na ordem do <head>.
+   * type: 'internal' | 'external' | 'ignore'
+   * Fonte de verdade no frontend. Atualizado por openDocument e operações do CssExplorer.
+   */
+  const cssManifest = ref([])
+
   /** CSS rule groups shown in the Inspector. Updated by updateInspectorRules(). */
   const ruleGroups = ref([])
 
@@ -110,6 +117,22 @@ export const useStyleStore = defineStore('style', () => {
   /** Switch the active pseudo-state/element tab and refresh inspector rules. */
   function setActivePseudoTab(tab) {
     activePseudoTab.value = tab
+  }
+
+  /**
+   * Define o manifesto CSS atual (chamado por openDocument).
+   * @param {Array<{path: string, type: string}>} manifest
+   */
+  function setManifest(manifest) {
+    cssManifest.value = manifest ?? []
+  }
+
+  /**
+   * Retorna o manifesto CSS atual.
+   * @returns {Array<{path: string, type: string}>}
+   */
+  function getManifest() {
+    return cssManifest.value
   }
 
   /** Select a rule — syncs Inspector and Explorer simultaneously. */
@@ -201,6 +224,7 @@ export const useStyleStore = defineStore('style', () => {
 
   return {
     cssLogicTree,
+    cssManifest,
     selectedRuleId,
     explorerHighlightId,
     explorerScrollRequest,
@@ -219,5 +243,7 @@ export const useStyleStore = defineStore('style', () => {
     updateInspectorRules,
     copyStyle,
     clearCopiedStyle,
+    setManifest,
+    getManifest,
   }
 })

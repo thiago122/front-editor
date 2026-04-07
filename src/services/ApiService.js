@@ -68,9 +68,9 @@ export const ApiService = {
   },
 
   /**
-   * Lê o HTML de um documento e seus assets associados.
+   * Lê o HTML de um documento, seu manifesto e a baseUrl para resolver URLs.
    * @param {string} path - Caminho relativo do documento (ex: 'teste-2/index.html')
-   * @returns {Promise<{html: string, assets: Array}>}
+   * @returns {Promise<{html: string, manifest: Array<{path: string, type: string}>, baseUrl: string}>}
    */
   readDocument(path) {
     return call('readDocument', { params: { path } })
@@ -136,6 +136,14 @@ export const ApiService = {
    */
   reorderAssets(paths) {
     return call('reorderAssets', { body: { paths } })
+  },
+
+  /**
+   * Salva o manifesto CSS no backend.
+   * @param {Array<{path: string, type: string}>} manifest
+   */
+  saveManifest(manifest) {
+    return call('saveManifest', { body: { manifest } })
   },
 
   /**
