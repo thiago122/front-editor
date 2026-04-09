@@ -2,6 +2,7 @@
 // EditorView.vue
 
 import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
+import { useRoute } from 'vue-router'
 
 import { Pipeline } from '@/editor/pipeline/pipeline'
 import { htmlPlugin } from '@/editor/pipeline/plugins/html-plugin'
@@ -21,6 +22,7 @@ import ASTExplorer from '@/components/ASTExplorer.vue'
 import CssExplorer from '@/components/CssExplorer.vue'
 import Preview from '@/components/Preview.vue'
 import Breadcrumbs from '@/components/Breadcrumbs.vue'
+import CodeEditor from '@/components/CodeEditor.vue'
 const EditorStore = useEditorStore()
 const styleStore  = useStyleStore()
 
@@ -58,15 +60,18 @@ import { CssLogicTreeService } from '@/editor/css/tree/CssLogicTreeService.js'
 import { HtmlExportService } from '@/editor/css/export/HtmlExportService.js'
 import { AutoSaveService, AUTOSAVE_INTERVAL_MS } from '@/editor/css/export/AutoSaveService.js'
 import AutoSaveRecoveryBanner from '@/components/AutoSaveRecoveryBanner.vue'
+import SaveStatus from '@/components/SaveStatus.vue'
 import { useColumnResize } from '@/composables/useColumnResize.js'
 
 const { startResize, isResizing } = useColumnResize()
 const pixelPerfect = usePixelPerfect()
+const route = useRoute()
 
 // ─── Larguras das colunas redimensionáveis (em px) ──────────────────────────
 const layerWidth     = ref(280)  // col-layer    (HTML Explorer)
 const cssWidth       = ref(450)  // col-css      (CSS Explorer)
 const inspectorWidth = ref(300)  // col-panel-inspector
+const codeEditorHeight = ref(250) // Altura do editor de código
 
 // No template, Vue faz auto-unwrap de refs (layerWidth → 280).
 // Usar funções no script garante que o ref correto é passado ao composable.
@@ -74,6 +79,10 @@ function startLayerResize(e)        { startResize(e, layerWidth,     { min: 160,
 function startCssResize(e)          { startResize(e, cssWidth,       { min: 220, max: 680 }) }
 function startCssRightResize(e)     { startResize(e, cssWidth,       { min: 220, max: 680, direction: -1 }) }
 function startInspectorResize(e)    { startResize(e, inspectorWidth, { min: 200, max: 520, direction: -1 }) }
+
+function startCodeEditorResize(e) {
+  startResize(e, codeEditorHeight, { min: 100, max: 800, direction: -1, axis: 'y' })
+}
 
 const isSaveModalOpen  = ref(false)
 const isImportModalOpen = ref(false)
@@ -162,15 +171,25 @@ onMounted(async () => {
   // Verifica se existe backup da sessão anterior antes de carregar a página
   pendingSave.value = AutoSaveService.load()
 
-  // Só carrega a página de teste quando o editor foi aberto diretamente
-  // (sem selecionar documento no HomeView).
-  // Quando vem do HomeView, EditorStore.openDocument() já carregou o HTML.
-  // if (!EditorStore.currentDocument) {
-  //   await loadExternalTestPage()
-  // }
+  // Se houver um path na URL, carrega o documento correspondente
+  const path = route.query.path
+  if (path && EditorStore.currentDocument?.path !== path) {
+    try {
+      await EditorStore.openDocumentByPath(path)
+    } catch (e) {
+      console.error('[EditorView] Erro ao carregar documento da URL:', e)
+    }
+  }
 
   // Inicia o auto-save periódico após carregar a página
   autoSaveTimer = setInterval(runAutoSave, AUTOSAVE_INTERVAL_MS)
+})
+
+// Observa mudanças na URL (navegação entre documentos)
+watch(() => route.query.path, async (newPath) => {
+  if (newPath && EditorStore.currentDocument?.path !== newPath) {
+    await EditorStore.openDocumentByPath(newPath)
+  }
 })
 
 onUnmounted(() => {
@@ -570,6 +589,17 @@ watch(
           <div class="shrink-0 max-w-full" style="position: relative;">
               <Breadcrumbs />
           </div>
+
+          <!-- Code Editor Integrado (v-if para otimização radical) -->
+          <div v-if="EditorStore.showCodeEditor" class="shrink-0 flex flex-col" :style="{ height: codeEditorHeight + 'px' }">
+            <!-- Handle Superior (Vertical) -->
+            <div 
+              class="h-1 cursor-row-resize bg-transparent hover:bg-indigo-400/40 transition-colors z-[1001] border-t border-gray-300"
+              title="Arrastar para ajustar altura do código"
+              @mousedown="startCodeEditorResize"
+            />
+            <CodeEditor />
+          </div>
     
       </div>
 
@@ -609,9 +639,6 @@ watch(
 
     <CssOutputModal :isOpen="isSaveModalOpen" @close="isSaveModalOpen = false" />
     <HtmlImportModal :isOpen="isImportModalOpen" @close="isImportModalOpen = false" @load="handleHtmlLoad" />
+    <SaveStatus />
   </div>
-  <!-- container main-->
-  <!-- <div>
-    <CodeEditor></CodeEditor>
-  </div> -->
 </template>

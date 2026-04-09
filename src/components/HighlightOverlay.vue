@@ -2,6 +2,7 @@
 import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
 import { NodeDispatcher } from '@/editor/dispatchers/NodeDispatcher'
+import NodeToolbar from '@/components/NodeToolbar.vue'
 import TagAutocomplete from '@/components/TagAutocomplete.vue'
 import { tagToHtml } from '@/editor/html/htmlTags'
 import { TEXT_EDITABLE_TAGS } from '@/editor/html/htmlConstants'
@@ -151,47 +152,6 @@ const rect = computed(() => {
   }
 })
 
-// ── Controles de seleção (apenas mode=selection) ─────────────────────────────
-
-const selNodeId = computed(() => props.mode === 'selection' ? EditorStore.selectedNodeId : null)
-
-const selParent = computed(() =>
-  selNodeId.value ? EditorStore.getParent(selNodeId.value) : null
-)
-
-const selIndex = computed(() => {
-  if (!selParent.value?.children || !selNodeId.value) return -1
-  return selParent.value.children.findIndex(c => c.nodeId === selNodeId.value)
-})
-
-const canMoveUp   = computed(() => selIndex.value > 0)
-const canMoveDown = computed(() =>
-  selParent.value && selIndex.value < selParent.value.children.length - 1
-)
-
-function selectParent() {
-  if (selParent.value) EditorStore.selectParent()
-}
-
-function moveUp()        { if (canMoveUp.value)   NodeDispatcher.moveNode(selNodeId.value, -1) }
-function moveDown()      { if (canMoveDown.value) NodeDispatcher.moveNode(selNodeId.value,  1) }
-function deleteNode()    { if (selNodeId.value) NodeDispatcher.deleteNode(selNodeId.value) }
-function duplicateNode() { if (selNodeId.value) NodeDispatcher.duplicateNode(selNodeId.value) }
-
-// ── Edição de texto inline (botão "T") ────────────────────────────────────────
-
-/** True se a tag selecionada suporta edição de texto inline */
-const canEditText = computed(() => {
-  const el = EditorStore.selectedElement
-  if (!el) return false
-  return TEXT_EDITABLE_TAGS.includes(el.tagName.toLowerCase())
-})
-
-/**
- * Inicia a edição inline no elemento selecionado.
- * Delega ao useInlineEdit via a função registrada no store pelo Preview.vue.
- * Desativa o inspectMode para que o clickHandler do iframe não interfira durante a edição.
- */
 function startTextEdit() {
   const el = EditorStore.selectedElement
   if (!el) return
@@ -201,32 +161,14 @@ function startTextEdit() {
   }
 }
 
-// ── Autocomplete de tags (botões + e ↳) ──────────────────────────────────────
+const selNodeId = computed(() => props.mode === 'selection' ? EditorStore.selectedNodeId : null)
 
-const showAutocomplete  = ref(false)
-const autocompleteStyle = ref({})
-// 'after' = inserir como irmão após | 'child' = inserir como último filho
-const insertMode        = ref('after')
+// ── NOTE: Node actions (delete, duplicate, etc.) are now in NodeToolbar.vue ──
 
-/** Abre o autocomplete posicionado abaixo do botão clicado */
-function openAutocomplete(event, mode = 'after') {
-  const rect = event.currentTarget.getBoundingClientRect()
-  openAutocompleteAt(rect.bottom + 4, rect.left, mode)
-}
-
-/**
- * Abre o autocomplete em coordenadas fixas.
- * Usado tanto pelo clique nos botões quanto pelos atalhos de teclado.
- */
-function openAutocompleteAt(top, left, mode = 'after') {
-  insertMode.value        = mode
-  autocompleteStyle.value = { top: `${top}px`, left: `${left}px` }
-  showAutocomplete.value  = true
-}
-
-// ── Atalhos de teclado ────────────────────────────────────────────────────────
-// Ctrl+Space       → inserir irmão após (+)
-// Ctrl+Shift+Space → inserir como último filho (↳)
+// ── Autocomplete Logic moved to NodeToolbar.vue ──
+// We proxy the global shortcut to the NodeToolbar instance via a ref if needed,
+// but for simplicity, we can let NodeToolbar handle its own visibility if it matches selection.
+const toolbarRef = ref(null)
 
 function handleGlobalKeydown(e) {
   if (!e.ctrlKey || e.key !== ' ') return
@@ -234,44 +176,16 @@ function handleGlobalKeydown(e) {
   if (!selNodeId.value) return
 
   e.preventDefault()
-
   const mode = e.shiftKey ? 'child' : 'after'
-
-  // Toggle: fecha se já estiver aberto no mesmo modo
-  if (showAutocomplete.value && insertMode.value === mode) {
-    showAutocomplete.value = false
-    return
-  }
-
-  const el     = EditorStore.selectedElement
-  const iframe = EditorStore.iframe
-
-  if (el && iframe) {
-    const elRect     = el.getBoundingClientRect()
-    const iframeRect = iframe.getBoundingClientRect()
-    openAutocompleteAt(
-      elRect.bottom + iframeRect.top + 6,
-      elRect.left   + iframeRect.left,
-      mode,
-    )
-  } else {
-    openAutocompleteAt(window.innerHeight / 2 - 60, window.innerWidth / 2 - 90, mode)
+  
+  // Se temos uma ref para a toolbar do elemento selecionado, pedimos para ela abrir o autocomplete
+  if (toolbarRef.value) {
+    toolbarRef.value.triggerAutocomplete(mode)
   }
 }
 
 onMounted(()      => window.addEventListener('keydown', handleGlobalKeydown))
 onBeforeUnmount(() => window.removeEventListener('keydown', handleGlobalKeydown))
-
-/** Usuário selecionou uma tag no autocomplete */
-function onTagSelected(tag) {
-  showAutocomplete.value = false
-  if (!selNodeId.value) return
-  if (insertMode.value === 'child') {
-    NodeDispatcher.appendElement(selNodeId.value, tagToHtml(tag))
-  } else {
-    NodeDispatcher.insertAfter(selNodeId.value, tagToHtml(tag))
-  }
-}
 
 const label = computed(() => {
   const el = props.mode === 'hover' ? EditorStore.hoveredElement : EditorStore.selectedElement
@@ -390,62 +304,12 @@ const boxSpacing = computed(() => {
       <!-- Controles: apenas no modo selection -->
       <template v-if="mode === 'selection' && selNodeId">
         <div class="flex items-center border-l border-blue-500">
-          <!-- Ir para pai -->
-          <button
-            v-if="selParent"
-            @click.stop="selectParent"
-            class="px-1.5 py-0.5 hover:bg-blue-700 transition-colors"
-            title="Selecionar pai"
-          >↑</button>
-
-          <!-- Inserir irmão após (+) -->
-          <button
-            @click.stop="openAutocomplete($event, 'after')"
-            class="px-1.5 py-0.5 hover:bg-blue-700 transition-colors font-bold"
-            title="Inserir tag após este elemento (Ctrl+Space)"
-          >+</button>
-
-          <!-- Inserir como último filho (↳) -->
-          <button
-            @click.stop="openAutocomplete($event, 'child')"
-            class="px-1.5 py-0.5 hover:bg-blue-700 transition-colors font-bold"
-            title="Inserir tag dentro como último filho (Ctrl+Shift+Space)"
-          >↳</button>
-
-          <!-- Duplicar -->
-          <button
-            @click.stop="duplicateNode"
-            class="px-1.5 py-0.5 hover:bg-blue-700 transition-colors"
-            title="Duplicar elemento"
-          >⧉</button>
-
-          <!-- Editar texto inline -->
-          <button
-            v-if="canEditText"
-            @click.stop="startTextEdit"
-            class="px-1.5 py-0.5 hover:bg-blue-700 transition-colors font-bold font-mono"
-            title="Editar texto do elemento"
-          >T</button>
-
-          <!-- Deletar -->
-          <button
-            @click.stop="deleteNode"
-            class="px-1.5 py-0.5 hover:bg-red-600 transition-colors"
-            title="Deletar elemento"
-          >×</button>
+           <NodeToolbar ref="toolbarRef" :node-id="selNodeId" variant="overlay" />
         </div>
       </template>
     </div>
 
   </div>
-
-  <!-- Autocomplete de tags: abre ao clicar no botão + da barra de seleção -->
-  <TagAutocomplete
-    v-if="showAutocomplete"
-    :style="autocompleteStyle"
-    @select="onTagSelected"
-    @close="showAutocomplete = false"
-  />
 
 </template>
 

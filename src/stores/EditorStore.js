@@ -1,6 +1,6 @@
 // EditorStore.js
 
-import { ref, computed, watch, markRaw } from 'vue'
+import { ref, computed, watch, markRaw, toRaw } from 'vue'
 import { defineStore } from 'pinia'
 import { Pipeline } from '@/editor/pipeline/pipeline'
 import { htmlPlugin } from '@/editor/pipeline/plugins/html-plugin'
@@ -37,6 +37,20 @@ export const useEditorStore = defineStore('editor', () => {
   const manipulation = ref(null)
   const clipboard         = ref({ type: null, data: null }) // Clipboard tipado
   const showCssExplorer   = ref(false)                      // CSS Explorer visível ao lado do inspector
+  const showCodeEditor    = ref(false)                      // Code Editor visível no rodapé do canvas
+  const codeEditorMode     = ref('html')                    // 'html' | 'css'
+  const codeEditorTargetId = ref(null)                      // ID do nó ou da regra sendo editada
+
+  /**
+   * Abre o editor de código em um modo específico para um alvo específico.
+   * @param {string} mode - 'html' | 'css'
+   * @param {string} targetId - ID do nó (HTML) ou RuleID (CSS)
+   */
+  function openCodeEditor(mode, targetId) {
+    codeEditorMode.value = mode
+    codeEditorTargetId.value = targetId
+    showCodeEditor.value = true
+  }
 
   /**
    * Função registrada pelo Preview.vue que inicia a edição inline num elemento do iframe.
@@ -64,6 +78,17 @@ export const useEditorStore = defineStore('editor', () => {
    */
   const isBlinking = ref(false)
   let   _blinkTimer = null
+
+  /**
+   * Estado do processo de salvamento para feedback na UI.
+   * Ativado por Ctrl+S.
+   */
+  const saveState = ref({
+    active:  false,
+    status:  'idle',   // 'saving' | 'success' | 'error'
+    message: '',
+    details: [],      // lista de arquivos salvos ou erros
+  })
 
   const pipeline = new Pipeline()
   pipeline.use(htmlPlugin())
@@ -94,9 +119,15 @@ export const useEditorStore = defineStore('editor', () => {
     // Remove style tags do editor
     EDITOR_STYLE_IDS.forEach((id) => doc.getElementById(id)?.remove())
 
-    // Remove cursor inline adicionado pelo useIframeEvents durante o inspectMode
+    // Remove cursor e outline inline adicionados pelo editor durante interações
     doc.documentElement.style.removeProperty('cursor')
     doc.body?.style.removeProperty('cursor')
+
+    // Remove outline: none que o useInlineEdit.js injeta durante edição inline
+    // (safety net: o finish/cancel já removem, mas arquivos antigos podem ter ficado com isso)
+    doc.querySelectorAll('[style*="outline"]').forEach((el) => {
+      el.style.removeProperty('outline')
+    })
 
     // Remove atributos style que ficaram vazios após as remoções acima
     doc.querySelectorAll('[style]').forEach((el) => {
@@ -230,6 +261,12 @@ export const useEditorStore = defineStore('editor', () => {
 
   function getParent(nodeId) {
     return manipulation.value.getParent(nodeId)
+  }
+
+  /** Retorna um nó do AST pelo ID (usa toRaw para busca confiável) */
+  function getNode(nodeId) {
+    if (!ast.value) return null
+    return findNodeById(toRaw(ast.value), nodeId)
   }
 
   // Getters para a UI
@@ -385,6 +422,7 @@ export const useEditorStore = defineStore('editor', () => {
    * @param {{ id, title, type, path }} doc
    */
   async function openDocument(doc) {
+    if (!doc) return
     try {
       const docPath = (doc.path ?? doc.id).replace(/\\/g, '/') // normaliza barras do Windows
       console.log('[EditorStore] openDocument:', docPath)
@@ -413,6 +451,38 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   /**
+   * Procura um documento pelo path e o abre.
+   * Útil para carregar o documento quando a página é atualizada (via URL).
+   * @param {string} path 
+   */
+  async function openDocumentByPath(path) {
+    if (!path) return
+    try {
+      const normalizedPath = path.replace(/\\/g, '/')
+      
+      // Busca a lista atualizada para encontrar os metadados (id, title, type)
+      const docs = await ApiService.listDocuments()
+      const doc  = docs.find(d => (d.path ?? d.id).replace(/\\/g, '/') === normalizedPath)
+      
+      if (doc) {
+        await openDocument(doc)
+      } else {
+        // Fallback: tenta abrir apenas com o path se não encontrar na lista
+        console.warn(`[EditorStore] Documento não encontrado na lista: ${normalizedPath}. Tentando abertura direta.`)
+        await openDocument({
+          id: normalizedPath,
+          path: normalizedPath,
+          title: normalizedPath.split('/').pop(),
+          type: 'document'
+        })
+      }
+    } catch (e) {
+      console.error('[EditorStore] openDocumentByPath ERRO:', e)
+      throw e
+    }
+  }
+
+  /**
    * Salva o HTML atual via API no documento aberto.
    * 1. Gera HTML do iframe e aplica hooks (limpeza de atributos, prettier)
    * 2. DocumentNormalizer.prepareForSave() injeta <link> relativos limpos
@@ -426,50 +496,97 @@ export const useEditorStore = defineStore('editor', () => {
     const iframeDoc = getIframeDoc()
     if (!iframeDoc) return false
 
-    // 1. Gera o HTML e permite que hooks o modifiquem antes de salvar.
-    //    O payload é um objeto mutável: handlers podem fazer payload.html = novoHtml.
-    const savePayload = { doc, html: HtmlExportService.generateHtml(iframeDoc) }
-
-    await editorHooks.emitAsync('document:beforeSave', savePayload)
-
-    // 2. Normaliza o HTML: remove estilos do editor, injeta <link> relativos limpos
-    const docPath = doc.path ?? doc.id
-    const manifest = styleStore.getManifest()
-    savePayload.html = DocumentNormalizer.prepareForSave(savePayload.html, manifest, docPath)
-
-    // 3. Salva HTML no backend
-    await ApiService.saveDocument(docPath, savePayload.html)
-    console.log('[EditorStore] saveDocument: HTML salvo', docPath)
-
-    // 4. Salva todos os CSS internos (ignorando on_page e externos)
-    const logicTree = styleStore.cssLogicTree
-    if (logicTree) {
-      const sheets = CssExportService.generateAll(logicTree)
-      const saves = []
-      sheets.forEach(({ origin, sourceName, css }) => {
-        if (origin !== 'internal') return // só arquivos editáveis do manifesto
-        saves.push(
-          ApiService.saveAsset(sourceName, css)
-            .then(() => console.log('[EditorStore] CSS salvo:', sourceName))
-            .catch(err => console.error('[EditorStore] Erro ao salvar CSS:', sourceName, err))
-        )
-      })
-      await Promise.all(saves)
+    // Inicia feedback visual
+    saveState.value = {
+      active:  true,
+      status:  'saving',
+      message: 'Salvando alterações...',
+      details: [],
     }
 
-    // 5. Salva o manifesto atualizado
-    await ApiService.saveManifest(manifest)
-      .then(() => console.log('[EditorStore] Manifesto salvo'))
-      .catch(err => console.error('[EditorStore] Erro ao salvar manifesto:', err))
+    try {
+      // 1. Gera o HTML e permite que hooks o modifiquem antes de salvar.
+      const savePayload = { doc, html: HtmlExportService.generateHtml(iframeDoc) }
+      await editorHooks.emitAsync('document:beforeSave', savePayload)
 
-    editorHooks.emit('document:afterSave', { doc, html: savePayload.html })
+      // 2. Normaliza o HTML
+      const docPath = doc.path ?? doc.id
+      const manifest = styleStore.getManifest()
+      savePayload.html = DocumentNormalizer.prepareForSave(savePayload.html, manifest, docPath)
 
-    return true
+      // 3. Salva HTML no backend
+      await ApiService.saveDocument(docPath, savePayload.html)
+      saveState.value.details.push(`HTML: ${fileName.value || docPath}`)
+      console.log('[EditorStore] saveDocument: HTML salvo', docPath)
+
+      // 4. Salva todos os CSS internos (ignorando on_page e externos)
+      const logicTree = styleStore.cssLogicTree
+      if (logicTree) {
+        // Usamos toRaw para garantir que trabalhamos com o array real da logicTree
+        const sheets = CssExportService.generateAll(logicTree)
+        const saves = []
+        
+        sheets.forEach(({ origin, sourceName, css }) => {
+          if (origin !== 'internal') return // só os editáveis
+          
+          saves.push(
+            ApiService.saveAsset(sourceName, css, currentDocument.value?.path)
+              .then(() => {
+                saveState.value.details.push(`CSS: ${sourceName}`)
+                console.log('[EditorStore] CSS salvo:', sourceName)
+              })
+              .catch(err => {
+                const errorMsg = `Erro CSS (${sourceName}): ${err.message}`
+                saveState.value.details.push(errorMsg)
+                saveState.value.status = 'error'
+                console.error('[EditorStore]', errorMsg)
+              })
+          )
+        })
+        await Promise.all(saves)
+      }
+
+      // 5. Salva o manifesto atualizado
+      await ApiService.saveManifest(manifest, docPath)
+      saveState.value.details.push(`Manifesto atualizado`)
+      console.log('[EditorStore] Manifesto salvo')
+
+      if (saveState.value.status !== 'error') {
+        saveState.value.status  = 'success'
+        saveState.value.message = 'Documento salvo com sucesso!'
+      } else {
+        saveState.value.message = 'Houve problemas ao salvar alguns arquivos.'
+      }
+
+      editorHooks.emit('document:afterSave', { doc, html: savePayload.html })
+
+    } catch (e) {
+      console.error('[EditorStore] saveDocument ERRO FATAL:', e)
+      saveState.value.status  = 'error'
+      saveState.value.message = 'Erro crítico ao salvar'
+      saveState.value.details.push(e.message)
+    } finally {
+      // Oculta a mensagem após alguns segundos se for sucesso
+      if (saveState.value.status === 'success') {
+        setTimeout(() => {
+          // Se ainda for a mesma sessão de save, fecha
+          if (saveState.value.status === 'success') {
+            saveState.value.active = false
+          }
+        }, 4000)
+      }
+    }
+
+    return saveState.value.status !== 'error'
   }
 
   return {
     triggerInlineEdit,
     showCssExplorer,
+    showCodeEditor,
+    codeEditorMode,
+    codeEditorTargetId,
+    openCodeEditor,
     ctx,
     selectNode,
     selectedNode,
@@ -489,6 +606,7 @@ export const useEditorStore = defineStore('editor', () => {
     saveFile,
     saveFileAs,
     openDocument,
+    openDocumentByPath,
     saveDocument,
     fileAccessSupported: FileAccessService.isSupported(),
     loadHTML,
@@ -506,6 +624,7 @@ export const useEditorStore = defineStore('editor', () => {
     pipeline,
     handleHover,
     getParent,
+    getNode,
     activate,
     deactivate,
     clearSelection,
@@ -513,6 +632,7 @@ export const useEditorStore = defineStore('editor', () => {
     redo,
     isBlinking,
     startBlink,
+    saveState,
   }
 })
 

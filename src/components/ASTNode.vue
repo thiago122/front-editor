@@ -4,6 +4,7 @@
 import { computed, ref } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
 import { useExplorerDragDrop } from '@/composables/useExplorerDragDrop'
+import NodeToolbar from './NodeToolbar.vue'
 import { DRAG_RESTRICTED_TAGS } from '@/editor/html/constants'
 
 const EditorStore = useEditorStore()
@@ -188,11 +189,20 @@ function onSelect() {
         <template v-else-if="node.type === 'comment'">
           <span class="text-green-600 opacity-80">&lt;!-- {{ node.value?.trim() }} --&gt;</span>
         </template>
-        
         <template v-else>
            <span class="text-gray-400">{{ node.type }}</span>
         </template>
       </div>
+
+      <!-- NODE ACTIONS TOOLBAR -->
+      <div 
+        v-if="node.type === 'element'"
+        class="ml-auto pl-2 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+        :class="{ 'opacity-100': isSelected }"
+      >
+        <NodeToolbar :node-id="node.nodeId" variant="explorer" />
+      </div>
+
     </div>
 
     <!-- CHILDREN (with Indentation Guide) -->

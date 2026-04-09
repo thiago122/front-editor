@@ -85,12 +85,23 @@ export class CssAstBuilder {
     //   1. data-manifest-path — path relativo real do arquivo (ex: 'css/global.css')
     //   2. data-source-name   — nome definido manualmente
     //   3. owner.id           — legado
-    //   4. 'style'            — fallback final
-    const sourceName =
+    //   4. owner.href (short) — para <link> tags externas
+    //   5. 'style'            — fallback final
+    let sourceName =
       owner.getAttribute('data-manifest-path') ||
       owner.getAttribute('data-source-name') ||
-      owner.id ||
-      'style'
+      owner.id
+
+    if (!sourceName && owner.tagName === 'LINK' && owner.href) {
+      try {
+        const url = new URL(owner.href)
+        sourceName = url.pathname.split('/').pop() || url.hostname
+      } catch (e) {
+        sourceName = owner.href
+      }
+    }
+
+    if (!sourceName) sourceName = 'style'
 
     return { origin, sourceName }
   }
@@ -104,6 +115,8 @@ export class CssAstBuilder {
       return owner.textContent
     }
 
+    const href = owner.href || ''
+
     // 2. <link> tags: tenta ler cssRules (pode falhar por CORS em arquivos externos)
     try {
       const rules = sheet.cssRules || sheet.rules
@@ -113,17 +126,19 @@ export class CssAstBuilder {
     } catch (e) {
       // 3. Fallback: usa o texto já fetched via fetch() (disponível para arquivos externos
       //    mesmo com CORS, desde que o servidor não bloqueie o método fetch)
-      const href = owner.href || ''
       const fetchedText = this.cssContentMap.get(href)
+      
       if (fetchedText?.trim()) {
-        this.handleCorsError(sheet, sourceName, e)
+        this.handleCorsError(sheet, sourceName, href, e, true) // true = recovered
+        
         // Marca o owner como readonly para que o inspector não permita edições
         if (owner && !owner.hasAttribute('data-readonly')) {
           owner.setAttribute('data-readonly', 'true')
         }
         return fetchedText
       }
-      this.handleCorsError(sheet, sourceName, e)
+      
+      this.handleCorsError(sheet, sourceName, href, e, false) // false = failed completely
     }
 
     return ''
@@ -132,13 +147,23 @@ export class CssAstBuilder {
   /**
    * Handle CORS errors when accessing external stylesheets
    */
-  handleCorsError(sheet, sourceName, error) {
+  handleCorsError(sheet, sourceName, href, error, recovered = false) {
     if (!sheet._corsErrorLogged) {
-      const tip = sourceName.includes('fonts.googleapis.com') 
-        ? "TIP: Google Fonts require 'crossorigin' attribute on the link tag for inspection."
-        : "External rules cannot be inspected without 'crossorigin' attribute on the link tag."
+      const isGoogleFonts = href.includes('fonts.googleapis.com') || sourceName.includes('fonts.googleapis.com')
       
-      console.warn(`[CssAstBuilder] Style "${sourceName}" is CORS-protected. ${tip}`, error.message)
+      const tip = isGoogleFonts
+        ? "TIP: Google Fonts require 'crossorigin' attribute on the link tag for full inspection."
+        : "External rules cannot be inspected directly without 'crossorigin' attribute on the link tag."
+      
+      const status = recovered ? 'Recovered via fetch (Read-Only)' : 'Failed to access'
+      const msg = `[CssAstBuilder] Style "${sourceName}" is CORS-protected. ${status}. ${tip}`
+      
+      if (recovered) {
+        console.info(msg, `Error details: ${error.message}`)
+      } else {
+        console.warn(msg, error.message)
+      }
+      
       sheet._corsErrorLogged = true
     }
   }

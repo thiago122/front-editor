@@ -148,6 +148,9 @@ onBeforeUnmount(() => {
 
 // Auto-open após qualquer inserção de nó (tag inserida pelo usuário)
 editorHooks.on('node:afterInsert', () => {
+  // Se o usuário está digitando no CodeEditor, não roubamos o foco!
+  if (document.activeElement?.closest('.cm-editor')) return
+
   // nextTick duplo: 1º para o AST/DOM atualizar, 2º para o Vue renderizar o elemento
   nextTick(() => nextTick(() => openRuleCreator()))
 })

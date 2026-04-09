@@ -77,7 +77,7 @@ export class ManipulationEngine {
 
   /** --- PRIMITIVE OPERATIONS (History Aware) --- **/
 
-  removeNodeAt(parentId, index) {
+  removeNodeAt(parentId, index, suppressDom = false) {
     const ctx = this.getCtx()
     const parent = findNodeById(ctx.ast, parentId)
     if (!parent || !parent.children[index]) return
@@ -89,7 +89,9 @@ export class ManipulationEngine {
 
     // Sync DOM is tricky here because we only know the parent and index.
     // But removedNode has the ID we need to remove from DOM.
-    this._syncDom(removedNode.nodeId, 'remove')
+    if (!suppressDom) {
+      this._syncDom(removedNode.nodeId, 'remove')
+    }
 
     // Record Inverse: Insert
     history.record({
@@ -100,7 +102,7 @@ export class ManipulationEngine {
     editorHooks.emit('node:afterRemove', { parentId, index, node: removedNode })
   }
 
-  insertNodeAt(parentId, index, node) {
+  insertNodeAt(parentId, index, node, suppressDom = false) {
     const ctx = this.getCtx()
     const parent = findNodeById(ctx.ast, parentId)
     if (!parent) return
@@ -110,44 +112,46 @@ export class ManipulationEngine {
     parent.children.splice(index, 0, node)
 
     // Sync DOM
-    // We need to generate HTML for the node
-    const html = this.pipeline.astToCode(node)
-    const doc = this.getDoc()
+    if (!suppressDom) {
+      // We need to generate HTML for the node
+      const html = this.pipeline.astToCode(node)
+      const doc = this.getDoc()
 
-    // Strategy to find a valid DOM anchor:
-    // 1. Try to find the closest NEXT sibling that exists in DOM (insert before it)
-    let nextAnchor = null
-    for (let i = index + 1; i < parent.children.length; i++) {
-      const sib = parent.children[i]
-      const domEl = doc?.querySelector(`[data-node-id="${sib.nodeId}"]`)
-      if (domEl) {
-        nextAnchor = sib
-        break
-      }
-    }
-
-    if (nextAnchor) {
-      this._syncDom(null, 'before', html, nextAnchor.nodeId)
-    } else {
-      // 2. If no next anchor, try closest PREVIOUS sibling (insert after it)
-      let prevAnchor = null
-      for (let i = index - 1; i >= 0; i--) {
+      // Strategy to find a valid DOM anchor:
+      // 1. Try to find the closest NEXT sibling that exists in DOM (insert before it)
+      let nextAnchor = null
+      for (let i = index + 1; i < parent.children.length; i++) {
         const sib = parent.children[i]
         const domEl = doc?.querySelector(`[data-node-id="${sib.nodeId}"]`)
         if (domEl) {
-          prevAnchor = sib
+          nextAnchor = sib
           break
         }
       }
 
-      if (prevAnchor) {
-        this._syncDom(null, 'after', html, prevAnchor.nodeId)
+      if (nextAnchor) {
+        this._syncDom(null, 'before', html, nextAnchor.nodeId)
       } else {
-        // 3. Fallback: Prepend or Append
-        if (index === 0) {
-          this._syncDom(parentId, 'prepend', html)
+        // 2. If no next anchor, try closest PREVIOUS sibling (insert after it)
+        let prevAnchor = null
+        for (let i = index - 1; i >= 0; i--) {
+          const sib = parent.children[i]
+          const domEl = doc?.querySelector(`[data-node-id="${sib.nodeId}"]`)
+          if (domEl) {
+            prevAnchor = sib
+            break
+          }
+        }
+
+        if (prevAnchor) {
+          this._syncDom(null, 'after', html, prevAnchor.nodeId)
         } else {
-          this._syncDom(parentId, 'append', html)
+          // 3. Fallback: Prepend or Append
+          if (index === 0) {
+            this._syncDom(parentId, 'prepend', html)
+          } else {
+            this._syncDom(parentId, 'append', html)
+          }
         }
       }
     }
@@ -429,15 +433,21 @@ export class ManipulationEngine {
       const oldChildrenCount = node.children.length
 
       history.beginTransaction()
-      // Remove all existing
+      // 1. Remove all existing (AST ONLY - silent)
       for (let i = 0; i < oldChildrenCount; i++) {
-        this.removeNodeAt(nodeId, 0)
+        this.removeNodeAt(nodeId, 0, true)
       }
-      // Add new
+      // 2. Add new (AST ONLY - silent)
       newChildren.forEach((child, i) => {
-        this.insertNodeAt(nodeId, i, child)
+        this.insertNodeAt(nodeId, i, child, true)
       })
       history.commit()
+
+      // 3. Single DOM Sync: Generate full inner HTML and update at once
+      const fullInnerHtml = newChildren
+        .map(child => this.pipeline.astToCode(child))
+        .join('')
+      this._syncDom(nodeId, 'innerHTML', fullInnerHtml)
 
       return true
     } catch (e) {

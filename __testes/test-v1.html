@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editor Test V1</title>
+    <!-- O editor injetará os CSS do manifesto automaticamente no iframe -->
+</head>
+<body>
+    <header class="header">
+        <h1>Teste de Validação do Editor</h1>
+        <p>Este arquivo serve para verificar se as ferramentas de inspeção e estilo ainda funcionam.</p>
+    </header>
+
+    <main class="container">
+        <section id="basics" class="section">
+            <h2 class="section-title">Elementos Básicos</h2>
+            <div class="card-grid">
+                <div class="card">
+                    <h3>Card 1</h3>
+                    <p>Um parágrafo simples dentro de um card para testar a tipografia.</p>
+                    <button class="btn btn-primary">Botão Primário</button>
+                </div>
+                <div class="card card-dark">
+                    <h3>Card 2 (Escuro)</h3>
+                    <p>Um card com classe diferente para testar a troca de estilos CSS.</p>
+                    <button class="btn btn-secondary">Botão Secundário</button>
+                </div>
+                <div class="card">
+                    <h3>Card 3</h3>
+                    <ul class="list">
+                        <li>Item 1</li>
+                        <li>Item 2</li>
+                        <li>Item 3</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section id="box-model" class="section">
+            <h2 class="section-title">Teste de Box Model</h2>
+            <div class="box-model-demo">
+                <div class="inner-box">Conteúdo com Padding e Margin</div>
+            </div>
+        </section>
+
+        <section id="flex-grid" class="section">
+            <h2 class="section-title">Flex & Grid</h2>
+            <div class="flex-container">
+                <div class="flex-item">Item A</div>
+                <div class="flex-item">Item B</div>
+                <div class="flex-item">Item C</div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <p>&copy; 2024 Visual Editor Test Suite</p>
+    </footer>
+</body>
+</html>

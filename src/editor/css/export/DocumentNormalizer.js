@@ -103,8 +103,35 @@ export class DocumentNormalizer {
     const doc = parser.parseFromString(html, 'text/html')
     const head = doc.head
 
-    // 1. Remove <style data-location="internal">
-    head.querySelectorAll('style[data-location="internal"]').forEach(el => el.remove())
+    // IDs de <style> injetados pelo editor — devem ser todos removidos antes de salvar
+    const EDITOR_STYLE_IDS = new Set([
+      'editor-ui-styles',
+      'editor-outline-mode',
+      'editor-empty-placeholder',
+    ])
+
+    // 1. Remove estilos injetados pelo editor, MAS PRESERVA on_page.
+    head.querySelectorAll('style').forEach(el => {
+      const location = el.getAttribute('data-location')
+      const isEditorUI = EDITOR_STYLE_IDS.has(el.id)
+      
+      // Se for on_page, mantemos, mas limpamos os atributos internos do editor
+      if (location === 'on_page') {
+        el.removeAttribute('data-location')
+        el.removeAttribute('data-captured')
+        el.removeAttribute('data-source')
+        return 
+      }
+
+      // Se for um estilo injetado (internal/external/UI), removemos
+      const shouldRemove = 
+        location === 'internal' || 
+        location === 'external' || 
+        el.hasAttribute('data-captured') ||
+        isEditorUI
+        
+      if (shouldRemove) el.remove()
+    })
 
     // 2. Coleta links "ignore" ANTES de limpar (verbatim via outerHTML)
     const ignoreLinks = []
@@ -112,11 +139,13 @@ export class DocumentNormalizer {
       ignoreLinks.push(el.outerHTML)
     })
 
-    // 3. Remove todos os <link rel="stylesheet">
+    // 3. Remove todos os <link rel="stylesheet"> (ignore voltam abaixo)
     head.querySelectorAll('link[rel="stylesheet"]').forEach(el => el.remove())
 
-    // 4. Calcula prefixo relativo com base na profundidade do documento
-    const depth = (docPath || '').replace(/^\//, '').split('/').length - 1
+    // 4. Calcula prefixo relativo com base na profundidade do documento RELATIVA ao projeto
+    // Como cada pasta é um projeto e o manifesto fica na raiz do projeto, 
+    // documentos na raiz do projeto têm depth 0.
+    const depth = 0 
     const prefix = depth > 0 ? '../'.repeat(depth) : ''
 
     // 5. Insere os <link> do manifesto (na ordem do manifesto)

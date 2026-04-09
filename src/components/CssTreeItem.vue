@@ -1,9 +1,11 @@
 <script setup>
 import { computed, ref, nextTick, toRaw, watch } from 'vue'
 import { useStyleStore } from '@/stores/StyleStore'
+import { useEditorStore } from '@/stores/EditorStore'
 import { findCssNode } from '@/utils/astHelpers'
 
 const styleStore = useStyleStore()
+const editorStore = useEditorStore()
 
 const props = defineProps({
   node:           { type: Object,  required: true },
@@ -353,6 +355,20 @@ function highlightSegments(text, query) {
           <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+          </svg>
+        </button>
+
+        <!-- Edit Code icon: for files, selectors and at-rules -->
+        <button
+          v-if="(node.type === 'file' || node.type === 'selector' || node.type === 'at-rule') && !isExternal"
+          class="ml-auto mr-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-amber-500"
+          title="Editar via Código"
+          @click.stop="editorStore.openCodeEditor('css', node.id)"
+          @dragstart.stop
+        >
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <polyline points="16 18 22 12 16 6"></polyline>
+            <polyline points="8 6 2 12 8 18"></polyline>
           </svg>
         </button>
       </div>

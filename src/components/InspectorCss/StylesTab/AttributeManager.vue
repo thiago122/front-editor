@@ -46,9 +46,11 @@
               <!-- Edit mode chip -->
               <span v-else class="inline-flex items-center gap-0.5">
                 <input
+                  ref="editClassInput"
                   v-model="editClassValue"
-                  @keydown.enter="confirmEditClass(cls)"
-                  @keydown.escape="editingClass = null"
+                  @input="ac.updateQuery($event.target.value)"
+                  @keydown="handleEnter($event, () => confirmEditClass(cls))"
+                  @keydown.escape="editingClass = null; ac.close()"
                   class="w-[100px] border border-blue-400 px-1 py-0 outline-none font-mono text-blue-800 text-[11px] rounded"
                 />
                 <button @click="confirmEditClass(cls)" class="text-blue-600 hover:text-blue-800">✓</button>
@@ -62,8 +64,9 @@
                 <input
                   ref="addClassInput"
                   v-model="newClassName"
-                  @keydown.enter="confirmAddClass"
-                  @keydown.escape="addingClass = false"
+                  @input="ac.updateQuery($event.target.value)"
+                  @keydown="handleEnter($event, confirmAddClass)"
+                  @keydown.escape="addingClass = false; ac.close()"
                   placeholder="class-name"
                   class="w-[100px] border border-blue-400 px-1 py-0 outline-none font-mono text-blue-800 text-[11px] rounded"
                 />
@@ -179,16 +182,22 @@
 
     </div>
   </div>
+
+  <!-- Autocomplete Dropdown -->
+  <CssAutocompleteDropdown :ac="ac" :anchor="ac.inputEl.value" />
 </template>
 
 <script setup>
 import { computed, ref, nextTick } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
 import { useStyleStore } from '@/stores/StyleStore'
+import { useCssAutocomplete } from '@/composables/useCssAutocomplete'
+import CssAutocompleteDropdown from '@/components/CssAutocompleteDropdown.vue'
 import { EDITOR_IGNORED_ATTRS } from '@/editor/html/constants'
 
 const editorStore = useEditorStore()
 const styleStore  = useStyleStore()
+const ac          = useCssAutocomplete()
 
 // ── UI state ──────────────────────────────────────────────────────────────────
 const showPanel   = ref(true)
@@ -199,6 +208,7 @@ const newClassName  = ref('')
 const addClassInput = ref(null)
 const editingClass  = ref(null)   // nome da classe sendo renomeada
 const editClassValue = ref('')
+const editClassInput = ref(null)
 
 const addingId  = ref(false)
 const newIdValue = ref('')
@@ -240,6 +250,26 @@ const genericAttrs = computed(() => {
     .map(a => ({ name: a.name, value: a.value }))
 })
 
+/** Todas as classes presentes no CSS do projeto */
+const allAvailableClasses = computed(() => {
+  const classes = new Set()
+  const traverse = (nodes) => {
+    if (!nodes) return
+    nodes.forEach(node => {
+      if (node.type === 'selector' && node.label) {
+        // Regex para capturar classes (ex: .my-class)
+        const matches = node.label.match(/\.([\w-]+)/g)
+        if (matches) {
+          matches.forEach(m => classes.add(m.slice(1)))
+        }
+      }
+      if (node.children) traverse(node.children)
+    })
+  }
+  traverse(styleStore.cssLogicTree)
+  return Array.from(classes).sort()
+})
+
 /** Chama após qualquer mutação para reativar os computeds. */
 function notifyChange() { mutationTick.value++ }
 
@@ -269,17 +299,37 @@ function isIdUsedInCss(id) {
   return allRules.value.some(r => r.selector === sel || r.selector.includes(sel))
 }
 
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function handleEnter(e, confirmFn) {
+  // Se o autocomplete consumiu o Enter/Tab, não fazemos nada.
+  // Caso contrário, confirmamos a ação.
+  if (!ac.onKeydown(e)) {
+    if (e.key === 'Enter') confirmFn()
+  }
+}
+
 // ── CRUD — Classes ─────────────────────────────────────────────────────────────
 
 function startAddClass() {
   addingClass.value = true
   newClassName.value = ''
-  nextTick(() => addClassInput.value?.focus())
+  nextTick(() => {
+    addClassInput.value?.focus()
+    ac.openCustom(addClassInput.value, allAvailableClasses.value, '', (val) => {
+      newClassName.value = val
+      confirmAddClass()
+    })
+  })
 }
 
 function confirmAddClass() {
   const name = newClassName.value.trim().replace(/^\./, '')
-  if (!name || !editorStore.selectedNodeId) { addingClass.value = false; return }
+  if (!name || !editorStore.selectedNodeId) {
+    addingClass.value = false
+    ac.close()
+    return
+  }
   const current = classList.value
   if (!current.includes(name)) {
     const merged = [...current, name].join(' ')
@@ -288,6 +338,7 @@ function confirmAddClass() {
   }
   addingClass.value = false
   newClassName.value = ''
+  ac.close()
 }
 
 function removeClass(cls) {
@@ -300,15 +351,27 @@ function removeClass(cls) {
 function startEditClass(cls) {
   editingClass.value = cls
   editClassValue.value = cls
+  nextTick(() => {
+    editClassInput.value?.focus()
+    ac.openCustom(editClassInput.value, allAvailableClasses.value, cls, (val) => {
+      editClassValue.value = val
+      confirmEditClass(cls)
+    })
+  })
 }
 
 function confirmEditClass(oldCls) {
   const newCls = editClassValue.value.trim().replace(/^\./, '')
-  if (!newCls || !editorStore.selectedNodeId) { editingClass.value = null; return }
+  if (!newCls || !editorStore.selectedNodeId) {
+    editingClass.value = null
+    ac.close()
+    return
+  }
   const merged = classList.value.map(c => c === oldCls ? newCls : c).join(' ')
   editorStore.manipulation.setAttribute(editorStore.selectedNodeId, 'class', merged)
   notifyChange()
   editingClass.value = null
+  ac.close()
 }
 
 // ── CRUD — ID ──────────────────────────────────────────────────────────────────

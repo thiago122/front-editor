@@ -10,10 +10,18 @@ import { DuplicateCommand } from '@/editor/commands/node/DuplicateCommand'
 export const NodeDispatcher = {
   deleteNode(nodeId) {
     const store = useEditorStore()
+    const parent = store.getParent(nodeId)
     const cmd = new DeleteCommand(nodeId, {
       manipulation: store.manipulation,
     })
     cmd.execute()
+
+    // Seleciona o pai após deletar o filho para não perder o foco
+    if (parent) {
+      store.selectNode(parent.nodeId)
+    } else {
+      store.clearSelection()
+    }
   },
 
   appendElement(parentId, html) {

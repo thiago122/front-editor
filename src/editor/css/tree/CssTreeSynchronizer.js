@@ -1,5 +1,5 @@
 import { toRaw } from 'vue'
-import { generate } from 'css-tree'
+import { generate, List } from 'css-tree'
 
 /**
  * CssTreeSynchronizer
@@ -42,11 +42,26 @@ export class CssTreeSynchronizer {
    * @param {Document} targetDoc
    */
   updateStyleElements(targetDoc) {
+    if (this.fileGroups.size === 0) {
+      console.warn('[CssTreeSynchronizer] No rules collected to sync.');
+    }
+
     this.fileGroups.forEach(({ origin, sourceName, rules }) => {
-      const fileAst = { type: 'StyleSheet', children: rules }
-      const css = generate(fileAst)
-      const styleEl = this.findOrCreateStyleElement(targetDoc, origin, sourceName)
-      styleEl.textContent = css
+      try {
+        const fileAst = { 
+          type: 'StyleSheet', 
+          children: new List().fromArray(rules) 
+        }
+        const css = generate(fileAst)
+        const styleEl = this.findOrCreateStyleElement(targetDoc, origin, sourceName)
+        
+        if (styleEl.textContent !== css) {
+          styleEl.textContent = css
+          console.log(`[CssTreeSynchronizer] Updated DOM <style> for ${sourceName} (${css.length} chars)`);
+        }
+      } catch (e) {
+        console.error(`[CssTreeSynchronizer] Failed to generate CSS for ${sourceName}:`, e);
+      }
     })
   }
 

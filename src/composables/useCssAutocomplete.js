@@ -103,6 +103,22 @@ export function useCssAutocomplete() {
   }
 
   /**
+   * Abre sugestões personalizadas usando uma lista arbitrária.
+   * @param {HTMLInputElement} el       — input host
+   * @param {string[]}         items    — lista de candidatos
+   * @param {string}           text     — valor atual do input
+   * @param {Function}         onAccept — callback(value)
+   */
+  function openCustom(el, items, text, onAccept) {
+    inputEl.value    = el
+    candidates.value = items
+    query.value      = text ?? ''
+    activeIdx.value  = -1
+    mode.value       = 'custom'
+    onAcceptCb       = onAccept
+  }
+
+  /**
    * Handler de teclado — ligar ao @keydown do input host.
    * Retorna true se o evento foi consumido (para suprimir comportamento padrão).
    */
@@ -120,6 +136,9 @@ export function useCssAutocomplete() {
       return true
     }
     if (e.key === 'Enter' || e.key === 'Tab') {
+      // Shift+Tab sempre é para navegação retroativa, nunca para aceitar sugestão
+      if (e.key === 'Tab' && e.shiftKey) return false
+
       if (activeIdx.value >= 0) {
         // Item explicitamente selecionado via seta → aceita
         e.preventDefault()
@@ -150,9 +169,11 @@ export function useCssAutocomplete() {
     activeIdx,
     isActive,
     mode,
+    inputEl,
     // Métodos
     openProp,
     openValue,
+    openCustom,
     updateQuery,
     accept,
     close,

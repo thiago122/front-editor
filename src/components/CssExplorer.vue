@@ -506,11 +506,10 @@ async function deleteFile(fileNodeCopy) {
   let trashId = null
   if (sourceName) {
     try {
-      const res = await ApiService.trashAsset(sourceName)
+      const res = await ApiService.trashAsset(sourceName, editorStore.currentDocument?.path)
       trashId = res.trashId
     } catch (err) {
-      console.warn('[deleteFile] trashAsset falhou (arquivo pode não estar no servidor):', err.message)
-      // Continua mesmo sem backend (arquivo pode ser on_page ou não ter sido salvo)
+      console.warn('[deleteFile] trashAsset falhou:', err.message)
     }
   }
 
@@ -586,7 +585,7 @@ async function createStylesheet(type, href = null) {
     // 1. Cria o arquivo físico no disco (o backend adiciona ao manifest.json)
     let finalPath = href
     try {
-      const res  = await ApiService.createAsset(href, 'css')
+      const res  = await ApiService.createAsset(href, 'css', editorStore.currentDocument?.path)
       finalPath  = res.path ?? href
     } catch (err) {
       // Arquivo já existe → usa o existente sem recriar
@@ -903,7 +902,7 @@ async function moveFileInManifest(fileNode, direction) {
   // 5. Persiste no backend (envia apenas os paths, o backend preserva os types)
   const paths = newManifest.map(e => e.path)
   try {
-    await ApiService.reorderAssets(paths)
+    await ApiService.reorderAssets(paths, editorStore.currentDocument?.path)
     console.log('[CssExplorer] reorderAssets OK:', paths)
   } catch (err) {
     console.error('[CssExplorer] reorderAssets falhou:', err)

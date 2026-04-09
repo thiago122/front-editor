@@ -60,7 +60,15 @@ const customHtml     = ref('')
 function toggleMenu(idx, event) {
   if (openMenuIdx.value === idx) { closeAll(); return }
   const rect = event.currentTarget.getBoundingClientRect()
-  dropdownStyle.value = { top: `${rect.bottom + 4}px`, left: `${rect.left}px` }
+  const DROPDOWN_HEIGHT = 180 // aprox (max-height 220, mas tags iniciais são poucas)
+  const windowH = window.innerHeight
+
+  let top = rect.bottom + 4
+  if (top + DROPDOWN_HEIGHT > windowH) {
+    top = rect.top - DROPDOWN_HEIGHT - 4
+  }
+
+  dropdownStyle.value = { top: `${top}px`, left: `${rect.left}px` }
   openMenuIdx.value   = idx
   showHtmlPanel.value = false
 }
@@ -68,7 +76,15 @@ function toggleMenu(idx, event) {
 function toggleHtmlPanel(event) {
   if (showHtmlPanel.value) { closeAll(); return }
   const rect = event.currentTarget.getBoundingClientRect()
-  htmlPanelStyle.value = { top: `${rect.bottom + 4}px`, left: `${rect.left}px` }
+  const PANEL_HEIGHT = 200 // aprox (textarea + buttons)
+  const windowH = window.innerHeight
+
+  let top = rect.bottom + 4
+  if (top + PANEL_HEIGHT > windowH) {
+    top = rect.top - PANEL_HEIGHT - 4
+  }
+
+  htmlPanelStyle.value = { top: `${top}px`, left: `${rect.left}px` }
   showHtmlPanel.value = true
   openMenuIdx.value   = -1
 }

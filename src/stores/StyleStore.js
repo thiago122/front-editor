@@ -3,6 +3,9 @@ import { defineStore } from 'pinia'
 import { CssAstService } from '@/editor/css/ast/CssAstService'
 import { CssLogicTreeService } from '@/editor/css/tree/CssLogicTreeService'
 import { calculateOverrides, findCssNode } from '@/utils/astHelpers'
+import { CssExportService } from '@/editor/css/export/CssExportService'
+import { useEditorStore } from './EditorStore'
+import { generateId } from '@/utils/ids.js'
 import { unifiedHistory } from '@/editor/history/UnifiedHistoryManager'
 
 // ─── Internal helper ──────────────────────────────────────────────────────────
@@ -164,7 +167,7 @@ export const useStyleStore = defineStore('style', () => {
    * @param {Document} doc - The target document (usually iframe.contentDocument)
    */
   function applyMutation(doc) {
-    CssLogicTreeService.syncToDOM(cssLogicTree.value, doc)
+    CssLogicTreeService.syncToDOM(toRaw(cssLogicTree.value), doc)
     notifyTreeMutation()
   }
 
@@ -220,6 +223,97 @@ export const useStyleStore = defineStore('style', () => {
     selectRule(target?.rules[0]?.uid ?? null)
   }
 
+  /**
+   * Atualiza as declarações de uma regra a partir de uma string de CSS bruto.
+   * @param {string} ruleId - ID da regra (nó selector ou at-rule)
+   * @param {string} cssString - Apenas o conteúdo interno: "color: red; padding: 10px;"
+   */
+  function updateRuleDeclarationsFromCSS(ruleId, cssString) {
+    const logicTree = toRaw(cssLogicTree.value)
+    const node = findCssNode(logicTree, ruleId)
+    if (!node) return
+
+    const astNode = toRaw(node.metadata?.astNode)
+    if (!astNode?.block) return
+
+    // 1. Criamos um nó temporário de regra para fazer o parse seguro das declarações
+    const tempRule = CssAstService.createNode(`.temp { ${cssString} }`, 'Rule')
+    if (!tempRule || !tempRule.block) return
+
+    // 2. Substituímos os filhos do bloco AST original (Master AST)
+    // Em vez de substituir a lista inteira, usamos os métodos do List se disponíveis
+    if (astNode.block.children.fromArray) {
+      astNode.block.children.fromArray(tempRule.block.children.toArray())
+    } else {
+      astNode.block.children = tempRule.block.children
+    }
+
+    // 3. Reconstruímos os filhos da Logic Tree para refletir as novas declarações
+    // Isso é vital para que o Inspector e Explorer vejam os novos dados.
+    node.children = []
+    astNode.block.children.forEach(astDecl => {
+      if (astDecl.type === 'Declaration') {
+        const prop = astDecl.property
+        const val  = CssAstService.generateCss(astDecl.value)
+        node.children.push({
+          id:       generateId(),
+          type:     'declaration',
+          label:    prop,
+          value:    val,
+          metadata: { astNode: astDecl },
+          children: [],
+        })
+      }
+    })
+
+
+    // 4. Sincronizamos com o DOM (Preview)
+    const editorStore = useEditorStore()
+    applyMutation(editorStore.getIframeDoc())
+    
+    // 5. Atualizamos o Inspector lateral imediatamente
+    updateInspectorRules(
+      editorStore.selectedElement,
+      editorStore.viewport,
+      ruleId
+    )
+
+    notifyTreeMutation()
+  }
+
+  /**
+   * Atualiza um ARQUIVO inteiro de CSS a partir de uma string bruta (seletores + chaves).
+   * @param {string} fileId - ID do nó 'file' na Logic Tree
+   * @param {string} cssString - Código CSS completo: ".btn { ... } @media { ... }"
+   */
+  function updateFileFromCSS(fileId, cssString) {
+    const logicTree = toRaw(cssLogicTree.value)
+    const node = findCssNode(logicTree, fileId)
+    if (!node || node.type !== 'file') return
+
+    const astNode = toRaw(node.metadata?.astNode) // StyleSheet node
+    if (!astNode) return
+
+    // 1. Faz o parse do conteúdo completo como um StyleSheet
+    const newSheetAst = CssAstService.createNode(cssString, 'StyleSheet')
+    if (!newSheetAst) return
+
+    // 2. Transfere os filhos para o Master AST original
+    if (astNode.children.fromArray) {
+      astNode.children.fromArray(newSheetAst.children.toArray())
+    } else {
+      astNode.children = newSheetAst.children
+    }
+
+    // 3. Reconstroi a Logic Tree do arquivo (re-uso parcial do builder seria ideal, 
+    // mas aqui vamos apenas forçar o rebuild global simples por enquanto pela segurança do sync)
+    // TODO: No futuro, reconstruir apenas o sub-ramo do arquivo para performance.
+    const editorStore = useEditorStore()
+    rebuildLogicTree(editorStore.getIframeDoc())
+
+    console.log(`[StyleStore] File ${fileId} updated via bulk CSS.`);
+  }
+
   // ── Exports ────────────────────────────────────────────────────────────────
 
   return {
@@ -241,6 +335,7 @@ export const useStyleStore = defineStore('style', () => {
     applyMutation,
     rebuildLogicTree,
     updateInspectorRules,
+    updateRuleDeclarationsFromCSS,
     copyStyle,
     clearCopiedStyle,
     setManifest,

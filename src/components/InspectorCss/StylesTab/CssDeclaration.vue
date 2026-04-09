@@ -39,6 +39,7 @@
         @focus="onValueFocus"
         @input="onValueInput"
         @blur="onValueBlur"
+        @keydown="onValueArrow"
         @keydown.enter.prevent="onFocusNextDecl"
         @keydown.tab.prevent="onTabValue"
         @keydown.escape.prevent="onEscapeValue"
@@ -75,6 +76,66 @@ const ac         = useCssAutocomplete()
 const propInput  = ref(null)
 const valueInput = ref(null)
 const acTarget   = ref(null)  // 'prop' | 'value' | null — qual input está com dropdown
+
+// ── Numeric scrubbing (Up/Down sobre número) ─────────────────────────────
+// Encontra o número mais próximo do cursor e ajusta pelo delta.
+// Suporta inteiros, decimais e números negativos dentro de valores compostos
+// como '1px 2em', 'rgba(0, 128, 255, 0.5)', 'translateX(-50%)'.
+function nudgeNumberAtCursor(str, cursorPos, delta) {
+  const numberRegex = /-?\d*\.?\d+/g
+  let match
+  while ((match = numberRegex.exec(str)) !== null) {
+    const start = match.index
+    const end   = start + match[0].length
+    // Cursor dentro ou imediatamente adjacente ao número
+    if (cursorPos >= start && cursorPos <= end) {
+      const original  = match[0]
+      const newVal    = parseFloat(original) + delta
+
+      // Preserva casas decimais: max entre o original e o delta
+      const origDec   = (original.split('.')[1] ?? '').length
+      const deltaDec  = (String(Math.abs(delta)).split('.')[1] ?? '').length
+      const precision = Math.max(origDec, deltaDec)
+      const newStr    = precision > 0 ? newVal.toFixed(precision) : String(Math.round(newVal))
+
+      return {
+        newValue:       str.slice(0, start) + newStr + str.slice(end),
+        selectionStart: start,
+        selectionEnd:   start + newStr.length,
+      }
+    }
+  }
+  return null  // nenhum número no cursor → comportamento padrão
+}
+
+function onValueArrow(e) {
+  if (!props.editable) return
+  if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
+  // Se o autocomplete está navegando, deixa ele tratar
+  if (ac.isActive.value) return
+
+  const direction   = e.key === 'ArrowUp' ? 1 : -1
+  const multiplier  = e.shiftKey ? 10 : e.altKey ? 0.1 : 1
+  const delta       = direction * multiplier
+
+  const input     = e.target
+  const rawValue  = editingValue.value ?? input.value
+  const result    = nudgeNumberAtCursor(rawValue, input.selectionStart, delta)
+  if (!result) return  // sem número no cursor → não interfere
+
+  e.preventDefault()
+
+  // Atualiza display e ancora o editing value
+  editingValue.value = result.newValue
+  // Restaura a posição do cursor sobre o número alterado
+  requestAnimationFrame(() => {
+    input.value = result.newValue
+    input.setSelectionRange(result.selectionStart, result.selectionEnd)
+  })
+
+  // Persiste imediatamente no AST (sem depender do blur)
+  updateDeclaration(props.rule, props.decl, 'value', result.newValue)
+}
 
 // ── editingValue ──────────────────────────────────────────────────────────────
 // Enquanto o value input está focado, rastreamos o valor localmente para que
@@ -120,6 +181,11 @@ function onPropBlur(e) {
   setTimeout(() => {
     ac.close()
     acTarget.value = null
+    // Se ainda é placeholder intocado e o foco foi para FORA da declaração → descarta
+    if (isDeclEmpty() && !valueInput.value?.matches(':focus')) {
+      emit('remove-if-empty')
+      return
+    }
     updateDeclaration(props.rule, props.decl, 'prop', typed)
   }, 120)
 }
@@ -161,6 +227,11 @@ function onValueBlur(e) {
     ac.close()
     acTarget.value = null
     editingValue.value = null  // libera o anchor — Vue volta a usar decl.value
+    // Se ainda é placeholder intocado e o foco foi para FORA da declaração → descarta
+    if (isDeclEmpty() && !propInput.value?.matches(':focus')) {
+      emit('remove-if-empty')
+      return
+    }
     updateDeclaration(props.rule, props.decl, 'value', finalValue)
   }, 120)
 }
@@ -178,6 +249,8 @@ function onFocusNextDecl(e) {
   if (ac.isActive.value && (ac.activeIdx.value >= 0 || ac.suggestions.value.length === 1)) return
   const currentDecl = e.target.closest('.decl')
   const nextDecl    = currentDecl?.nextElementSibling
+  e.preventDefault()
+  e.stopPropagation()
   e.target.blur()
   if (nextDecl?.classList.contains('decl')) {
     nextDecl.querySelector('.prop-name')?.focus()
@@ -201,6 +274,7 @@ function onTabProp(e) {
     const currentDecl = e.target.closest('.decl')
     const prevDecl    = currentDecl?.previousElementSibling
     e.preventDefault()
+    e.stopPropagation()
     if (prevDecl?.classList.contains('decl')) {
       // Há uma declaração acima → foca o value dela
       e.target.blur()
@@ -233,6 +307,7 @@ function onTabValue(e) {
   if (e.shiftKey) {
     if (ac.isActive.value) { ac.close() }
     e.preventDefault()
+    e.stopPropagation()
     e.target.blur()
     propInput.value?.focus()
     propInput.value?.select()

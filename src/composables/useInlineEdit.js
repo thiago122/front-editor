@@ -203,6 +203,7 @@ export function useInlineEdit(iframeRef) {
     // Remove os atributos de edição
     editingEl.removeAttribute('contenteditable')
     editingEl.removeAttribute('spellcheck')
+    editingEl.style.removeProperty('outline')  // limpa o outline: none adicionado pelo start()
     editingEl.removeEventListener('keydown', handleKeydown)
     editingEl.removeEventListener('blur', handleBlur) // remove o listener permanente
     getDoc()?.removeEventListener('selectionchange', onSelectionChange)
@@ -243,6 +244,7 @@ export function useInlineEdit(iframeRef) {
     el.removeEventListener('blur', handleBlur) // remove o listener permanente
     el.removeAttribute('contenteditable')
     el.removeAttribute('spellcheck')
+    el.style.removeProperty('outline')  // limpa o outline: none adicionado pelo start()
     el.removeAttribute('data-editing')
     el.innerHTML = html
 

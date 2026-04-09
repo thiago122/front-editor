@@ -12,6 +12,8 @@
     "preview": "vite preview",
     "test:unit": "vitest",
     "build-only": "vite build",
+    "build:bridge": "vite build --config vite.bridge.config.ts",
+    "build:all": "npm run build && npm run build:bridge",
     "type-check": "vue-tsc --build",
     "format": "prettier --write --experimental-cli src/"
   },
