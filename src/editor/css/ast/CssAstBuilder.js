@@ -176,7 +176,9 @@ export class CssAstBuilder {
       positions: true,
       parseValue: true,
       parseCustomProperty: true,
-      parseAtrulePrelude: true
+      parseAtrulePrelude: true,
+      // O css-tree não anexa comentários à AST automaticamente de forma útil para geração,
+      // mas habilitamos o suporte básico.
     })
 
     // Check if this is a read-only style

@@ -33,7 +33,7 @@ export class CssExplorerTreeBuilder {
   createLocationNodes(locationMap, rootNodes) {
     CSS_LOCATIONS.forEach(loc => {
       const node = {
-        id: generateId(),
+        id: `root::${loc}`,
         type: 'root',
         label: loc.toUpperCase().replace('_', ' '),
         metadata: { origin: loc },
@@ -76,7 +76,7 @@ export class CssExplorerTreeBuilder {
     let fileNode = locationNode.children.find(c => c.type === 'file' && c.label === sourceName)
     if (!fileNode) {
       fileNode = {
-        id: generateId(),
+        id: `file::${origin}::${sourceName}`,
         type: 'file',
         label: sourceName,
         metadata: { origin, sourceName },
@@ -95,7 +95,7 @@ export class CssExplorerTreeBuilder {
     if (!node) return null
 
     const logicNode = {
-      id: generateId(),
+      id: `rule::${node.origin}::${node.sourceName}::${this._sourceOrderCounter++}`,
       type: '',
       label: '',
       value: '',
@@ -103,8 +103,8 @@ export class CssExplorerTreeBuilder {
         origin:      node.origin,
         sourceName:  node.sourceName,  // necessário para o inspector exibir o nome do arquivo
         line:        node.loc?.start?.line,
-        // Índice global de aparição no CSS (para desempate de especificidade igual, como no Chrome)
-        sourceOrder: node.type === 'Rule' ? this._sourceOrderCounter++ : undefined,
+        // Índice global de aparição no CSS
+        sourceOrder: node.type === 'Rule' ? this._sourceOrderCounter - 1 : undefined,
         astNode:     node
       },
       children: []

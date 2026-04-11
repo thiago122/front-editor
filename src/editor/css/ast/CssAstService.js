@@ -83,7 +83,7 @@ export class CssAstService {
    */
   static generateCss(astNode) {
     try {
-      return generate(astNode)
+      return generate(astNode, { pretty: true })
     } catch (e) {
       console.error('[CssAstService] Failed to generate CSS from AST node:', e)
       return ''

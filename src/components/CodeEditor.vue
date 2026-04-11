@@ -12,7 +12,7 @@
  * verificar morphdom
  */
 
-import { ref, watch, onMounted, onBeforeUnmount, nextTick, toRaw } from 'vue'
+import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick, toRaw } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
 import { useStyleStore } from '@/stores/StyleStore'
 import { getCleanNode } from '@/utils/ast'
@@ -24,23 +24,53 @@ import { css } from '@codemirror/lang-css'
 import { Compartment } from '@codemirror/state'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { findCssNode } from '@/editor/css/tree/_logicTreeHelpers.js'
+import { CssExportService } from '@/editor/css/export/CssExportService.js'
 
 const EditorStore = useEditorStore()
 const styleStore  = useStyleStore()
 
 // --- ESTADOS ---
 const editorContainer = ref(null)
+const hasUnsavedChanges = ref(false)
+const isSaving = ref(false)
 let view = null
 
 // Trava para evitar loops entre o watcher e o evento de digitação
 let isUpdatingFromStore = false
 
+const targetNode = computed(() => {
+  const targetId = EditorStore.codeEditorTargetId
+  if (!targetId) return null
+  if (EditorStore.codeEditorMode === 'html') return EditorStore.getNode(targetId)
+  return findCssNode(toRaw(styleStore.cssLogicTree), targetId)
+})
+
+/** Indica se estamos no modo de edição de ARQUIVO completo (onde o save é manual) */
+const isBulkMode = computed(() => {
+  const node = targetNode.value
+  return EditorStore.codeEditorMode === 'css' && (node?.type === 'file' || node?.type === 'root')
+})
+
+const editorLabel = computed(() => {
+  if (EditorStore.codeEditorMode === 'html') return 'Código HTML'
+  const node = targetNode.value
+  if (!node) return 'Editor de CSS'
+
+  if (node.type === 'file' || node.type === 'root') {
+    return `Arquivo: ${node.label || 'Sem nome'}`
+  }
+
+  if (node.type === 'selector' || node.type === 'at-rule') {
+    return `Regra: ${node.label}`
+  }
+
+  return 'Regra CSS'
+})
+
 // --- MÉTODOS ---
 const initEditor = () => {
   if (!editorContainer.value) return
   
-  // A extensão de linguagem agora é reativa (dentro de uma função ou recriada)
-  // Para simplicidade, vamos recriar o editor ou re-configurar as extensões
   view = new EditorView({
     doc: '',
     extensions: [
@@ -52,6 +82,15 @@ const initEditor = () => {
           handleCodeChange(update.state.doc.toString())
         }
       }),
+      // Atalho Ctrl+S para salvar
+      EditorView.domEventHandlers({
+        keydown: (event) => {
+          if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+            event.preventDefault()
+            handleSave()
+          }
+        }
+      })
     ],
     parent: editorContainer.value,
   })
@@ -103,17 +142,26 @@ const syncCodeFromStore = () => {
           }
         }
       } else {
+        // Se estivermos no processo de salvamento/rebuild, evitamos mostrar erro de "não encontrado"
+        // para prevenir o flicker ou limpeza do editor enquanto a árvore é remontada.
+        if (isSaving.value) return
+
         content = `/* Regra ou Arquivo ${targetId} não encontrado */`
       }
     }
 
     // Só despacha se o conteúdo mudou para evitar loop infinito ou perda de cursor
     if (view.state.doc.toString() !== content) {
+      if (view.hasFocus && isBulkMode.value) {
+        return
+      }
+
       isUpdatingFromStore = true
       view.dispatch({
         changes: { from: 0, to: view.state.doc.length, insert: content },
       })
       isUpdatingFromStore = false
+      hasUnsavedChanges.value = false // Reseta ao carregar novo alvo
     }
   } catch (e) {
     console.error('[CodeEditor] Falha ao sincronizar:', e)
@@ -161,21 +209,56 @@ const debouncedUpdate = debounce((code) => {
 
   if (EditorStore.codeEditorMode === 'html') {
     EditorStore.manipulation.updateInnerContent(targetId, code)
+    hasUnsavedChanges.value = false
   } else {
-    // Busca o nó para saber se é arquivo ou seletor
     const rawTree = toRaw(styleStore.cssLogicTree)
     const node = findCssNode(rawTree, targetId)
     
     if (node?.type === 'file' || node?.type === 'root') {
-      styleStore.updateFileFromCSS(targetId, code)
+      // No modo arquivo, o update real só acontece via handleSave().
     } else {
       styleStore.updateRuleDeclarationsFromCSS(targetId, code)
+      hasUnsavedChanges.value = false
     }
   }
 }, 400)
 
 function handleCodeChange(code) {
-  debouncedUpdate(code)
+  hasUnsavedChanges.value = true
+  
+  if (!isBulkMode.value) {
+    debouncedUpdate(code)
+  }
+}
+
+async function handleSave() {
+  if (!view || !hasUnsavedChanges.value) return
+  
+  const targetId = EditorStore.codeEditorTargetId
+  if (!targetId) return
+
+  isSaving.value = true
+  const code = view.state.doc.toString()
+
+  try {
+    if (EditorStore.codeEditorMode === 'html') {
+      EditorStore.manipulation.updateInnerContent(targetId, code)
+    } else {
+      const rawTree = toRaw(styleStore.cssLogicTree)
+      const node = findCssNode(rawTree, targetId)
+      
+      if (node?.type === 'file' || node?.type === 'root') {
+        styleStore.updateFileFromCSS(targetId, code)
+      } else {
+        styleStore.updateRuleDeclarationsFromCSS(targetId, code)
+      }
+    }
+    hasUnsavedChanges.value = false
+  } catch (err) {
+    console.error('[CodeEditor] Erro ao salvar:', err)
+  } finally {
+    isSaving.value = false
+  }
 }
 
 onMounted(() => {
@@ -196,17 +279,43 @@ onMounted(() => {
             : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'"
         >
           <span class="w-2 h-2 rounded-full animate-pulse" :class="EditorStore.codeEditorMode === 'html' ? 'bg-indigo-400' : 'bg-amber-400'"></span>
-          Editor de {{ EditorStore.codeEditorMode === 'html' ? 'HTML' : 'Regra CSS' }}
+          Editor de {{ editorLabel }}
         </div>
         
         <div class="h-4 w-[1px] bg-gray-700"></div>
 
         <span class="text-[10px] text-gray-500 font-mono">
-          ID: {{ EditorStore.codeEditorTargetId }}
+          ID: {{ EditorStore.codeEditorTargetId.length > 15 ? EditorStore.codeEditorTargetId.substring(0,12) + '...' : EditorStore.codeEditorTargetId }}
+        </span>
+
+        <!-- Indicador de Alterações no modo real-time -->
+        <span v-if="!isBulkMode && hasUnsavedChanges" class="text-[9px] text-amber-500 italic flex items-center gap-1">
+          <span class="w-1.5 h-1.5 bg-amber-500 rounded-full animate-ping"></span>
+          Auto-salvando...
         </span>
       </div>
 
       <div class="flex items-center gap-2">
+        <!-- Botão Salvar (Apenas modo Arquivo ou quando há mudanças) -->
+        <button
+          v-if="isBulkMode"
+          @click="handleSave"
+          :disabled="!hasUnsavedChanges || isSaving"
+          class="flex items-center gap-2 px-3 h-6 rounded text-[11px] font-bold transition-all"
+          :class="hasUnsavedChanges 
+            ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg' 
+            : 'bg-gray-800 text-gray-500 cursor-default'"
+        >
+          <svg v-if="isSaving" class="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+          </svg>
+          {{ isSaving ? 'Salvando...' : hasUnsavedChanges ? 'Salvar' : 'Salvo' }}
+        </button>
+
         <button 
           @click="EditorStore.showCodeEditor = false"
           class="text-gray-500 hover:text-white transition-colors p-1"

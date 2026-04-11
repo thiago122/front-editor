@@ -46,7 +46,7 @@ export class CssExportService {
         key,
         origin,
         sourceName,
-        css: generate(styleSheet),
+        css: generate(styleSheet, { pretty: true }),
       })
     })
     return result

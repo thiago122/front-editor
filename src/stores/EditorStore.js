@@ -41,15 +41,43 @@ export const useEditorStore = defineStore('editor', () => {
   const codeEditorMode     = ref('html')                    // 'html' | 'css'
   const codeEditorTargetId = ref(null)                      // ID do nó ou da regra sendo editada
 
+  /** Estado do editor rápido (popover) */
+  const quickCodeEditor = ref({
+    show:     false,
+    mode:     'css',
+    targetId: null,
+    x:        0,
+    y:        0,
+    updateKey: 0
+  })
+
   /**
    * Abre o editor de código em um modo específico para um alvo específico.
    * @param {string} mode - 'html' | 'css'
    * @param {string} targetId - ID do nó (HTML) ou RuleID (CSS)
+   * @param {{x: number, y: number}} position - Opcional: posição para abrir o editor rápido
    */
-  function openCodeEditor(mode, targetId) {
+  function openCodeEditor(mode, targetId, position = null) {
+    // Se for uma regra CSS e tivermos posição, abrimos o Quick Editor (popover)
+    if (mode === 'css' && targetId?.startsWith('rule::') && position) {
+      quickCodeEditor.value.targetId = targetId
+      quickCodeEditor.value.mode     = mode
+      quickCodeEditor.value.x        = position.x
+      quickCodeEditor.value.y        = position.y
+      quickCodeEditor.value.updateKey++ // Sinal de gatilho para os componentes
+      quickCodeEditor.value.show     = true
+      return
+    }
+
+    // Caso contrário (Arquivos, HTML ou sem posição), abre o painel inferior tradicional
     codeEditorMode.value = mode
     codeEditorTargetId.value = targetId
     showCodeEditor.value = true
+    
+    // Fecha o quick editor se ele estiver aberto para outro alvo
+    if (quickCodeEditor.value.show) {
+      quickCodeEditor.value.show = false
+    }
   }
 
   /**
@@ -584,6 +612,7 @@ export const useEditorStore = defineStore('editor', () => {
     triggerInlineEdit,
     showCssExplorer,
     showCodeEditor,
+    quickCodeEditor,
     codeEditorMode,
     codeEditorTargetId,
     openCodeEditor,

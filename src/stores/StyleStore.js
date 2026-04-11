@@ -176,14 +176,23 @@ export const useStyleStore = defineStore('style', () => {
    * Only call on init or when stylesheet structure changes.
    * For edits, use applyMutation() instead.
    */
-  async function rebuildLogicTree(doc, locations = ['internal', 'external']) {
+  async function rebuildLogicTree(doc, locations = ['internal', 'external', 'on_page']) {
     if (!doc) return
-    const masterAst = await CssAstService.buildMasterAst(doc, locations)
-    cssLogicTree.value = markRaw(CssLogicTreeService.buildLogicTree(masterAst))
-    // A logicTree foi substituída por um novo array — snapshots antigos
-    // apontam para o array anterior e não fazem mais sentido.
-    unifiedHistory.clearCssHistory()
-    notifyTreeMutation()
+    try {
+      const masterAst = await CssAstService.buildMasterAst(doc, locations)
+      
+      if (!masterAst || (masterAst.children && masterAst.children.isEmpty)) {
+        console.warn('[StyleStore] Rebuild resultou em AST possivelmente vazio.')
+      }
+
+      const newTree = CssLogicTreeService.buildLogicTree(masterAst)
+      cssLogicTree.value = markRaw(newTree)
+      
+      unifiedHistory.clearCssHistory()
+      notifyTreeMutation()
+    } catch (err) {
+      console.error('[StyleStore] Erro crítico no rebuildLogicTree:', err)
+    }
   }
 
   /**
@@ -256,7 +265,7 @@ export const useStyleStore = defineStore('style', () => {
         const prop = astDecl.property
         const val  = CssAstService.generateCss(astDecl.value)
         node.children.push({
-          id:       generateId(),
+          id:       `decl::${ruleId}::${prop}`, // ID Estável para declaração
           type:     'declaration',
           label:    prop,
           value:    val,
@@ -286,32 +295,32 @@ export const useStyleStore = defineStore('style', () => {
    * @param {string} fileId - ID do nó 'file' na Logic Tree
    * @param {string} cssString - Código CSS completo: ".btn { ... } @media { ... }"
    */
-  function updateFileFromCSS(fileId, cssString) {
+  async function updateFileFromCSS(fileId, cssString) {
     const logicTree = toRaw(cssLogicTree.value)
     const node = findCssNode(logicTree, fileId)
     if (!node || node.type !== 'file') return
 
-    const astNode = toRaw(node.metadata?.astNode) // StyleSheet node
-    if (!astNode) return
+    const editorStore = useEditorStore()
+    const doc = editorStore.getIframeDoc()
+    const sourceName = node.label
 
-    // 1. Faz o parse do conteúdo completo como um StyleSheet
-    const newSheetAst = CssAstService.createNode(cssString, 'StyleSheet')
-    if (!newSheetAst) return
-
-    // 2. Transfere os filhos para o Master AST original
-    if (astNode.children.fromArray) {
-      astNode.children.fromArray(newSheetAst.children.toArray())
-    } else {
-      astNode.children = newSheetAst.children
+    // 1. Atualizar o DOM (tag <style>) diretamente primeiro.
+    // Isso garante que o rebuildLogicTree subsequente leia o código novo.
+    let styleEl = doc?.getElementById(sourceName)
+    if (!styleEl && doc) {
+      styleEl = doc.querySelector(`style[data-manifest-path="${sourceName}"]`)
     }
 
-    // 3. Reconstroi a Logic Tree do arquivo (re-uso parcial do builder seria ideal, 
-    // mas aqui vamos apenas forçar o rebuild global simples por enquanto pela segurança do sync)
-    // TODO: No futuro, reconstruir apenas o sub-ramo do arquivo para performance.
-    const editorStore = useEditorStore()
-    rebuildLogicTree(editorStore.getIframeDoc())
+    if (styleEl) {
+      styleEl.textContent = cssString
+    } else {
+      console.warn(`[StyleStore] Tag <style> não encontrada para o arquivo: ${sourceName}`)
+    }
 
-    console.log(`[StyleStore] File ${fileId} updated via bulk CSS.`);
+    // 2. Reconstrói a Logic Tree do documento (re-parseando o DOM atualizado)
+    await rebuildLogicTree(doc)
+
+    console.log(`[StyleStore] File ${fileId} updated via bulk CSS.`)
   }
 
   // ── Exports ────────────────────────────────────────────────────────────────
@@ -340,5 +349,6 @@ export const useStyleStore = defineStore('style', () => {
     clearCopiedStyle,
     setManifest,
     getManifest,
+    updateFileFromCSS,
   }
 })

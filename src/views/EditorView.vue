@@ -23,6 +23,7 @@ import CssExplorer from '@/components/CssExplorer.vue'
 import Preview from '@/components/Preview.vue'
 import Breadcrumbs from '@/components/Breadcrumbs.vue'
 import CodeEditor from '@/components/CodeEditor.vue'
+import QuickCodeEditor from '@/components/QuickCodeEditor.vue'
 const EditorStore = useEditorStore()
 const styleStore  = useStyleStore()
 
@@ -640,5 +641,6 @@ watch(
     <CssOutputModal :isOpen="isSaveModalOpen" @close="isSaveModalOpen = false" />
     <HtmlImportModal :isOpen="isImportModalOpen" @close="isImportModalOpen = false" @load="handleHtmlLoad" />
     <SaveStatus />
+    <QuickCodeEditor />
   </div>
 </template>

@@ -52,7 +52,7 @@ export class CssTreeSynchronizer {
           type: 'StyleSheet', 
           children: new List().fromArray(rules) 
         }
-        const css = generate(fileAst)
+        const css = generate(fileAst, { pretty: true })
         const styleEl = this.findOrCreateStyleElement(targetDoc, origin, sourceName)
         
         if (styleEl.textContent !== css) {

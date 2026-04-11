@@ -23,7 +23,8 @@
           v-if="rule.selector !== 'element.style'"
           class="rule__meta-btn rule__meta-btn--code"
           title="Editar via Código"
-          @click.stop="editorStore.openCodeEditor('css', rule.uid)"
+          data-quick-editor-trigger="true"
+          @click.stop="(e) => editorStore.openCodeEditor('css', rule.uid, { x: e.clientX, y: e.clientY })"
         >
           <svg class="rule__meta-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <polyline points="16 18 22 12 16 6"></polyline>

@@ -9,9 +9,7 @@ import { findAndRemoveFromLogicTree } from '@/utils/astHelpers.js'
 import { generateId } from '@/utils/ids.js'
 import CssTreeItem from './CssTreeItem.vue'
 import CssContextMenu from './CssContextMenu.vue'
-import CssImportModal from './CssImportModal.vue'
 import { useCssDragDrop } from '@/composables/useCssDragDrop'
-import { parse } from 'css-tree'
 import { ApiService } from '@/services/ApiService'
 
 const styleStore = useStyleStore()
@@ -683,73 +681,7 @@ async function undoTrash() {
   }
 }
 
-// ─── CSS Import ───────────────────────────────────────────────────────────────
-
-/**
- * Estado do modal de importação.
- * targetFileNode é o nó `file` de destino selecionado pelo usuário.
- */
-const importModal = ref({ open: false, fileNode: null })
-
-/** Abre o modal para importar CSS no arquivo `node`. */
-function openImportModal(node) {
-  importModal.value = { open: true, fileNode: node }
-}
-
-/**
- * Recebe o CSS colado pelo usuário, injeta no iframe e reconstrói a árvore.
- *
- * Estratégia:
- *   1. Validar que o CSS pode ser parseado (css-tree).
- *   2. Localizar o `<style>` correto no iframe pelo sourceName do nó.
- *   3. Concatenar o CSS novo ao conteúdo existente.
- *   4. Reconstruir a Logic Tree para o Explorer refletir os novos nós.
- *
- * @param {string} cssText - CSS bruto colado pelo usuário
- */
-async function handleCssImport(cssText) {
-  const fileNode = importModal.value.fileNode
-  if (!fileNode || !cssText.trim()) return
-
-  // 1. Validar o CSS (parse lança erro se o CSS for inválido)
-  try {
-    parse(cssText)
-  } catch (err) {
-    console.error('[CssExplorer] CSS inválido, import abortado:', err)
-    return
-  }
-
-  // 2. Localizar o <style> no iframe pelo sourceName do arquivo
-  const doc        = editorStore.getIframeDoc()
-  const sourceName = fileNode.metadata?.sourceName
-  const origin     = fileNode.metadata?.origin
-
-  // Para nós on_page/internal: procura a tag <style> com data-location correspondente
-  let styleTag = null
-  if (origin === 'on_page' || origin === 'internal') {
-    const styles = Array.from(doc.querySelectorAll('style'))
-    styleTag = styles.find(s => {
-      const loc = s.dataset.location
-      // Se o arquivo é "style" sem nome específico, pega o primeiro on_page
-      return loc === origin || loc === 'on_page'
-    }) ?? null
-  }
-
-  if (!styleTag) {
-    // Cria uma nova <style> on_page se não encontrar a existente
-    styleTag = doc.createElement('style')
-    styleTag.setAttribute('data-location', 'on_page')
-    doc.head.appendChild(styleTag)
-  }
-
-  // 3. Concatenar o CSS novo (separado por linha em branco)
-  styleTag.textContent += '\n\n' + cssText
-
-  // 4. Reconstruir a Logic Tree para o Explorer refletir os novos nós
-  await styleStore.rebuildLogicTree(doc)
-
-  console.log(`[CssExplorer] CSS importado em "${sourceName}" (${origin}).`)
-}
+// ─── Menu de Contexto ───────────────────────────────────────────────────────
 
 function openContextMenu(node, event) {
   event.preventDefault()
@@ -776,7 +708,6 @@ function openContextMenu(node, event) {
         { label: 'Move Down',   icon: '↓',  action: () => moveFileInManifest(node, 'down') },
         { divider: true },
         { label: 'Rename',      icon: '✏️', action: () => renameFile(node), shortcut: 'F2' },
-        { label: 'Import CSS',  icon: '↑', action: () => openImportModal(node) },
         { label: 'Export .css', icon: '↓', action: () => downloadSheet(fileKey) },
         { divider: true },
         { label: 'Remover arquivo', icon: '✕', action: () => deleteFile(node), danger: true, shortcut: 'Del' },
@@ -1308,7 +1239,6 @@ const itemsOffset = computed(() => startIndex.value * ROW_HEIGHT)
                         @drop="onDrop"
                         @dragend="onDragEnd"
                         @contextmenu="openContextMenu"
-                        @import-css="openImportModal"
                         @select="onNodeSelect"
                     />
                 </div>
@@ -1326,13 +1256,6 @@ const itemsOffset = computed(() => startIndex.value * ROW_HEIGHT)
         <!-- Menu de contexto -->
         <CssContextMenu :menu="contextMenu" @close="contextMenu = null" />
 
-        <!-- Modal de importação de CSS -->
-        <CssImportModal
-          :isOpen="importModal.open"
-          :fileName="importModal.fileNode?.label ?? 'style'"
-          @import="handleCssImport"
-          @close="importModal.open = false"
-        />
 
         <!-- Toast de desfazer (lixeira) -->
         <Transition name="toast">
