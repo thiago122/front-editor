@@ -113,10 +113,15 @@
 
       <!-- Rule Header -->
       <div class="rule__header">
-        <div class="rule__header-left">
+        <div
+          class="rule__header-left"
+          :style="{ cursor: editable ? 'text' : 'default' }"
+          @click="editable && onAddDeclaration()"
+        >
           <span
             :class="['rule__selector', !editable ? 'rule__selector--readonly' : '']"
             :contenteditable="rule.selector !== 'element.style' && editable"
+            @click.stop
             @blur="onSelectorBlur"
             @keydown.enter.prevent="onSelectorConfirm"
             @keydown.tab.prevent="onSelectorConfirm"
@@ -387,6 +392,7 @@ function onRemoveIfEmpty(decl) {
 .rule__header-left {
   display: flex;
   align-items: center;
+  flex: 1;
 }
 .rule__selector {
   font-size: 13px;

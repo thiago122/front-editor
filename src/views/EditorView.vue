@@ -23,11 +23,14 @@ import CssExplorer from '@/components/CssExplorer.vue'
 import Preview from '@/components/Preview.vue'
 import Breadcrumbs from '@/components/Breadcrumbs.vue'
 import CodeEditor from '@/components/CodeEditor.vue'
+const codeEditorHtmlRef = ref(null)
+const codeEditorCssRef  = ref(null)
 import QuickCodeEditor from '@/components/QuickCodeEditor.vue'
 const EditorStore = useEditorStore()
 const styleStore  = useStyleStore()
 
 // UI
+import FloatingWindow from '@/components/ui/FloatingWindow.vue'
 import Separator from '@/components/Separator.vue'
 import AsidePanel from '@/components/AsidePanel.vue'
 
@@ -72,7 +75,6 @@ const route = useRoute()
 const layerWidth     = ref(280)  // col-layer    (HTML Explorer)
 const cssWidth       = ref(450)  // col-css      (CSS Explorer)
 const inspectorWidth = ref(300)  // col-panel-inspector
-const codeEditorHeight = ref(250) // Altura do editor de código
 
 // No template, Vue faz auto-unwrap de refs (layerWidth → 280).
 // Usar funções no script garante que o ref correto é passado ao composable.
@@ -81,9 +83,6 @@ function startCssResize(e)          { startResize(e, cssWidth,       { min: 220,
 function startCssRightResize(e)     { startResize(e, cssWidth,       { min: 220, max: 680, direction: -1 }) }
 function startInspectorResize(e)    { startResize(e, inspectorWidth, { min: 200, max: 520, direction: -1 }) }
 
-function startCodeEditorResize(e) {
-  startResize(e, codeEditorHeight, { min: 100, max: 800, direction: -1, axis: 'y' })
-}
 
 const isSaveModalOpen  = ref(false)
 const isImportModalOpen = ref(false)
@@ -153,10 +152,34 @@ function handleGlobalKeydown(e) {
     } else {
       downloadHtml()
     }
+  } else if (e.altKey && e.key === 'e') {
+    e.preventDefault()
+    EditorStore.showCssExplorer = !EditorStore.showCssExplorer
+  } else if (e.altKey && e.key === 'l') {
+    e.preventDefault()
+    activeExplorer.value = activeExplorer.value === 'html' ? null : 'html'
   }
 }
 onMounted(()      => window.addEventListener('keydown', handleGlobalKeydown))
 onUnmounted(() => window.removeEventListener('keydown', handleGlobalKeydown))
+
+// Escuta atalhos também no iframe (foco vai para o iframe ao interagir com o canvas)
+let _iframeWin = null
+function attachIframeKeydown(iframe) {
+  if (_iframeWin) _iframeWin.removeEventListener('keydown', handleGlobalKeydown)
+  _iframeWin = iframe?.contentWindow ?? null
+  _iframeWin?.addEventListener('keydown', handleGlobalKeydown)
+}
+
+watch(() => EditorStore.iframe, (iframe) => {
+  if (!iframe) return
+  attachIframeKeydown(iframe)
+  iframe.addEventListener('load', () => attachIframeKeydown(iframe))
+}, { immediate: true })
+
+onUnmounted(() => {
+  if (_iframeWin) _iframeWin.removeEventListener('keydown', handleGlobalKeydown)
+})
 
 // Auto-open CSS Explorer when a rule navigation is requested from the Inspector
 watch(() => styleStore.explorerScrollRequest, (v) => {
@@ -426,12 +449,16 @@ watch(
           </svg>
         </IconSidebarButton>
 
-        <IconSidebarButton title="Layers" @click="activeExplorer = activeExplorer === 'html' ? null : 'html'"
+        <IconSidebarButton title="Layers (Alt+L)" @click="activeExplorer = activeExplorer === 'html' ? null : 'html'"
           :class="activeExplorer === 'html' ? 'bg-gray-200' : ''">
           <IconLayer />
         </IconSidebarButton>
 
-        <IconSidebarButton title="HTML">
+        <IconSidebarButton 
+          title="HTML do Elemento" 
+          @click="EditorStore.selectedNodeId ? EditorStore.openCodeEditor('html', EditorStore.selectedNodeId) : null"
+          :class="EditorStore.htmlEditor.show ? 'bg-gray-200' : ''"
+        >
           <IconHTML />
         </IconSidebarButton>
 
@@ -496,8 +523,8 @@ watch(
         <!-- Pixel Perfect: abre o painel de controles -->
         <IconSidebarButton
           title="Pixel Perfect — sobrepor imagem de referência"
-          @click="activeExplorer = activeExplorer === 'pixelPerfect' ? null : 'pixelPerfect'"
-          :class="activeExplorer === 'pixelPerfect' ? 'bg-violet-100 text-violet-600' : (pixelPerfect.enabled.value ? 'text-violet-500' : '')"
+          @click="EditorStore.pixelPerfectEditor.show = !EditorStore.pixelPerfectEditor.show"
+          :class="EditorStore.pixelPerfectEditor.show ? 'bg-violet-100 text-violet-600' : (pixelPerfect.enabled.value ? 'text-violet-500' : '')"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
@@ -533,20 +560,6 @@ watch(
         />
       </template>
 
-      <!-- col-pixelPerfect: painel de controles do Pixel Perfect -->
-      <template v-if="activeExplorer === 'pixelPerfect'">
-        <AsidePanel
-          title="Pixel Perfect"
-          :style="{ width: '220px', minWidth: '200px', maxWidth: '280px' }"
-          style2="position: relative; z-index: var(--z-panel)"
-        >
-          <PixelPerfectPanel :containerEl="previewContainerEl" />
-        </AsidePanel>
-        <div
-          class="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-blue-400/40 transition-colors z-50"
-          @mousedown="e => startResize(e, ref(220), { min: 200, max: 280 })"
-        />
-      </template>
 
       <!-- col-css: CSS Explorer (REMOVIDO DA ESQUERDA — agora fica à direita do canvas) -->
 
@@ -591,16 +604,91 @@ watch(
               <Breadcrumbs />
           </div>
 
-          <!-- Code Editor Integrado (v-if para otimização radical) -->
-          <div v-if="EditorStore.showCodeEditor" class="shrink-0 flex flex-col" :style="{ height: codeEditorHeight + 'px' }">
-            <!-- Handle Superior (Vertical) -->
-            <div 
-              class="h-1 cursor-row-resize bg-transparent hover:bg-indigo-400/40 transition-colors z-[1001] border-t border-gray-300"
-              title="Arrastar para ajustar altura do código"
-              @mousedown="startCodeEditorResize"
+          <!-- Code Editor HTML Flutuante -->
+          <FloatingWindow 
+            :show="EditorStore.htmlEditor.show"
+            title="Editor HTML"
+            :initialX="EditorStore.htmlEditor.x"
+            :initialY="EditorStore.htmlEditor.y"
+            :initialWidth="800"
+            :initialHeight="500"
+            :closeOnClickOutside="false"
+            @close="EditorStore.htmlEditor.show = false"
+          >
+            <template #header-left>
+              <div class="flex items-center gap-2 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest border bg-indigo-500/20 text-indigo-400 border-indigo-500/30">
+                <span class="w-1.5 h-1.5 rounded-full animate-pulse bg-indigo-400"></span>
+                HTML
+              </div>
+              <div class="h-3 w-[1px] bg-gray-700 mx-1"></div>
+              <span v-if="EditorStore.htmlEditor.targetId" class="text-[10px] text-gray-500 font-mono truncate max-w-[200px]">
+                ID: {{ EditorStore.htmlEditor.targetId }}
+              </span>
+            </template>
+
+            <CodeEditor 
+              ref="codeEditorHtmlRef" 
+              mode="html" 
+              :targetId="EditorStore.htmlEditor.targetId" 
+              :show="EditorStore.htmlEditor.show"
+              :hideHeader="true" 
+              @close="EditorStore.htmlEditor.show = false"
             />
-            <CodeEditor />
-          </div>
+          </FloatingWindow>
+
+          <!-- Code Editor CSS Flutuante -->
+          <FloatingWindow 
+            :show="EditorStore.cssFileEditor.show"
+            title="Editor CSS"
+            :initialX="EditorStore.cssFileEditor.x"
+            :initialY="EditorStore.cssFileEditor.y"
+            :initialWidth="800"
+            :initialHeight="500"
+            :closeOnClickOutside="false"
+            @close="EditorStore.cssFileEditor.show = false"
+          >
+            <template #header-left>
+              <div class="flex items-center gap-2 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest border bg-amber-500/20 text-amber-400 border-amber-500/30">
+                <span class="w-1.5 h-1.5 rounded-full animate-pulse bg-amber-400"></span>
+                CSS
+              </div>
+              <div class="h-3 w-[1px] bg-gray-700 mx-1"></div>
+              <span v-if="EditorStore.cssFileEditor.targetId" class="text-[10px] text-gray-500 font-mono truncate max-w-[200px]">
+                ID: {{ EditorStore.cssFileEditor.targetId }}
+              </span>
+            </template>
+
+            <template #header-right>
+              <div v-if="codeEditorCssRef?.isBulkMode" class="flex items-center">
+                <button
+                  @click="codeEditorCssRef.handleSave"
+                  :disabled="!codeEditorCssRef.hasUnsavedChanges || codeEditorCssRef.isSaving"
+                  class="flex items-center gap-1.5 px-3 h-6 rounded text-[10px] font-bold transition-all border"
+                  :class="codeEditorCssRef.hasUnsavedChanges 
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500 shadow-sm' 
+                    : 'bg-gray-800 text-gray-500 border-gray-700 cursor-default'"
+                >
+                  <svg v-if="codeEditorCssRef.isSaving" class="animate-spin h-3 w-3 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <svg v-else class="w-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                  </svg>
+                  {{ codeEditorCssRef.isSaving ? 'Salvando' : codeEditorCssRef.hasUnsavedChanges ? 'Salvar' : 'Salvo' }}
+                </button>
+              </div>
+            </template>
+
+            <CodeEditor 
+              ref="codeEditorCssRef" 
+              mode="css" 
+              :targetId="EditorStore.cssFileEditor.targetId" 
+              :show="EditorStore.cssFileEditor.show"
+              :hideHeader="true" 
+              @close="EditorStore.cssFileEditor.show = false"
+            />
+          </FloatingWindow>
     
       </div>
 
@@ -642,5 +730,26 @@ watch(
     <HtmlImportModal :isOpen="isImportModalOpen" @close="isImportModalOpen = false" @load="handleHtmlLoad" />
     <SaveStatus />
     <QuickCodeEditor />
+
+    <!-- Pixel Perfect Floating Window -->
+    <FloatingWindow 
+      :show="EditorStore.pixelPerfectEditor.show"
+      title="Pixel Perfect"
+      theme="light"
+      :initialX="EditorStore.pixelPerfectEditor.x"
+      :initialY="EditorStore.pixelPerfectEditor.y"
+      :initialWidth="240"
+      :initialHeight="400"
+      :closable="true"
+      @close="EditorStore.pixelPerfectEditor.show = false"
+    >
+      <template #header-left>
+        <div class="flex items-center gap-2 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest border bg-violet-500/10 text-violet-600 border-violet-500/20">
+          <span class="w-1.5 h-1.5 rounded-full animate-pulse bg-violet-500"></span>
+          Pixel Perfect
+        </div>
+      </template>
+      <PixelPerfectPanel :containerEl="previewContainerEl" />
+    </FloatingWindow>
   </div>
 </template>

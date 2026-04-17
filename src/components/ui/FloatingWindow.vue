@@ -12,6 +12,8 @@ const props = defineProps({
   minHeight:       { type: Number,  default: 200 },
   blueIndicator:  { type: Boolean, default: false },
   closable:        { type: Boolean, default: true },
+  closeOnClickOutside: { type: Boolean, default: true },
+  theme:           { type: String,  default: 'dark' }, // 'dark' | 'light'
 })
 
 const emit = defineEmits(['close', 'move', 'resize'])
@@ -33,6 +35,29 @@ const positionStyle = computed(() => ({
   width: `${size.value.width}px`,
   height: `${size.value.height}px`,
 }))
+
+const themeClasses = computed(() => {
+  if (props.theme === 'light') {
+    return {
+      container: 'bg-white/95 backdrop-blur-md border-black/[0.08] shadow-[0_20px_50px_rgba(0,0,0,0.15)]',
+      header: 'bg-gray-50/80 border-black/[0.05]',
+      title: 'text-blue-600',
+      body: 'bg-white/50',
+      footer: 'bg-gray-50/80 border-black/[0.05]',
+      closeBtn: 'text-gray-400 hover:text-gray-900 hover:bg-black/5',
+      resizeIcon: 'text-gray-300'
+    }
+  }
+  return {
+    container: 'bg-[#282c34] border-gray-100/10 shadow-2xl',
+    header: 'bg-[#21252b] border-gray-800',
+    title: 'text-blue-400',
+    body: 'bg-[#282c34]',
+    footer: 'bg-[#1e2227] border-gray-800',
+    closeBtn: 'text-gray-500 hover:text-white hover:bg-white/5',
+    resizeIcon: 'text-gray-700'
+  }
+})
 
 // --- DRAG ---
 function startDrag(e) {
@@ -131,7 +156,7 @@ function onKeydown(e) {
 }
 
 function handleClickOutside(e) {
-  if (!props.show || !props.closable) return
+  if (!props.show || !props.closable || !props.closeOnClickOutside) return
 
   const target = e.target
   const isTrigger = target.closest('[data-quick-editor-trigger]')
@@ -164,19 +189,28 @@ onBeforeUnmount(() => {
     <div
       v-show="show"
       ref="container"
-      class="fixed z-[10000] bg-[#282c34] rounded-lg shadow-2xl border border-gray-100/10 overflow-hidden flex flex-col"
-      :class="isDragging || isResizing ? 'transition-none select-none' : 'transition-[left,top,width,height] duration-200'"
+      class="fixed z-[10000] rounded-lg border overflow-hidden flex flex-col"
+      :class="[
+        isDragging || isResizing ? 'transition-none select-none' : 'transition-[left,top,width,height] duration-200',
+        themeClasses.container
+      ]"
       :style="positionStyle"
     >
       <!-- Title bar (Handle) -->
       <div 
-        class="flex items-center justify-between px-3 h-9 bg-[#21252b] border-b border-gray-800 shrink-0 select-none cursor-grab active:cursor-grabbing"
+        class="flex items-center justify-between px-3 h-9 border-b shrink-0 select-none cursor-grab active:cursor-grabbing"
+        :class="themeClasses.header"
         @pointerdown="startDrag"
       >
         <div class="flex items-center gap-2 pointer-events-none overflow-hidden">
           <slot name="header-left">
             <span v-if="blueIndicator" class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shrink-0"></span>
-            <span class="text-[10px] font-bold text-blue-400 uppercase tracking-widest shrink-0 truncate">{{ title }}</span>
+            <span 
+              class="text-[10px] font-bold uppercase tracking-widest shrink-0 truncate"
+              :class="themeClasses.title"
+            >
+              {{ title }}
+            </span>
           </slot>
         </div>
         
@@ -185,7 +219,8 @@ onBeforeUnmount(() => {
           <button 
             v-if="closable"
             @click.stop="$emit('close')" 
-            class="text-gray-500 hover:text-white transition-colors p-1 pointer-events-auto rounded hover:bg-white/5"
+            class="transition-colors p-1 pointer-events-auto rounded"
+            :class="themeClasses.closeBtn"
             title="Fechar (Esc)"
           >
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -196,12 +231,19 @@ onBeforeUnmount(() => {
       </div>
       
       <!-- Body -->
-      <div class="flex-1 overflow-hidden relative bg-[#282c34]">
+      <div 
+        class="flex-1 overflow-hidden relative"
+        :class="themeClasses.body"
+      >
         <slot></slot>
       </div>
 
       <!-- Footer -->
-      <div v-if="$slots.footer" class="shrink-0 px-3 py-2 bg-[#1e2227] border-t border-gray-800">
+      <div 
+        v-if="$slots.footer" 
+        class="shrink-0 px-3 py-2 border-t"
+        :class="themeClasses.footer"
+      >
         <slot name="footer"></slot>
       </div>
 
@@ -210,7 +252,12 @@ onBeforeUnmount(() => {
         class="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize z-[10001] flex items-end justify-end p-0.5 group"
         @pointerdown.stop="startResize"
       >
-        <svg class="w-2.5 h-2.5 text-gray-700 group-hover:text-blue-500 transition-colors" viewBox="0 0 24 24" fill="currentColor">
+        <svg 
+          class="w-2.5 h-2.5 transition-colors group-hover:text-blue-500" 
+          :class="themeClasses.resizeIcon"
+          viewBox="0 0 24 24" 
+          fill="currentColor"
+        >
           <path d="M22 22H20V20H22V22ZM22 18H20V16H22V18ZM18 22H16V20H18V22ZM18 18H16V16H18V18ZM14 22H12V20H14V22ZM22 14H20V12H22V14Z" />
         </svg>
       </div>

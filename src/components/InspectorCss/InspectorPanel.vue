@@ -2,26 +2,26 @@
   <div class="h-full flex flex-col bg-white text-[12px] text-gray-900 select-none font-mono">
 
     <!-- Header with Tab Navigation -->
-    <div class="flex items-center border-b border-gray-200 bg-gray-50 min-w-0">
+    <div class="flex items-center border-b border-gray-200 bg-gray-50 min-w-0 pr-1">
+      <!-- Botão toggle CSS Explorer: primeiro item agora -->
+      <button
+        class="shrink-0 w-8 h-8 flex items-center justify-center transition-colors border-r border-gray-200"
+        :class="editorStore.showCssExplorer ? 'bg-blue-50 text-blue-600' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'"
+        title="CSS Explorer (Alt+E)"
+        @click="editorStore.showCssExplorer = !editorStore.showCssExplorer"
+      >
+        <IconExplorer class="w-4 h-4" />
+      </button>
+
       <!-- Abas: overflow-hidden para não vazar quando a coluna for estreita -->
       <div class="flex overflow-hidden min-w-0">
         <button v-for="tab in TABS" :key="tab"
           @click="activeTab = tab"
           :class="['px-3 py-2 text-[11px] font-medium transition-colors shrink-0',
-            activeTab === tab ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-800']">
+            activeTab === tab ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-800 text-top-tab']">
           {{ tab }}
         </button>
       </div>
-
-      <!-- Botão toggle CSS Explorer: shrink-0 para nunca desaparecer -->
-      <button
-        class="shrink-0 ml-auto mr-1 w-6 h-6 flex items-center justify-center rounded transition-colors"
-        :class="editorStore.showCssExplorer ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-200'"
-        title="CSS Explorer (mostrar/ocultar)"
-        @click="editorStore.showCssExplorer = !editorStore.showCssExplorer"
-      >
-        <IconCSS class="w-3.5 h-3.5" />
-      </button>
     </div>
 
 
@@ -72,13 +72,43 @@
           </div>
         </template>
 
-        <!-- ATTRIBUTES TAB -->
-        <AttributeManager v-else-if="activeTab === 'Attributes'" />
-
         <!-- COMPUTED TAB -->
         <ComputedTab v-else-if="activeTab === 'Computed'" />
       </div>
     </template>
+
+    <!-- ── QUICK ATTRIBUTES ACCORDION (Bottom) ────────────────────────── -->
+    <div 
+      v-if="editorStore.selectedElement" 
+      class="border-t-2 border-blue-500 bg-white flex flex-col shrink-0 min-h-0 relative"
+      style="box-shadow: 0 -4px 12px rgba(0,0,0,0.08);"
+    >
+      <!-- Header / Summary Bar -->
+      <div 
+        @click="editorStore.quickAttributesOpen = !editorStore.quickAttributesOpen"
+        class="px-3 py-2 flex items-center justify-between cursor-pointer bg-slate-100 hover:bg-slate-200 transition-colors group border-b border-gray-200"
+        title="Gerenciar atributos (Alt+C para adicionar classe)"
+      >
+        <div class="flex items-center gap-2 min-w-0">
+          <span :class="editorStore.quickAttributesOpen ? 'rotate-90' : ''" class="text-[8px] text-slate-500 transition-transform">▶</span>
+          <span class="text-blue-600 font-bold">&lt;{{ editorStore.selectedElement.tagName.toLowerCase() }}&gt;</span>
+          
+          <!-- Summary chips (only when closed) -->
+          <div v-if="!editorStore.quickAttributesOpen" class="flex gap-1 overflow-hidden">
+            <template v-for="cls in summaryClasses" :key="cls">
+              <span class="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 truncate">.{{ cls }}</span>
+            </template>
+            <span v-if="editorStore.selectedElement.id" class="text-[10px] text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200 truncate">#{{ editorStore.selectedElement.id }}</span>
+          </div>
+        </div>
+        <span class="text-[10px] text-slate-500 font-bold uppercase tracking-wide group-hover:text-blue-600 transition-colors">Atributos</span>
+      </div>
+
+      <!-- Expandable Content -->
+      <div v-if="editorStore.quickAttributesOpen" class="flex-1 overflow-hidden h-[200px] border-t border-gray-100 bg-white">
+        <AttributeManager ref="quickAttributesRef" @close="editorStore.quickAttributesOpen = false" />
+      </div>
+    </div>
   </div>
 </template>
 
@@ -88,7 +118,7 @@ import { useEditorStore } from '@/stores/EditorStore'
 import { useStyleStore } from '@/stores/StyleStore'
 import { editorHooks } from '@/editor/HookManager'
 
-import ComputedTab from './ComputedTab/ComputedTab.vue'
+import ComputedTab from '@/components/InspectorCss/ComputedTab/ComputedTab.vue'
 import RuleCreator from '@/components/InspectorCss/RuleCreator.vue'
 import InspectorEmptyState from '@/components/InspectorCss/InspectorEmptyState.vue'
 import AttributeManager from '@/components/InspectorCss/StylesTab/AttributeManager.vue'
@@ -96,9 +126,9 @@ import PseudoStateTabBar from '@/components/InspectorCss/StylesTab/PseudoStateTa
 import TargetRuleGroup from '@/components/InspectorCss/StylesTab/TargetRuleGroup.vue'
 import InheritedRuleGroup from '@/components/InspectorCss/StylesTab/InheritedRuleGroup.vue'
 import HeadManager from '@/components/InspectorCss/HeadManager.vue'
-import IconCSS from '@/components/icons/IconCSS.vue'
+import IconExplorer from '@/components/icons/IconExplorer.vue'
 
-const TABS = ['Styles', 'Attributes', 'Computed', 'Head']
+const TABS = ['Styles', 'Computed', 'Head']
 const activeTab = ref('Styles')
 
 const editorStore = useEditorStore()
@@ -107,6 +137,7 @@ const styleStore = useStyleStore()
 // ── Quick Selector (Ctrl+K e auto-open após inserção) ───────────────────────────
 
 const ruleCreatorRef = ref(null)
+const quickAttributesRef = ref(null)
 
 /**
  * Muda para a aba Styles e abre o RuleCreator com foco no input de seletor.
@@ -117,11 +148,29 @@ function openRuleCreator() {
   nextTick(() => ruleCreatorRef.value?.open())
 }
 
+/**
+ * Abre o acordeão de atributos (Quick Attributes) e foca no campo de adicionar classe.
+ */
+function openQuickClass() {
+  editorStore.quickAttributesOpen = true
+  nextTick(() => {
+    quickAttributesRef.value?.startAddClass()
+  })
+}
+
 // Alt+K global → abre Quick Selector
+// Alt+C global → abre Quick Class (Atributos)
 function onKeydown(e) {
   if (e.altKey && e.key === 'k') {
     e.preventDefault()
     openRuleCreator()
+  } else if (e.altKey && e.key === 'c') {
+    e.preventDefault()
+    openQuickClass()
+  } else if (e.key === 'Escape') {
+    if (editorStore.quickAttributesOpen) {
+      editorStore.quickAttributesOpen = false
+    }
   }
 }
 
@@ -179,6 +228,12 @@ function applyAttrRename() {
 const targetGroup = computed(() => styleStore.ruleGroups.find(g => g.isTarget))
 const inheritedGroups = computed(() => styleStore.ruleGroups.filter(g => !g.isTarget))
 
+const summaryClasses = computed(() => {
+  mutationTick.value // dependência de reatividade para o MutationObserver
+  if (!editorStore.selectedElement) return []
+  return (editorStore.selectedElement.className || '').split(/\s+/).filter(Boolean).slice(0, 3)
+})
+
 
 // ── Refresh ───────────────────────────────────────────────────────────────────
 
@@ -202,12 +257,16 @@ watch(() => styleStore.selectedRuleId, refresh)
 // Watches class/id/style on the selected element directly in the DOM.
 // Needed because AttributeManager modifies these attributes via manipulation.setAttribute(),
 // which bypasses the StyleStore and never increments astMutationKey.
+const mutationTick = ref(0)
 let observer = null
 
 watch(() => editorStore.selectedElement, (newEl) => {
   if (observer) observer.disconnect()
   if (!newEl) return
-  observer = new MutationObserver(refresh)
+  observer = new MutationObserver(() => {
+    mutationTick.value++
+    refresh()
+  })
   observer.observe(newEl, {
     attributes: true,
     attributeFilter: ['style', 'class', 'id'],

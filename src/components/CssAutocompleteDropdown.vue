@@ -13,7 +13,7 @@
       v-if="ac.isActive.value"
       ref="listEl"
       class="css-ac-dropdown"
-      :class="{ 'is-positioned': isPositioned }"
+      :class="{ 'is-positioned': isPositioned, 'is-up': isUp }"
       :style="dropdownStyle"
     >
       <li
@@ -43,6 +43,7 @@ const listEl   = ref(null)
 const itemRefs = ref([])
 const dropdownStyle = ref({})
 const isPositioned  = ref(false)
+const isUp          = ref(false)
 
 // Scroll para o item ativo ao navegar com teclado
 watch(() => props.ac.activeIdx.value, idx => {
@@ -56,15 +57,22 @@ function updatePosition() {
   const el = props.anchor
   if (!el || !props.ac.isActive.value) {
     isPositioned.value = false
+    isUp.value = false
     return
   }
   const rect = el.getBoundingClientRect()
   
-  // Se o elemento não houver visibilidade ou rect válido, não posiciona
   if (rect.width === 0 && rect.height === 0) return
 
+  // Detecta se deve abrir para cima
+  const dropdownMaxHeight = 220
+  const spaceBelow = window.innerHeight - rect.bottom
+  const shouldOpenUp = spaceBelow < dropdownMaxHeight && rect.top > spaceBelow
+  isUp.value = shouldOpenUp
+
   dropdownStyle.value = {
-    top:       `${rect.bottom + 2}px`,
+    top:       shouldOpenUp ? 'auto' : `${rect.bottom + 2}px`,
+    bottom:    shouldOpenUp ? `${window.innerHeight - rect.top + 2}px` : 'auto',
     left:      `${rect.left}px`,
     minWidth:  `${Math.max(rect.width, 140)}px`,
   }
@@ -118,6 +126,10 @@ onUnmounted(() => {
   pointer-events: none;
   transform: translateY(-5px);
   transition: opacity 0.1s, transform 0.1s;
+}
+
+.css-ac-dropdown.is-up {
+  transform: translateY(5px);
 }
 
 .css-ac-dropdown.is-positioned {

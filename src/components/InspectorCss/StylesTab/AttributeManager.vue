@@ -50,7 +50,7 @@
                   v-model="editClassValue"
                   @input="ac.updateQuery($event.target.value)"
                   @keydown="handleEnter($event, () => confirmEditClass(cls))"
-                  @keydown.escape="editingClass = null; ac.close()"
+                  @keydown.escape="emit('close'); editingClass = null; ac.close()"
                   class="w-[100px] border border-blue-400 px-1 py-0 outline-none font-mono text-blue-800 text-[11px] rounded"
                 />
                 <button @click="confirmEditClass(cls)" class="text-blue-600 hover:text-blue-800">✓</button>
@@ -66,7 +66,7 @@
                   v-model="newClassName"
                   @input="ac.updateQuery($event.target.value)"
                   @keydown="handleEnter($event, confirmAddClass)"
-                  @keydown.escape="addingClass = false; ac.close()"
+                  @keydown.escape="emit('close'); addingClass = false; ac.close()"
                   placeholder="class-name"
                   class="w-[100px] border border-blue-400 px-1 py-0 outline-none font-mono text-blue-800 text-[11px] rounded"
                 />
@@ -115,7 +115,7 @@
             <input
               v-model="editIdValue"
               @keydown.enter="confirmEditId"
-              @keydown.escape="editingId = false"
+              @keydown.escape="emit('close'); editingId = false"
               class="flex-1 border border-purple-300 px-1 py-0 outline-none focus:border-purple-500 font-mono text-purple-700 rounded text-[11px] min-w-0"
             />
             <button @click="confirmEditId" class="text-blue-600 hover:text-blue-800 shrink-0">✓</button>
@@ -149,7 +149,7 @@
             <input
               v-model="editAttrValue"
               @keydown.enter="confirmEditAttr(attr.name)"
-              @keydown.escape="editingAttr = null"
+              @keydown.escape="emit('close'); editingAttr = null"
               class="flex-1 border border-blue-300 px-1 py-0 outline-none focus:border-blue-500 font-mono text-gray-800 rounded text-[11px] min-w-0"
             />
             <button @click="confirmEditAttr(attr.name)" class="text-blue-600 hover:text-blue-800 shrink-0">✓</button>
@@ -162,6 +162,7 @@
           <input
             v-model="newAttrName"
             @keydown.enter="$refs.newAttrValueInput?.focus()"
+            @keydown.escape="emit('close')"
             placeholder="attribute"
             class="w-[90px] border border-gray-200 px-1.5 py-1 outline-none focus:border-blue-400 font-mono text-gray-600 bg-white rounded text-[11px]"
           />
@@ -170,6 +171,7 @@
             ref="newAttrValueInput"
             v-model="newAttrValue"
             @keydown.enter="confirmAddAttr"
+            @keydown.escape="emit('close')"
             placeholder="value"
             class="flex-1 border border-gray-200 px-1.5 py-1 outline-none focus:border-blue-400 font-mono text-gray-600 bg-white rounded min-w-0 text-[11px]"
           />
@@ -198,6 +200,8 @@ import { EDITOR_IGNORED_ATTRS } from '@/editor/html/constants'
 const editorStore = useEditorStore()
 const styleStore  = useStyleStore()
 const ac          = useCssAutocomplete()
+
+const emit = defineEmits(['close'])
 
 // ── UI state ──────────────────────────────────────────────────────────────────
 const showPanel   = ref(true)
@@ -442,4 +446,8 @@ function confirmAddAttr() {
   newAttrName.value = ''
   newAttrValue.value = ''
 }
+
+defineExpose({
+  startAddClass
+})
 </script>

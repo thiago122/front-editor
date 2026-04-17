@@ -26,6 +26,15 @@ import { oneDark } from '@codemirror/theme-one-dark'
 import { findCssNode } from '@/editor/css/tree/_logicTreeHelpers.js'
 import { CssExportService } from '@/editor/css/export/CssExportService.js'
 
+const props = defineProps({
+  mode:           { type: String,  default: 'html' }, // 'html' | 'css'
+  targetId:       { type: String,  default: null },
+  show:           { type: Boolean, default: false },
+  hideHeader:     { type: Boolean, default: false },
+})
+
+const emit = defineEmits(['close'])
+
 const EditorStore = useEditorStore()
 const styleStore  = useStyleStore()
 
@@ -39,20 +48,19 @@ let view = null
 let isUpdatingFromStore = false
 
 const targetNode = computed(() => {
-  const targetId = EditorStore.codeEditorTargetId
-  if (!targetId) return null
-  if (EditorStore.codeEditorMode === 'html') return EditorStore.getNode(targetId)
-  return findCssNode(toRaw(styleStore.cssLogicTree), targetId)
+  if (!props.targetId) return null
+  if (props.mode === 'html') return EditorStore.getNode(props.targetId)
+  return findCssNode(toRaw(styleStore.cssLogicTree), props.targetId)
 })
 
 /** Indica se estamos no modo de edição de ARQUIVO completo (onde o save é manual) */
 const isBulkMode = computed(() => {
   const node = targetNode.value
-  return EditorStore.codeEditorMode === 'css' && (node?.type === 'file' || node?.type === 'root')
+  return props.mode === 'css' && (node?.type === 'file' || node?.type === 'root')
 })
 
 const editorLabel = computed(() => {
-  if (EditorStore.codeEditorMode === 'html') return 'Código HTML'
+  if (props.mode === 'html') return 'Código HTML'
   const node = targetNode.value
   if (!node) return 'Editor de CSS'
 
@@ -76,7 +84,7 @@ const initEditor = () => {
     extensions: [
       basicSetup,
       oneDark,
-      new Compartment().of(EditorStore.codeEditorMode === 'html' ? html() : css()),
+      new Compartment().of(props.mode === 'html' ? html() : css()),
       EditorView.updateListener.of((update) => {
         if (update.docChanged && !isUpdatingFromStore) {
           handleCodeChange(update.state.doc.toString())
@@ -105,14 +113,14 @@ onMounted(() => {
 
 /** Sincroniza o conteúdo do editor com base no MODO e no ALVO */
 const syncCodeFromStore = () => {
-  if (!EditorStore.showCodeEditor || !view) return 
-  const targetId = EditorStore.codeEditorTargetId
+  if (!view) return 
+  const targetId = props.targetId
   if (!targetId) return
 
   try {
     let content = ''
 
-    if (EditorStore.codeEditorMode === 'html') {
+    if (props.mode === 'html') {
       const node = EditorStore.getNode(targetId)
       if (node) {
         const children = node.children || []
@@ -172,12 +180,12 @@ const syncCodeFromStore = () => {
 // Watcher para mudança de modo ou alvo
 watch(
   [
-    () => EditorStore.codeEditorMode, 
-    () => EditorStore.codeEditorTargetId,
+    () => props.mode, 
+    () => props.targetId,
     () => styleStore.cssLogicTree
   ], 
   ([mode, targetId, tree]) => {
-    if (!EditorStore.showCodeEditor) return
+    if (!props.show) return
 
     if (editorContainer.value) {
       if (!view) {
@@ -204,10 +212,9 @@ let lastSyncedId = null
 
 // Update logic
 const debouncedUpdate = debounce((code) => {
-  const targetId = EditorStore.codeEditorTargetId
+  const targetId = props.targetId
   if (!targetId) return
-
-  if (EditorStore.codeEditorMode === 'html') {
+  if (props.mode === 'html') {
     EditorStore.manipulation.updateInnerContent(targetId, code)
     hasUnsavedChanges.value = false
   } else {
@@ -234,14 +241,14 @@ function handleCodeChange(code) {
 async function handleSave() {
   if (!view || !hasUnsavedChanges.value) return
   
-  const targetId = EditorStore.codeEditorTargetId
+  const targetId = props.targetId
   if (!targetId) return
 
   isSaving.value = true
   const code = view.state.doc.toString()
 
   try {
-    if (EditorStore.codeEditorMode === 'html') {
+    if (props.mode === 'html') {
       EditorStore.manipulation.updateInnerContent(targetId, code)
     } else {
       const rawTree = toRaw(styleStore.cssLogicTree)
@@ -264,28 +271,35 @@ async function handleSave() {
 onMounted(() => {
   initEditor()
 })
+
+defineExpose({
+  handleSave,
+  hasUnsavedChanges,
+  isBulkMode,
+  isSaving
+})
 </script>
 
 <template>
-  <div class="h-full w-full flex flex-col bg-[#282c34] border-t border-gray-700 overflow-hidden shadow-2xl">
+  <div class="h-full w-full flex flex-col bg-[#282c34] overflow-hidden">
     <!-- Header Simples e Independente -->
-    <div class="flex items-center justify-between px-3 h-9 bg-[#21252b] border-b border-gray-800 shrink-0">
+    <div v-if="!hideHeader" class="flex items-center justify-between px-3 h-9 bg-[#21252b] border-b border-gray-800 shrink-0">
       <div class="flex h-full items-center gap-3">
         <!-- Indicador de Modo -->
         <div 
           class="flex items-center gap-2 px-3 py-1 rounded text-[10px] font-bold uppercase tracking-widest"
-          :class="EditorStore.codeEditorMode === 'html' 
+          :class="props.mode === 'html' 
             ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' 
             : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'"
         >
-          <span class="w-2 h-2 rounded-full animate-pulse" :class="EditorStore.codeEditorMode === 'html' ? 'bg-indigo-400' : 'bg-amber-400'"></span>
+          <span class="w-2 h-2 rounded-full animate-pulse" :class="props.mode === 'html' ? 'bg-indigo-400' : 'bg-amber-400'"></span>
           Editor de {{ editorLabel }}
         </div>
         
         <div class="h-4 w-[1px] bg-gray-700"></div>
 
-        <span class="text-[10px] text-gray-500 font-mono">
-          ID: {{ EditorStore.codeEditorTargetId.length > 15 ? EditorStore.codeEditorTargetId.substring(0,12) + '...' : EditorStore.codeEditorTargetId }}
+        <span v-if="props.targetId" class="text-[10px] text-gray-500 font-mono">
+          ID: {{ props.targetId.length > 15 ? props.targetId.substring(0,12) + '...' : props.targetId }}
         </span>
 
         <!-- Indicador de Alterações no modo real-time -->
@@ -317,7 +331,7 @@ onMounted(() => {
         </button>
 
         <button 
-          @click="EditorStore.showCodeEditor = false"
+          @click="emit('close')"
           class="text-gray-500 hover:text-white transition-colors p-1"
           title="Fechar Editor"
         >

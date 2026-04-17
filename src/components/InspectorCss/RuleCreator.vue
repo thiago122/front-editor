@@ -1,42 +1,83 @@
 <template>
-  <div class="p-2 border-b border-gray-300">
-    <label class="text-[12px] font-semibold text-gray-600 cursor-pointer mb-1" title="Alt + k" @click="toggle">Create Selector +</label>
-    <div v-if="showForm">
-      <div class="flex items-center mb-2">
-        <input
-          ref="selectorInput"
-          v-model="customSelector"
-          @keydown="onInputKeydown"
-          type="text"
-          placeholder="Ex: .meu-card:hover"
-          class="bg-white border border-[#d1d1d1] px-1 py-0.5 text-[11px] outline-none focus:border-blue-500 block w-full"
-        />
+  <div class="px-2 py-1.5 flex items-center border-b border-gray-100 bg-gray-50/30">
+
+    <button 
+      ref="triggerRef"
+      class="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-white border border-gray-200 text-gray-700 hover:border-blue-400 hover:text-blue-600 transition-all text-[10px] font-medium shadow-sm active:scale-95 group" 
+      title="Alt + k" 
+      @click="toggle">
+      <span class="text-blue-500 font-bold group-hover:scale-125 transition-transform">+</span>
+      <span>Selector</span>
+    </button>
+    
+    <Teleport to="body">
+      <div 
+        v-if="showForm" 
+        ref="formRef"
+        class="fixed z-[10000] bg-white border border-gray-200 rounded-lg shadow-2xl p-3 w-[260px] animate-popover"
+        :style="dropdownStyle">
+        
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Nova Regra CSS</span>
+          <button @click="close" class="text-gray-400 hover:text-red-500 transition-colors p-0.5 rounded hover:bg-red-50">
+             <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+               <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+             </svg>
+          </button>
+        </div>
+
+        <!-- Body -->
+        <div class="space-y-3">
+          <div>
+            <label class="block text-[9px] text-gray-500 font-bold mb-1 uppercase tracking-tight">Seletor</label>
+            <input
+              ref="selectorInput"
+              v-model="customSelector"
+              @keydown="onInputKeydown"
+              type="text"
+              placeholder="Ex: .meu-card:hover"
+              class="bg-gray-50 border border-gray-200 px-2 py-1.5 text-[11px] outline-none focus:border-blue-500 focus:bg-white block w-full rounded-md transition-all font-mono"
+            />
+          </div>
+          
+          <div>
+            <label class="block text-[9px] text-gray-500 font-bold mb-1 uppercase tracking-tight">Arquivo de Destino</label>
+            <div class="flex items-center gap-2">
+              <div class="relative flex-1">
+                <select
+                  ref="sourceSelect"
+                  v-model="selectedSource"
+                  @keydown="onSelectKeydown"
+                  class="bg-gray-50 border border-gray-200 px-2 py-1.5 text-[11px] outline-none focus:border-blue-500 focus:bg-white block w-full truncate rounded-md transition-all appearance-none pr-6 font-mono"
+                  title="Target Source">
+                  <option :value="null">Selecionar arquivo...</option>
+                  <option v-for="source in availableSources" :key="`${source.origin}:${source.name}`" :value="source">
+                    {{ source.name }}
+                  </option>
+                </select>
+                <div class="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                  </svg>
+                </div>
+              </div>
+              <button
+                @mousedown.prevent
+                @click="createRule"
+                class="shrink-0 h-[28px] px-4 bg-blue-600 text-white text-[11px] font-bold rounded-md hover:bg-blue-700 transition-all shadow-md active:scale-95">
+                Adicionar
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="flex items-center mb-2 gap-2">
-        <select
-          ref="sourceSelect"
-          v-model="selectedSource"
-          @keydown="onSelectKeydown"
-          class="bg-white border border-[#d1d1d1] px-1 py-0.5 text-[11px] outline-none focus:border-blue-500 block w-full truncate"
-          title="Target Source">
-          <option :value="null">Select Source (required)</option>
-          <option v-for="source in availableSources" :key="`${source.origin}:${source.name}`" :value="source">
-            {{ source.name }}
-          </option>
-        </select>
-        <button
-          @mousedown.prevent
-          @click="createRule"
-          class="h-[22px] px-4 py-0.5 bg-blue-600 text-white text-[11px] hover:bg-blue-700 transition-all tracking-tighter">
-          add
-        </button>
-      </div>
-    </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
 import { useStyleStore } from '@/stores/StyleStore'
 import { createRule as createCssRule } from '@/editor/css/actions/cssRuleActions'
@@ -48,8 +89,12 @@ const customSelector = ref('')
 const selectedSource = ref(null)
 const showForm = ref(false)
 
+const triggerRef    = ref(null)
+const formRef       = ref(null)
 const selectorInput = ref(null)
 const sourceSelect  = ref(null)
+
+const dropdownStyle = ref({})
 
 const selectedElement = computed(() => editorStore.selectedElement)
 
@@ -134,8 +179,45 @@ function close() {
 function open(initialSelector = '') {
   showForm.value = true
   customSelector.value = initialSelector
-  nextTick(() => selectorInput.value?.focus())
+  updatePosition()
+  nextTick(() => {
+    updatePosition()
+    selectorInput.value?.focus()
+  })
 }
+
+function updatePosition() {
+  if (!triggerRef.value) return
+  const rect = triggerRef.value.getBoundingClientRect()
+  
+  // Posiciona logo abaixo do botão, alinhado à esquerda
+  // Adiciona um pequeno gap de 4px
+  dropdownStyle.value = {
+    top: `${rect.bottom + 4}px`,
+    left: `${rect.left}px`,
+  }
+}
+
+// Click outside logic
+function handleClickOutside(e) {
+  if (!showForm.value) return
+  if (formRef.value && !formRef.value.contains(e.target) && 
+      triggerRef.value && !triggerRef.value.contains(e.target)) {
+    close()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('mousedown', handleClickOutside)
+  window.addEventListener('resize', updatePosition)
+  window.addEventListener('scroll', updatePosition, true)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('mousedown', handleClickOutside)
+  window.removeEventListener('resize', updatePosition)
+  window.removeEventListener('scroll', updatePosition, true)
+})
 
 /**
  * Apply simple selectors (.class, #id) to the selected element automatically.
@@ -173,7 +255,7 @@ function createRule() {
     (selectedElement.value.id ? '#' + selectedElement.value.id : '')
 
   if (!selectedSource.value) {
-    alert('Please select a CSS source before adding a rule.')
+    alert('Por favor selecione um arquivo de destino antes de adicionar a regra.')
     return
   }
 
@@ -194,3 +276,15 @@ const emit = defineEmits(['rule-added'])
 
 defineExpose({ open, close })
 </script>
+
+<style scoped>
+@keyframes popover {
+  from { opacity: 0; transform: translateY(-8px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.animate-popover {
+  animation: popover 0.15s ease-out;
+  transform-origin: top left;
+}
+</style>

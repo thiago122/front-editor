@@ -37,9 +37,22 @@ export const useEditorStore = defineStore('editor', () => {
   const manipulation = ref(null)
   const clipboard         = ref({ type: null, data: null }) // Clipboard tipado
   const showCssExplorer   = ref(false)                      // CSS Explorer visível ao lado do inspector
-  const showCodeEditor    = ref(false)                      // Code Editor visível no rodapé do canvas
-  const codeEditorMode     = ref('html')                    // 'html' | 'css'
-  const codeEditorTargetId = ref(null)                      // ID do nó ou da regra sendo editada
+  
+  const htmlEditor = ref({
+    show:     false,
+    targetId: null,
+    x:        window.innerWidth / 2 - 420,
+    y:        window.innerHeight - 560
+  })
+
+  const cssFileEditor = ref({
+    show:     false,
+    targetId: null,
+    x:        window.innerWidth / 2 + 20,
+    y:        window.innerHeight - 560
+  })
+
+  const quickAttributesOpen = ref(false)                    // Acordeão de atributos na base do inspector
 
   /** Estado do editor rápido (popover) */
   const quickCodeEditor = ref({
@@ -49,6 +62,12 @@ export const useEditorStore = defineStore('editor', () => {
     x:        0,
     y:        0,
     updateKey: 0
+  })
+  
+  const pixelPerfectEditor = ref({
+    show:     false,
+    x:        window.innerWidth - 450,
+    y:        100
   })
 
   /**
@@ -69,10 +88,13 @@ export const useEditorStore = defineStore('editor', () => {
       return
     }
 
-    // Caso contrário (Arquivos, HTML ou sem posição), abre o painel inferior tradicional
-    codeEditorMode.value = mode
-    codeEditorTargetId.value = targetId
-    showCodeEditor.value = true
+    if (mode === 'html') {
+      htmlEditor.value.targetId = targetId
+      htmlEditor.value.show = true
+    } else {
+      cssFileEditor.value.targetId = targetId
+      cssFileEditor.value.show = true
+    }
     
     // Fecha o quick editor se ele estiver aberto para outro alvo
     if (quickCodeEditor.value.show) {
@@ -300,55 +322,102 @@ export const useEditorStore = defineStore('editor', () => {
   // Getters para a UI
   const canPaste = computed(() => clipboard.value.type === 'html-node')
 
-  // ── Outline mode: injeta/remove <style> no iframe ──────────────────────────
+  // ── Outline & Viewport Styles: injeta/remove <style> no iframe ───────────────
   const OUTLINE_STYLE_ID = 'editor-outline-mode'
-  watch([outlineMode, iframe], () => {
-    const doc = getIframeDoc()
+  const EMPTY_PLACEHOLDER_STYLE_ID = 'editor-empty-placeholder'
+
+  /**
+   * Aplica ou remove estilos utilitários (outline, placeholders) no documento do iframe.
+   * Centralizado para garantir consistência no load inicial e em reloads.
+   */
+  function applyEditorStyles(doc = getIframeDoc()) {
     if (!doc) return
-    // Remove sempre primeiro para garantir estado limpo
+
+    // 1. Outline Mode
     doc.getElementById(OUTLINE_STYLE_ID)?.remove()
     if (outlineMode.value) {
       const style = doc.createElement('style')
       style.id = OUTLINE_STYLE_ID
-      style.textContent = '* { outline: 1px solid rgba(255, 100, 0, 0.4) !important; }'
-      doc.head.appendChild(style)
-    }
-  })
+      style.textContent = `
+        /* Linhas base sutis para todos */
+        * { outline: 1px solid rgba(0, 0, 0, 0.1) !important; outline-offset: -1px; transition: outline-color 0.2s; }
 
-  // ── Empty placeholder: mostra borda tracejada + label em elementos vazios ─────────
-  const EMPTY_PLACEHOLDER_STYLE_ID = 'editor-empty-placeholder'
-  watch([showEmptyPlaceholder, iframe], () => {
-    const doc = getIframeDoc()
-    if (!doc) return
+        /* Cores temáticas por categoria (mais vibrantes) */
+        div, section, article, main, header, footer { outline-color: rgba(99, 102, 241, 0.4) !important; } 
+        span, p, h1, h2, h3, h4, h5, h6 { outline-color: rgba(245, 158, 11, 0.4) !important; }
+        a, button, input, select, textarea { outline-color: rgba(16, 185, 129, 0.5) !important; }
+        img, video, svg, canvas { outline-color: rgba(236, 72, 153, 0.5) !important; }
+
+        /* Label no Hover */
+        *:not(html):not(body):hover { 
+          outline: 2px solid #6366f1 !important; 
+          outline-offset: -2px;
+          z-index: 9999;
+        }
+
+        /* Tooltip baseada no nome da tag */
+        *:not(html):not(body):hover::after {
+          content: "<" var(--tag-name, "element") ">" !important;
+          position: absolute;
+          top: -18px;
+          left: -2px;
+          background: #6366f1;
+          color: white;
+          font-size: 10px;
+          font-weight: 600;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+          padding: 2px 6px;
+          border-radius: 4px 4px 0 0;
+          pointer-events: none;
+          z-index: 10000;
+          line-height: 1.2;
+          display: block !important;
+          text-transform: lowercase;
+          white-space: nowrap;
+          box-shadow: 0 -2px 4px rgba(0,0,0,0.1);
+        }
+      `
+      doc.head.appendChild(style)
+
+      // Injeta o nome da tag como variável CSS em todos os elementos (estratégia para labels)
+      // Nota: Para performance, poderíamos fazer isso apenas sob demanda, mas no iframe pequeno é OK.
+      doc.querySelectorAll('*').forEach(el => {
+        if (el.tagName && !el.style.getPropertyValue('--tag-name')) {
+          el.style.setProperty('--tag-name', `'${el.tagName.toLowerCase()}'`)
+        }
+      })
+    }
+
+    // 2. Empty Placeholders
     doc.getElementById(EMPTY_PLACEHOLDER_STYLE_ID)?.remove()
     if (showEmptyPlaceholder.value) {
       const style = doc.createElement('style')
       style.id = EMPTY_PLACEHOLDER_STYLE_ID
       style.textContent = `
-        [data-node-id]:empty {
+        [data-node-id]:empty:not(br):not(hr) {
           min-height: 24px;
           outline: 1.5px dashed rgba(99,102,241,0.5) !important;
-          
           position: relative;
-        }
-        [data-node-id]:empty::before {
-          content: attr(data-node-id) !important;
-          width: 90%;
-          display: block !important;
-          content: "vazio" !important;
-          position: absolute;
-          inset: 0;
-          display: flex;
+          display: flex !important;
           align-items: center;
           justify-content: center;
+        }
+        [data-node-id]:empty:not(br):not(hr)::before {
+          content: "vazio" !important;
           font-size: 10px;
           font-family: monospace;
-          color: rgba(99,102,241,0.6);
+          color: rgba(99, 102, 241, 0.6);
           pointer-events: none;
         }
       `
       doc.head.appendChild(style)
     }
+  }
+
+  // Watchers reagindo a mudanças de estado manuais
+  watch([outlineMode, showEmptyPlaceholder], () => applyEditorStyles())
+  watch(iframe, (newIframe) => {
+    if (newIframe) applyEditorStyles(newIframe.contentDocument)
   })
 
   watch(iframe, (newIframe) => {
@@ -359,6 +428,9 @@ export const useEditorStore = defineStore('editor', () => {
       newIframe.addEventListener('load', async () => {
         // Refresh CSS AST (loads CSS internally)
         await styleStore.rebuildLogicTree(getIframeDoc(), ['internal', 'external'])
+        
+        // Garante que os estilos do editor (outline, etc) sejam reaplicados no novo doc
+        applyEditorStyles()
       })
     }
   })
@@ -610,11 +682,10 @@ export const useEditorStore = defineStore('editor', () => {
 
   return {
     triggerInlineEdit,
-    showCssExplorer,
-    showCodeEditor,
+    htmlEditor,
+    cssFileEditor,
     quickCodeEditor,
-    codeEditorMode,
-    codeEditorTargetId,
+    quickAttributesOpen,
     openCodeEditor,
     ctx,
     selectNode,
@@ -662,6 +733,7 @@ export const useEditorStore = defineStore('editor', () => {
     isBlinking,
     startBlink,
     saveState,
+    pixelPerfectEditor,
   }
 })
 
