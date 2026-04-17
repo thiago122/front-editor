@@ -70,6 +70,59 @@ export const useEditorStore = defineStore('editor', () => {
     y:        100
   })
 
+  const visualEditor = ref({
+    activeRuleUid: null,
+    nextZIndex: 10000,
+    panels: {
+      layout:     { show: false, x: 0, y: 0, width: 350, height: 400, zIndex: 10000 },
+      typography: { show: false, x: 0, y: 0, width: 350, height: 400, zIndex: 10000 },
+      appearance: { show: false, x: 0, y: 0, width: 350, height: 400, zIndex: 10000 },
+      dynamics:   { show: false, x: 0, y: 0, width: 350, height: 400, zIndex: 10000 },
+    }
+  })
+
+  function bringPanelToTop(categoryId) {
+    const panel = visualEditor.value.panels[categoryId]
+    if (!panel) return
+    visualEditor.value.nextZIndex++
+    panel.zIndex = visualEditor.value.nextZIndex
+  }
+
+  /**
+   * Alterna a visibilidade de um painel de edição visual.
+   * Se a regra informada for nova, sincroniza todas as janelas abertas para ela.
+   */
+  function toggleVisualPanel(ruleUid, categoryId, initialPos = null) {
+    const isNewRule = visualEditor.value.activeRuleUid !== ruleUid
+    
+    // 1. Atualiza o contexto global se for uma regra diferente
+    if (isNewRule) {
+      visualEditor.value.activeRuleUid = ruleUid
+    }
+
+    const panel = visualEditor.value.panels[categoryId]
+    if (!panel) return
+
+    // 2. Se a regra mudou, garantimos que o painel clicado abra
+    if (isNewRule) {
+      panel.show = true
+    } else {
+      // Se for a mesma regra, alterna (toggle)
+      panel.show = !panel.show
+    }
+
+    // 3. Posicionamento inicial (só se estiver abrindo e não houver posição salva)
+    if (panel.show && initialPos && panel.x === 0 && panel.y === 0) {
+      panel.x = initialPos.x
+      panel.y = initialPos.y
+    }
+
+    // 4. Sempre traz para frente ao abrir ou clicar
+    if (panel.show) {
+      bringPanelToTop(categoryId)
+    }
+  }
+
   /**
    * Abre o editor de código em um modo específico para um alvo específico.
    * @param {string} mode - 'html' | 'css'
@@ -734,6 +787,9 @@ export const useEditorStore = defineStore('editor', () => {
     startBlink,
     saveState,
     pixelPerfectEditor,
+    visualEditor,
+    toggleVisualPanel,
+    bringPanelToTop,
   }
 })
 

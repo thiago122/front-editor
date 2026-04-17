@@ -143,7 +143,26 @@
         />
       </div>
 
-      <div class="rule__brace-close">}</div>
+      <div class="rule__brace-row">
+        <div class="rule__brace-close">}</div>
+
+        <!-- Visual Editing Buttons (L, T, A, D) -->
+        <div class="rule__visual-btns">
+          <button
+            v-for="group in visualGroups"
+            :key="group.id"
+            class="rule__visual-btn"
+            :class="[
+              `rule__visual-btn--${group.color}`,
+              { 'is-active': editorStore.visualEditor.activeRuleUid === rule.uid && editorStore.visualEditor.panels[group.id].show }
+            ]"
+            :title="group.title"
+            @click.stop="(e) => editorStore.toggleVisualPanel(rule.uid, group.id, { x: e.clientX, y: e.clientY })"
+          >
+            {{ group.label }}
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Banner de confirmação: sincronizar atributo do elemento -->
@@ -198,6 +217,13 @@ const props = defineProps({
   rule: { type: Object, required: true },
   editable: { type: Boolean, default: false },
 })
+
+const visualGroups = [
+  { id: 'layout',     label: 'L', title: 'Layout & Structure (L)', color: 'blue' },
+  { id: 'typography', label: 'T', title: 'Typography (T)',         color: 'amber' },
+  { id: 'appearance', label: 'A', title: 'Appearance & Skin (A)', color: 'pink' },
+  { id: 'dynamics',   label: 'D', title: 'Motion & Feedback (D)',  color: 'indigo' },
+]
 
 const INDENT_SIZE = 7
 const indentPx = computed(() => ((props.rule.context?.length ?? 0) + 1) * INDENT_SIZE + 'px')
@@ -539,6 +565,68 @@ function onRemoveIfEmpty(decl) {
 .rule__rename-btn--no  { background: #f3f4f6; color: #374151; }
 .rule__rename-btn--no:hover  { background: #e5e7eb; }
 /* Transition */
+/* Visual Editing Buttons & Close Brace Row */
+.rule__brace-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rule__visual-btns {
+  display: flex;
+  gap: 3px;
+  opacity: 0.15;
+  transition: opacity 0.2s;
+}
+.rule:hover .rule__visual-btns {
+  opacity: 1;
+}
+.rule__visual-btn {
+  width: 17px;
+  height: 17px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 900;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  color: white;
+  text-shadow: 0 1px 1px rgba(0,0,0,0.1);
+}
+
+/* Vibrancy states */
+.rule__visual-btn:hover {
+  transform: scale(1.1) translateY(-1px);
+  filter: brightness(1.1);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+}
+
+.rule__visual-btn.is-active {
+  transform: scale(0.95);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+  outline: 2px solid white;
+  outline-offset: -2px;
+}
+
+/* Master Colors */
+.rule__visual-btn--blue     { background: #3b82f6; }
+.rule__visual-btn--amber    { background: #f59e0b; }
+.rule__visual-btn--pink     { background: #ec4899; }
+.rule__visual-btn--indigo   { background: #6366f1; }
+
+/* Subtle opacity when not hover rule (optional balance) */
+.rule__visual-btns {
+  display: flex;
+  gap: 4px;
+  opacity: 0.75;
+  transition: opacity 0.2s;
+}
+.rule:hover .rule__visual-btns {
+  opacity: 1;
+}
+
 .rename-banner-enter-active,
 .rename-banner-leave-active { transition: opacity .2s, transform .2s; }
 .rename-banner-enter-from,

@@ -8,21 +8,25 @@ const props = defineProps({
   initialY:        { type: Number,  default: 0 },
   initialWidth:    { type: Number,  default: 400 },
   initialHeight:   { type: Number,  default: 300 },
-  minWidth:        { type: Number,  default: 300 },
-  minHeight:       { type: Number,  default: 200 },
+  minWidth:        { type: Number,  default: 100 },
+  minHeight:       { type: Number,  default: 100 },
   blueIndicator:  { type: Boolean, default: false },
   closable:        { type: Boolean, default: true },
   closeOnClickOutside: { type: Boolean, default: true },
   theme:           { type: String,  default: 'dark' }, // 'dark' | 'light'
+  minimizable:     { type: Boolean, default: true },
+  minimalist:      { type: Boolean, default: false }, // Compact header and no body padding
+  zIndex:          { type: Number,  default: 10000 },
 })
 
-const emit = defineEmits(['close', 'move', 'resize'])
+const emit = defineEmits(['close', 'move', 'resize', 'focus'])
 
 const container = ref(null)
 const pos = ref({ x: props.initialX, y: props.initialY })
 const size = ref({ width: props.initialWidth, height: props.initialHeight })
 const isDragging = ref(false)
 const isResizing = ref(false)
+const isMinimized = ref(false)
 
 let dragOffset = { x: 0, y: 0 }
 let resizeStartSize = { w: 0, h: 0 }
@@ -33,7 +37,8 @@ const positionStyle = computed(() => ({
   left: `${pos.value.x}px`,
   top: `${pos.value.y}px`,
   width: `${size.value.width}px`,
-  height: `${size.value.height}px`,
+  height: isMinimized.value ? 'auto' : `${size.value.height}px`,
+  zIndex: props.zIndex
 }))
 
 const themeClasses = computed(() => {
@@ -61,9 +66,9 @@ const themeClasses = computed(() => {
 
 // --- DRAG ---
 function startDrag(e) {
-  if (e.target.closest('button')) return
   
   isDragging.value = true
+  emit('focus') // Traz para frente ao começar a arrastar
   const rect = container.value.getBoundingClientRect()
   dragOffset = {
     x: e.clientX - rect.left,
@@ -189,17 +194,20 @@ onBeforeUnmount(() => {
     <div
       v-show="show"
       ref="container"
-      class="fixed z-[10000] rounded-lg border overflow-hidden flex flex-col"
+      class="fixed rounded-lg border overflow-hidden flex flex-col"
       :class="[
         isDragging || isResizing ? 'transition-none select-none' : 'transition-[left,top,width,height] duration-200',
         themeClasses.container
       ]"
       :style="positionStyle"
+      @pointerdown="emit('focus')"
     >
-      <!-- Title bar (Handle) -->
       <div 
-        class="flex items-center justify-between px-3 h-9 border-b shrink-0 select-none cursor-grab active:cursor-grabbing"
-        :class="themeClasses.header"
+        class="flex items-center justify-between px-3 border-b shrink-0 select-none cursor-grab active:cursor-grabbing"
+        :class="[
+          themeClasses.header,
+          minimalist ? 'h-7' : 'h-9'
+        ]"
         @pointerdown="startDrag"
       >
         <div class="flex items-center gap-2 pointer-events-none overflow-hidden">
@@ -214,8 +222,25 @@ onBeforeUnmount(() => {
           </slot>
         </div>
         
-        <div class="flex items-center gap-2 shrink-0">
+        <div class="flex items-center gap-1 shrink-0">
           <slot name="header-right"></slot>
+          
+          <!-- Minimize Button -->
+          <button 
+            v-if="minimizable"
+            @click.stop="isMinimized = !isMinimized" 
+            class="transition-colors p-1 pointer-events-auto rounded flex items-center justify-center"
+            :class="themeClasses.closeBtn"
+            :title="isMinimized ? 'Expandir' : 'Minimizar'"
+          >
+            <svg v-if="isMinimized" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 13l-7 7-7-7" />
+            </svg>
+            <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M18 12H6" />
+            </svg>
+          </button>
+
           <button 
             v-if="closable"
             @click.stop="$emit('close')" 
@@ -232,15 +257,16 @@ onBeforeUnmount(() => {
       
       <!-- Body -->
       <div 
+        v-show="!isMinimized"
         class="flex-1 overflow-hidden relative"
-        :class="themeClasses.body"
+        :class="[themeClasses.body, minimalist ? 'p-0' : '']"
       >
         <slot></slot>
       </div>
 
       <!-- Footer -->
       <div 
-        v-if="$slots.footer" 
+        v-if="$slots.footer && !isMinimized" 
         class="shrink-0 px-3 py-2 border-t"
         :class="themeClasses.footer"
       >
@@ -249,6 +275,7 @@ onBeforeUnmount(() => {
 
       <!-- Resize Handle -->
       <div 
+        v-show="!isMinimized"
         class="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize z-[10001] flex items-end justify-end p-0.5 group"
         @pointerdown.stop="startResize"
       >

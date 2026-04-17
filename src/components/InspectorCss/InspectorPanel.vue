@@ -109,6 +109,12 @@
         <AttributeManager ref="quickAttributesRef" @close="editorStore.quickAttributesOpen = false" />
       </div>
     </div>
+
+    <!-- ── VISUAL EDITING PANELS (L, T, A, D) ────────────────────────── -->
+    <VisualPanel category="layout" />
+    <VisualPanel category="typography" />
+    <VisualPanel category="appearance" />
+    <VisualPanel category="dynamics" />
   </div>
 </template>
 
@@ -127,6 +133,7 @@ import TargetRuleGroup from '@/components/InspectorCss/StylesTab/TargetRuleGroup
 import InheritedRuleGroup from '@/components/InspectorCss/StylesTab/InheritedRuleGroup.vue'
 import HeadManager from '@/components/InspectorCss/HeadManager.vue'
 import IconExplorer from '@/components/icons/IconExplorer.vue'
+import VisualPanel from '@/components/InspectorCss/StylesTab/VisualPanel.vue'
 
 const TABS = ['Styles', 'Computed', 'Head']
 const activeTab = ref('Styles')
