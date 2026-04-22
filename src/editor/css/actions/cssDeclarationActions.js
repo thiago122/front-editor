@@ -42,6 +42,13 @@ export function toggleDeclaration(rule, decl) {
     CssLogicTreeService.toggleDeclaration(decl)
     styleStore.applyMutation(useEditorStore().getIframeDoc())
     unifiedHistory.commitCss(styleStore.cssLogicTree)
+
+    // Refresh inspector rules to reflect the change
+    styleStore.updateInspectorRules(
+      useEditorStore().selectedElement,
+      useEditorStore().viewport,
+      useEditorStore().selectedRuleId || rule.uid
+    )
   }
 }
 
@@ -61,6 +68,13 @@ export function updateDeclaration(rule, decl, field, newValue) {
     CssLogicTreeService.updateDeclaration(decl, field, newValue)
     styleStore.applyMutation(useEditorStore().getIframeDoc())
     unifiedHistory.commitCss(styleStore.cssLogicTree)
+
+    // Refresh inspector rules to reflect the change
+    styleStore.updateInspectorRules(
+      useEditorStore().selectedElement,
+      useEditorStore().viewport,
+      useEditorStore().selectedRuleId || rule.uid
+    )
   }
 }
 
@@ -117,6 +131,13 @@ export function addDeclaration(rule, ruleEl = null, prop = null, val = null) {
     CssLogicTreeService.createDeclaration(rule, prop, val)
     styleStore.applyMutation(useEditorStore().getIframeDoc())
     unifiedHistory.commitCss(styleStore.cssLogicTree)
+
+    // Refresh inspector rules to reflect the change
+    styleStore.updateInspectorRules(
+      useEditorStore().selectedElement,
+      useEditorStore().viewport,
+      useEditorStore().selectedRuleId || rule.uid
+    )
   }
 }
 

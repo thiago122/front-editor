@@ -151,7 +151,7 @@
           <button
             v-for="group in visualGroups"
             :key="group.id"
-            class="rule__visual-btn"
+            class="rule__visual-btn relative"
             :class="[
               `rule__visual-btn--${group.color}`,
               { 'is-active': editorStore.visualEditor.activeRuleUid === rule.uid && editorStore.visualEditor.panels[group.id].show }
@@ -160,6 +160,11 @@
             @click.stop="(e) => editorStore.toggleVisualPanel(rule.uid, group.id, { x: e.clientX, y: e.clientY })"
           >
             {{ group.label }}
+            <!-- Blue dot: this rule has properties from this category -->
+            <span 
+              v-if="hasCategoryProps[group.id]"
+              class="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-blue-500 border border-white pointer-events-none"
+            ></span>
           </button>
         </div>
       </div>
@@ -224,6 +229,58 @@ const visualGroups = [
   { id: 'appearance', label: 'A', title: 'Appearance & Skin (A)', color: 'pink' },
   { id: 'dynamics',   label: 'D', title: 'Motion & Feedback (D)',  color: 'indigo' },
 ]
+
+/** Map of CSS properties per visual category */
+const CATEGORY_PROPS = {
+  layout: [
+    'display', 'position', 'top', 'right', 'bottom', 'left',
+    'width', 'min-width', 'max-width', 'height', 'min-height', 'max-height',
+    'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
+    'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+    'flex', 'flex-direction', 'flex-wrap', 'flex-grow', 'flex-shrink', 'flex-basis',
+    'justify-content', 'align-items', 'align-self', 'align-content', 'gap',
+    'grid', 'grid-template', 'grid-template-columns', 'grid-template-rows',
+    'grid-column', 'grid-row', 'grid-area',
+    'overflow', 'overflow-x', 'overflow-y', 'z-index', 'float', 'clear',
+    'box-sizing', 'object-fit', 'object-position',
+  ],
+  typography: [
+    'font-family', 'font-size', 'font-weight', 'font-style', 'font-variant',
+    'line-height', 'letter-spacing', 'word-spacing', 'text-align', 'text-indent',
+    'text-decoration', 'text-decoration-line', 'text-decoration-color',
+    'text-transform', 'text-overflow', 'white-space', 'word-break', 'line-break',
+    'direction', 'color', 'text-shadow',
+    '-webkit-text-stroke', '-webkit-text-stroke-width', '-webkit-text-stroke-color',
+  ],
+  appearance: [
+    'background', 'background-color', 'background-image', 'background-size',
+    'background-position', 'background-repeat', 'background-attachment',
+    'border', 'border-color', 'border-width', 'border-style',
+    'border-top', 'border-right', 'border-bottom', 'border-left',
+    'border-radius', 'border-top-left-radius', 'border-top-right-radius',
+    'border-bottom-left-radius', 'border-bottom-right-radius',
+    'box-shadow', 'outline', 'opacity', 'filter', 'backdrop-filter',
+    'cursor', 'pointer-events', 'visibility', 'list-style',
+  ],
+  dynamics: [
+    'transition', 'transition-property', 'transition-duration',
+    'transition-timing-function', 'transition-delay',
+    'animation', 'animation-name', 'animation-duration', 'animation-fill-mode',
+    'animation-timing-function', 'animation-iteration-count', 'animation-delay',
+    'transform', 'transform-origin', 'scale', 'rotate', 'translate',
+    'will-change',
+  ],
+}
+
+/** Returns true if the rule has at least one property from the given category */
+const hasCategoryProps = computed(() => {
+  const propNames = new Set((props.rule.declarations ?? []).filter(d => !d.disabled).map(d => d.prop))
+  const result = {}
+  for (const [cat, list] of Object.entries(CATEGORY_PROPS)) {
+    result[cat] = list.some(p => propNames.has(p))
+  }
+  return result
+})
 
 const INDENT_SIZE = 7
 const indentPx = computed(() => ((props.rule.context?.length ?? 0) + 1) * INDENT_SIZE + 'px')

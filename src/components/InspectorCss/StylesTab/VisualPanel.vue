@@ -2,8 +2,12 @@
 import { computed } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
 import { useStyleStore } from '@/stores/StyleStore'
-import { findCssNode } from '@/utils/astHelpers'
 import FloatingWindow from '@/components/ui/FloatingWindow.vue'
+import TypographyEditor from './visual/TypographyEditor.vue'
+import LayoutEditor from './visual/LayoutEditor.vue'
+import SizingEditor from './visual/SizingEditor.vue'
+import SpacingEditor from './visual/SpacingEditor.vue'
+import PositioningEditor from './visual/PositioningEditor.vue'
 
 const props = defineProps({
   category: {
@@ -35,15 +39,19 @@ const panelState = computed(() => editorStore.visualEditor.panels[props.category
 const activeRuleUid = computed(() => editorStore.visualEditor.activeRuleUid)
 
 /** 
- * Encontra a regra atual no Logic Tree para exibir metadados no header.
- * Como o store é reativo, mudar o activeRuleUid no pai atualiza todos os painéis.
+ * Busca a rule do ruleGroups (Inspector), que já tem .declarations formatado.
+ * É reativo: atualiza automaticamente quando ruleGroups ou activeRuleUid muda.
  */
 const rule = computed(() => {
   if (!activeRuleUid.value) return null
-  return findCssNode(styleStore.cssLogicTree, activeRuleUid.value)
+  for (const group of styleStore.ruleGroups) {
+    const found = group.rules?.find(r => r.uid === activeRuleUid.value)
+    if (found) return found
+  }
+  return null
 })
 
-const selectorName = computed(() => rule.value?.label || 'No Rule')
+const selectorName = computed(() => rule.value?.selector || 'No Rule')
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 function onClose() {
@@ -114,10 +122,40 @@ function onResize({ width, height }) {
        <div v-if="!activeRuleUid" class="flex flex-col items-center justify-center h-full text-gray-400">
          <p :class="minimalist ? 'text-[10px]' : 'text-sm'">Selecione uma regra para editar</p>
        </div>
-       <div v-else>
-         <!-- Placeholder para os futuros editores de propriedade -->
-         <div :class="minimalist ? 'text-[10px]' : 'text-[11px]'" class="text-gray-500 italic">
-           Editor de {{ config.label }} para {{ selectorName }}...
+       <div v-else class="flex flex-col">
+         <!-- Layout Category: painéis independentes lado a lado -->
+         <template v-if="category === 'layout' && rule">
+           <LayoutEditor
+             :key="activeRuleUid"
+             :rule-getter="() => rule"
+           />
+           <SizingEditor
+             :key="activeRuleUid + '_sizing'"
+             :rule-getter="() => rule"
+           />
+           <SpacingEditor
+             :key="activeRuleUid + '_spacing'"
+             :rule-getter="() => rule"
+           />
+           <PositioningEditor
+             :key="activeRuleUid + '_pos'"
+             :rule-getter="() => rule"
+           />
+         </template>
+
+         <!-- Typography Category -->
+         <TypographyEditor 
+           v-if="category === 'typography' && rule" 
+           :key="activeRuleUid"
+           :rule-getter="() => rule" 
+         />
+
+         <!-- Other categories placeholders -->
+         <div v-if="!rule || (category !== 'layout' && category !== 'typography')" 
+           :class="minimalist ? 'text-[10px]' : 'text-[11px]'" class="text-gray-500 italic"
+         >
+           <span v-if="!rule">Selecione uma regra para editar</span>
+           <span v-else>Editor de {{ config.label }} em breve...</span>
          </div>
        </div>
     </div>

@@ -108,7 +108,7 @@ onUnmounted(() => {
 <style scoped>
 .css-ac-dropdown {
   position: fixed;
-  z-index: 10000;
+  z-index: 999999;
   background: #fff;
   border: 1px solid #d1d5db;
   border-radius: 6px;

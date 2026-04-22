@@ -214,7 +214,7 @@ onBeforeUnmount(() => {
           <slot name="header-left">
             <span v-if="blueIndicator" class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shrink-0"></span>
             <span 
-              class="text-[10px] font-bold uppercase tracking-widest shrink-0 truncate"
+              class="text-[11px]  uppercase tracking-widest shrink-0 truncate"
               :class="themeClasses.title"
             >
               {{ title }}
