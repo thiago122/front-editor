@@ -131,9 +131,17 @@ export function useCssAutocomplete() {
       return true
     }
     if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      activeIdx.value = Math.max(activeIdx.value - 1, 0)
-      return true
+      if (activeIdx.value > 0) {
+        activeIdx.value--
+        e.preventDefault()
+        return true
+      }
+      if (activeIdx.value === 0) {
+        activeIdx.value = -1 // Deselect first item
+        e.preventDefault()
+        return true
+      }
+      return false // Let the host handle it (e.g. set to 0)
     }
     if (e.key === 'Enter' || e.key === 'Tab') {
       // Shift+Tab sempre é para navegação retroativa, nunca para aceitar sugestão

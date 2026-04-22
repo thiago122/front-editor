@@ -325,23 +325,31 @@ function updatePadding(value, side) {
           <VisualInput label="T" 
             :modelValue="lockMargin ? partValue(mParts.t) : mT.value.value" 
             :unit="lockMargin ? partUnit(mParts.t) : mT.unit.value" :units="units" :keywords="marginKeywords"
-            @update:modelValue="v => lockMargin ? updateMarginShorthand(0, v + (partUnit(mParts.t)||'')) : updateMargin(v, mT)" 
+            allow-negative
+            @update:modelValue="v => lockMargin ? updateMarginShorthand(0, (v === '' || isNaN(v)) ? v : v + (partUnit(mParts.t)||'')) : updateMargin(v, mT)" 
             @update:unit="u => lockMargin ? updateMarginShorthand(0, (partValue(mParts.t)||'0') + u) : mT.set(mT.value.value, u)" placeholder="0" />
+
           <VisualInput label="R" 
             :modelValue="lockMargin ? partValue(mParts.r) : mR.value.value" 
             :unit="lockMargin ? partUnit(mParts.r) : mR.unit.value" :units="units" :keywords="marginKeywords"
-            @update:modelValue="v => lockMargin ? updateMarginShorthand(1, v + (partUnit(mParts.r)||'')) : updateMargin(v, mR)" 
+            allow-negative
+            @update:modelValue="v => lockMargin ? updateMarginShorthand(1, (v === '' || isNaN(v)) ? v : v + (partUnit(mParts.r)||'')) : updateMargin(v, mR)" 
             @update:unit="u => lockMargin ? updateMarginShorthand(1, (partValue(mParts.r)||'0') + u) : mR.set(mR.value.value, u)" placeholder="0" />
+
+
           <VisualInput label="B" 
             :modelValue="lockMargin ? partValue(mParts.b) : mB.value.value" 
             :unit="lockMargin ? partUnit(mParts.b) : mB.unit.value" :units="units" :keywords="marginKeywords"
-            @update:modelValue="v => lockMargin ? updateMarginShorthand(2, v + (partUnit(mParts.b)||'')) : updateMargin(v, mB)" 
+            allow-negative
+            @update:modelValue="v => lockMargin ? updateMarginShorthand(2, (v === '' || isNaN(v)) ? v : v + (partUnit(mParts.b)||'')) : updateMargin(v, mB)" 
             @update:unit="u => lockMargin ? updateMarginShorthand(2, (partValue(mParts.b)||'0') + u) : mB.set(mB.value.value, u)" placeholder="0" />
           <VisualInput label="L" 
             :modelValue="lockMargin ? partValue(mParts.l) : mL.value.value" 
             :unit="lockMargin ? partUnit(mParts.l) : mL.unit.value" :units="units" :keywords="marginKeywords"
-            @update:modelValue="v => lockMargin ? updateMarginShorthand(3, v + (partUnit(mParts.l)||'')) : updateMargin(v, mL)" 
+            allow-negative
+            @update:modelValue="v => lockMargin ? updateMarginShorthand(3, (v === '' || isNaN(v)) ? v : v + (partUnit(mParts.l)||'')) : updateMargin(v, mL)" 
             @update:unit="u => lockMargin ? updateMarginShorthand(3, (partValue(mParts.l)||'0') + u) : mL.set(mL.value.value, u)" placeholder="0" />
+
         </div>
       </div>
 
@@ -387,23 +395,24 @@ function updatePadding(value, side) {
           <VisualInput label="T" 
             :modelValue="lockPadding ? partValue(pParts.t) : pT.value.value" 
             :unit="lockPadding ? partUnit(pParts.t) : pT.unit.value" :units="units" :keywords="paddingKeywords"
-            @update:modelValue="v => lockPadding ? updatePaddingShorthand(0, v + (partUnit(pParts.t)||'')) : updatePadding(v, pT)" 
+            @update:modelValue="v => lockPadding ? updatePaddingShorthand(0, (v === '' || isNaN(v)) ? v : v + (partUnit(pParts.t)||'')) : updatePadding(v, pT)" 
             @update:unit="u => lockPadding ? updatePaddingShorthand(0, (partValue(pParts.t)||'0') + u) : pT.set(pT.value.value, u)" placeholder="0" />
           <VisualInput label="R" 
             :modelValue="lockPadding ? partValue(pParts.r) : pR.value.value" 
             :unit="lockPadding ? partUnit(pParts.r) : pR.unit.value" :units="units" :keywords="paddingKeywords"
-            @update:modelValue="v => lockPadding ? updatePaddingShorthand(1, v + (partUnit(pParts.r)||'')) : updatePadding(v, pR)" 
+            @update:modelValue="v => lockPadding ? updatePaddingShorthand(1, (v === '' || isNaN(v)) ? v : v + (partUnit(pParts.r)||'')) : updatePadding(v, pR)" 
             @update:unit="u => lockPadding ? updatePaddingShorthand(1, (partValue(pParts.r)||'0') + u) : pR.set(pR.value.value, u)" placeholder="0" />
           <VisualInput label="B" 
             :modelValue="lockPadding ? partValue(pParts.b) : pB.value.value" 
             :unit="lockPadding ? partUnit(pParts.b) : pB.unit.value" :units="units" :keywords="paddingKeywords"
-            @update:modelValue="v => lockPadding ? updatePaddingShorthand(2, v + (partUnit(pParts.b)||'')) : updatePadding(v, pB)" 
+            @update:modelValue="v => lockPadding ? updatePaddingShorthand(2, (v === '' || isNaN(v)) ? v : v + (partUnit(pParts.b)||'')) : updatePadding(v, pB)" 
             @update:unit="u => lockPadding ? updatePaddingShorthand(2, (partValue(pParts.b)||'0') + u) : pB.set(pB.value.value, u)" placeholder="0" />
           <VisualInput label="L" 
             :modelValue="lockPadding ? partValue(pParts.l) : pL.value.value" 
             :unit="lockPadding ? partUnit(pParts.l) : pL.unit.value" :units="units" :keywords="paddingKeywords"
-            @update:modelValue="v => lockPadding ? updatePaddingShorthand(3, v + (partUnit(pParts.l)||'')) : updatePadding(v, pL)" 
+            @update:modelValue="v => lockPadding ? updatePaddingShorthand(3, (v === '' || isNaN(v)) ? v : v + (partUnit(pParts.l)||'')) : updatePadding(v, pL)" 
             @update:unit="u => lockPadding ? updatePaddingShorthand(3, (partValue(pParts.l)||'0') + u) : pL.set(pL.value.value, u)" placeholder="0" />
+
         </div>
       </div>
 

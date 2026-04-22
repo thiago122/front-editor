@@ -59,11 +59,13 @@ export function useCssProperty(ruleOrGetter, propName) {
     const rule = getRule()
     if (!rule) return
     
-    // When unit is empty string ('—' / unitless), value is saved as plain number
+    // When unit is empty string ('—' / unitless) OR the value is a keyword (not a number),
+    // value is saved as plain text without unit suffix.
+    const isNum = value !== '' && value !== null && !isNaN(value)
     const fullValue = (value === '' || value === null || value === undefined) 
       ? null 
-      : unit === '' 
-        ? `${value}`     // unitless: just the number (e.g. '1.5')
+      : (unit === '' || !isNum)
+        ? `${value}`        // keyword or unitless: just the value
         : `${value}${unit}` // with unit (e.g. '16px')
     
     // 1. Remove if null

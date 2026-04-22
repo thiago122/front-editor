@@ -11,8 +11,12 @@ const props = defineProps({
   // Passa um array de strings; use '' para a opção "sem unidade" → exibe '—'
   units:       { type: Array, default: () => ['px', 'rem', 'em', '%', 'vh', 'vw', 'ch'] },
   keywords:    { type: Array, default: () => ['auto', 'inherit', 'initial', 'revert', 'revert-layer', 'unset', 'max-content', 'min-content', 'fit-content'] },
-  allowNoUnit: { type: Boolean, default: false }
+  allowNoUnit: { type: Boolean, default: false },
+  allowNegative: { type: Boolean, default: false }
 })
+
+const realMin = computed(() => props.allowNegative ? -9999 : props.min)
+
 
 const emit = defineEmits(['update:modelValue', 'update:unit'])
 
@@ -71,8 +75,9 @@ function onMouseDown(e) {
 function onMouseMove(e) {
   if (!isDragging.value) return
   const delta = e.clientX - startX
-  const newVal = Math.min(props.max, Math.max(props.min, startVal + delta * props.step))
+  const newVal = Math.min(props.max, Math.max(realMin.value, startVal + delta * props.step))
   emit('update:modelValue', Math.round(newVal * 100) / 100)
+
 }
 
 function onMouseUp() {
@@ -104,11 +109,12 @@ function handleInput(e) {
 }
 
 function onFocus(e) {
-  if (props.keywords?.length > 0) {
-    const val = String(e.target.value || '')
-    // Se for numero (ex: 0, 10), mandamos query vazia para exibir todas as keywords
-    const query = (!isNaN(val) && val.trim() !== '') ? '' : val
-    ac.openCustom(e.target, props.keywords, query, accepted => {
+  const val = String(e.target.value || '').trim()
+  const isNumeric = val !== '' && !isNaN(val)
+
+  // Only open autocomplete if NOT numeric (match Chrome behavior)
+  if (props.keywords?.length > 0 && !isNumeric) {
+    ac.openCustom(e.target, props.keywords, val, accepted => {
       emit('update:modelValue', accepted)
     })
   }
@@ -123,9 +129,54 @@ function onBlur(e) {
 }
 
 function onKeydown(e) {
+  const val = String(props.modelValue ?? '').trim()
+  const isNumeric = val !== '' && !isNaN(val)
+
+  // 1. Numeric Stepping (prioritize over autocomplete arrow navigation if we already have a number)
+  if (isNumeric && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+    e.preventDefault()
+    ac.close() // Close list if it was open (match Chrome behavior)
+    
+    let stepAmount = props.step
+    if (e.shiftKey) stepAmount *= 10
+    if (e.altKey) stepAmount *= 0.1
+    
+    const current = parseFloat(props.modelValue) || 0
+    let next = e.key === 'ArrowUp' ? current + stepAmount : current - stepAmount
+    
+    // Clamp and Round
+    next = Math.min(props.max, Math.max(realMin.value, next))
+    emit('update:modelValue', Math.round(next * 100) / 100)
+    return
+
+  }
+
+  // 2. Empty Field Special Arrows (match Chrome behavior)
+  if (val === '') {
+    if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      emit('update:modelValue', 0)
+      ac.close()
+      return
+    }
+    if (e.key === 'ArrowDown' && !ac.isActive.value) {
+      e.preventDefault()
+      ac.openCustom(e.target, props.keywords, '', accepted => {
+        emit('update:modelValue', accepted)
+      })
+      return
+    }
+  }
+
+  // 3. Autocomplete fallback (Navigation/Selection)
   if (ac.onKeydown(e)) return
+
+  // 4. Defaults
   if (e.key === 'Escape') {
     e.target.blur()
+  } else if (e.key === 'Enter') {
+    e.target.blur()
+    ac.close()
   }
 }
 </script>

@@ -195,14 +195,18 @@ const truncateOptions = [
           <VisualInput label="Spacing" 
             :modelValue="letterSpacing.value.value" :unit="letterSpacing.unit.value"
             :units="['px', 'em']"
+            allow-negative
             @update:modelValue="v => letterSpacing.set(v, letterSpacing.unit.value)"
             @update:unit="u => letterSpacing.set(letterSpacing.value.value, u)"
           />
+
           <VisualInput label="Indent" 
             :modelValue="textIndent.value.value" :unit="textIndent.unit.value"
+            allow-negative
             @update:modelValue="v => textIndent.set(v, textIndent.unit.value)"
             @update:unit="u => textIndent.set(textIndent.value.value, u)"
           />
+
         </div>
 
         <!-- Breaking: Word + Line -->

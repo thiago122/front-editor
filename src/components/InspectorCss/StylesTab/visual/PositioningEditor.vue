@@ -61,15 +61,18 @@ const isStatic = computed(() => !position.raw.value || position.raw.value === 's
           @update:modelValue="v => zIndex.set(v)"
           placeholder="0"
           :units="[]"
+          allow-negative
         />
+
       </div>
 
       <!-- Offsets -->
       <div class="grid grid-cols-2 gap-x-3 gap-y-2 mt-1">
-        <VisualInput label="T" :modelValue="top.value.value" :unit="top.unit.value" :units="units" @update:modelValue="v => top.set(v, top.unit.value)" @update:unit="u => top.set(top.value.value, u)" placeholder="auto" />
-        <VisualInput label="R" :modelValue="right.value.value" :unit="right.unit.value" :units="units" @update:modelValue="v => right.set(v, right.unit.value)" @update:unit="u => right.set(right.value.value, u)" placeholder="auto" />
-        <VisualInput label="B" :modelValue="bottom.value.value" :unit="bottom.unit.value" :units="units" @update:modelValue="v => bottom.set(v, bottom.unit.value)" @update:unit="u => bottom.set(bottom.value.value, u)" placeholder="auto" />
-        <VisualInput label="L" :modelValue="left.value.value" :unit="left.unit.value" :units="units" @update:modelValue="v => left.set(v, left.unit.value)" @update:unit="u => left.set(left.value.value, u)" placeholder="auto" />
+        <VisualInput label="T" :modelValue="top.value.value" :unit="top.unit.value" :units="units" allow-negative @update:modelValue="v => top.set(v, top.unit.value)" @update:unit="u => top.set(top.value.value, u)" placeholder="auto" />
+        <VisualInput label="R" :modelValue="right.value.value" :unit="right.unit.value" :units="units" allow-negative @update:modelValue="v => right.set(v, right.unit.value)" @update:unit="u => right.set(right.value.value, u)" placeholder="auto" />
+        <VisualInput label="B" :modelValue="bottom.value.value" :unit="bottom.unit.value" :units="units" allow-negative @update:modelValue="v => bottom.set(v, bottom.unit.value)" @update:unit="u => bottom.set(bottom.value.value, u)" placeholder="auto" />
+        <VisualInput label="L" :modelValue="left.value.value" :unit="left.unit.value" :units="units" allow-negative @update:modelValue="v => left.set(v, left.unit.value)" @update:unit="u => left.set(left.value.value, u)" placeholder="auto" />
+
       </div>
     </div>
   </div>
