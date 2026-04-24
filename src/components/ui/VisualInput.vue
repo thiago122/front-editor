@@ -5,6 +5,7 @@ const props = defineProps({
   modelValue:  { type: [Number, String], default: '' },
   unit:        { type: String, default: 'px' },
   label:       { type: String, default: '' },
+  help:        { type: String, default: '' },
   min:         { type: Number, default: 0 },
   max:         { type: Number, default: 9999 },
   step:        { type: Number, default: 1 },
@@ -12,7 +13,9 @@ const props = defineProps({
   units:       { type: Array, default: () => ['px', 'rem', 'em', '%', 'vh', 'vw', 'ch'] },
   keywords:    { type: Array, default: () => ['auto', 'inherit', 'initial', 'revert', 'revert-layer', 'unset', 'max-content', 'min-content', 'fit-content'] },
   allowNoUnit: { type: Boolean, default: false },
-  allowNegative: { type: Boolean, default: false }
+  allowNegative: { type: Boolean, default: false },
+  isItem:      { type: Boolean, default: false },
+  warning:     { type: Boolean, default: false }
 })
 
 const realMin = computed(() => props.allowNegative ? -9999 : props.min)
@@ -186,10 +189,12 @@ function onKeydown(e) {
     <!-- Label (Scrubbable) -->
     <div 
       v-if="label"
-      class="text-[10px] text-gray-500 font-medium uppercase tracking-tight select-none py-1 min-w-[30px]"
+      class="flex items-center gap-1 text-[12px] text-blue-700 font-normal tracking-tight select-none py-1 min-w-[30px]"
       :class="varMode ? 'cursor-default' : 'cursor-ew-resize hover:text-blue-500 transition-colors'"
+      :title="help || label"
       @mousedown="onMouseDown"
     >
+      <span v-if="warning" title="Esta propriedade pode não ter efeito sem o pai configurado adequadamente" class="text-amber-500 font-black cursor-help">!</span>
       {{ label }}
     </div>
 

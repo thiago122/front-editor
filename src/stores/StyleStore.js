@@ -229,7 +229,21 @@ export const useStyleStore = defineStore('style', () => {
     ruleGroups.value = groups
 
     const target = groups.find(g => g.isTarget)
-    selectRule(target?.rules[0]?.uid ?? null)
+    const targetRules = target?.rules || []
+    
+    // 1. Filtrar regras ideais: que não sejam inline style e NÃO sejam pseudo-elementos
+    // (Pois editar layout/tipografia do elemento num pseudo-seletor no Inspetor Visual é confuso)
+    const idealCandidates = targetRules.filter(r => 
+      r.selector !== 'element.style' && 
+      !r.pseudoSubSection
+    )
+
+    // 2. Escolher a melhor: a primeira das ideais (maior especificidade)
+    // Fallback 1: Primeira que não seja 'element.style'
+    // Fallback 2: 'element.style' ou a primeira de todas
+    const bestRule = idealCandidates[0] || targetRules.find(r => r.selector !== 'element.style') || targetRules[0]
+    
+    selectRule(bestRule?.uid ?? null)
   }
 
   /**

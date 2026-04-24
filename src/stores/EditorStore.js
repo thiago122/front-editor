@@ -733,6 +733,21 @@ export const useEditorStore = defineStore('editor', () => {
     return saveState.value.status !== 'error'
   }
 
+  // ── Visual Editing Sync ────────────────────────────────────────────────────
+  
+  /**
+   * Monitora a regra selecionada no StyleStore (Inspector).
+   * Se houver algum painel de edição visual aberto, atualiza o activeRuleUid
+   * para que os painéis sigam a seleção do usuário automaticamente.
+   */
+  watch(() => styleStore.selectedRuleId, (newRuleId) => {
+    const anyPanelOpen = Object.values(visualEditor.value.panels).some(p => p.show)
+    
+    if (anyPanelOpen) {
+      visualEditor.value.activeRuleUid = newRuleId
+    }
+  })
+
   return {
     triggerInlineEdit,
     htmlEditor,

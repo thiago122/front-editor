@@ -5,6 +5,7 @@ const props = defineProps({
   modelValue:  { type: [String, Number], default: '' },
   options:     { type: Array, required: true },
   label:       { type: String, default: '' },
+  help:        { type: String, default: '' },
   placeholder: { type: String, default: 'Select...' }
 })
 
@@ -42,7 +43,10 @@ function handleVarInput(e) {
 
 <template>
   <div class="flex items-center gap-1">
-    <div v-if="label" class="text-[10px] text-gray-500 font-medium uppercase tracking-tight min-w-[30px] select-none">
+    <div v-if="label" 
+      class="text-[12px] text-blue-700 font-normal tracking-tight min-w-[30px] select-none truncate"
+      :title="help || label"
+    >
       {{ label }}
     </div>
     <div class="flex-1 relative h-6 flex items-center">
@@ -73,8 +77,8 @@ function handleVarInput(e) {
         </select>
         <!-- Custom arrow -->
         <div class="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-          <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19 9l-7 7-7-7" />
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 9l-7 7-7-7" />
           </svg>
         </div>
       </template>

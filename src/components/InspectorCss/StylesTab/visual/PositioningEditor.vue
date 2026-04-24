@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useVisualSection } from '@/composables/useVisualSection'
 import VisualInput from '@/components/ui/VisualInput.vue'
 import VisualSelect from '@/components/ui/VisualSelect.vue'
@@ -12,7 +12,10 @@ const POSITION_PROPS = [
   'position', 'top', 'right', 'bottom', 'left', 'z-index'
 ]
 
-const { showContent, hasAnyValue, useProp } = useVisualSection(() => props.ruleGetter(), POSITION_PROPS)
+const { hasAnyValue, useProp } = useVisualSection(() => props.ruleGetter(), POSITION_PROPS)
+
+const emit = defineEmits(['has-value'])
+watch(hasAnyValue, (v) => emit('has-value', v), { immediate: true })
 
 const position = useProp('position')
 const top      = useProp('top')
@@ -25,55 +28,41 @@ const posOptions = ['static', 'relative', 'absolute', 'fixed', 'sticky']
 const units = ['px', 'rem', 'em', '%', 'vh', 'vw']
 
 const isStatic = computed(() => !position.raw.value || position.raw.value === 'static')
+
+defineExpose({ hasAnyValue })
 </script>
 
 <template>
-  <div class="flex flex-col gap-2.5">
-    <div
-      class="flex items-center justify-between border-b border-gray-100 pb-1 cursor-pointer select-none"
-      @click="showContent = !showContent"
-    >
-      <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Positioning</span>
-      <div class="flex items-center gap-1.5">
-        <span
-          v-if="hasAnyValue"
-          class="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"
-        ></span>
-        <svg class="w-3 h-3 text-gray-400 transition-transform" :class="showContent ? '' : '-rotate-90'"
-          fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19 9l-7 7-7-7" />
-        </svg>
-      </div>
+  <div class="flex flex-col gap-2">
+    <div class="flex items-center gap-2">
+      <VisualSelect
+        label="Pos"
+        help="position: Define o método de posicionamento (static, relative, absolute, etc.)"
+        :modelValue="position.raw.value"
+        @update:modelValue="v => position.set(v)"
+        :options="posOptions"
+        placeholder="static"
+      />
+      <VisualInput
+        label="Z"
+        help="z-index: Controla a ordem de empilhamento vertical (camadas)"
+        :modelValue="zIndex.raw.value"
+        @update:modelValue="v => zIndex.set(v)"
+        placeholder="0"
+        :units="[]"
+        :keywords="['auto', 'inherit', 'initial']"
+        allow-negative
+      />
+
     </div>
 
-    <div v-show="showContent" class="flex flex-col gap-2 pt-1">
-      <div class="flex items-center gap-2">
-        <VisualSelect
-          label="Pos"
-          :modelValue="position.raw.value"
-          @update:modelValue="v => position.set(v)"
-          :options="posOptions"
-          placeholder="static"
-        />
-        <VisualInput
-          label="Z"
-          :modelValue="zIndex.raw.value"
-          @update:modelValue="v => zIndex.set(v)"
-          placeholder="0"
-          :units="[]"
-          allow-negative
-        />
+    <!-- Offsets -->
+    <div class="grid grid-cols-2 gap-x-3 gap-y-2 mt-1">
+      <VisualInput label="T" help="top: Deslocamento em relação ao topo" :modelValue="top.value.value" :unit="top.unit.value" :units="units" :keywords="['auto', 'inherit']" allow-negative @update:modelValue="v => top.set(v, top.unit.value)" @update:unit="u => top.set(top.value.value, u)" placeholder="auto" />
+      <VisualInput label="R" help="right: Deslocamento em relação à direita" :modelValue="right.value.value" :unit="right.unit.value" :units="units" :keywords="['auto', 'inherit']" allow-negative @update:modelValue="v => right.set(v, right.unit.value)" @update:unit="u => right.set(right.value.value, u)" placeholder="auto" />
+      <VisualInput label="B" help="bottom: Deslocamento em relação à base" :modelValue="bottom.value.value" :unit="bottom.unit.value" :units="units" :keywords="['auto', 'inherit']" allow-negative @update:modelValue="v => bottom.set(v, bottom.unit.value)" @update:unit="u => bottom.set(bottom.value.value, u)" placeholder="auto" />
+      <VisualInput label="L" help="left: Deslocamento em relação à esquerda" :modelValue="left.value.value" :unit="left.unit.value" :units="units" :keywords="['auto', 'inherit']" allow-negative @update:modelValue="v => left.set(v, left.unit.value)" @update:unit="u => left.set(left.value.value, u)" placeholder="auto" />
 
-      </div>
-
-      <!-- Offsets -->
-      <div class="grid grid-cols-2 gap-x-3 gap-y-2 mt-1">
-        <VisualInput label="T" :modelValue="top.value.value" :unit="top.unit.value" :units="units" allow-negative @update:modelValue="v => top.set(v, top.unit.value)" @update:unit="u => top.set(top.value.value, u)" placeholder="auto" />
-        <VisualInput label="R" :modelValue="right.value.value" :unit="right.unit.value" :units="units" allow-negative @update:modelValue="v => right.set(v, right.unit.value)" @update:unit="u => right.set(right.value.value, u)" placeholder="auto" />
-        <VisualInput label="B" :modelValue="bottom.value.value" :unit="bottom.unit.value" :units="units" allow-negative @update:modelValue="v => bottom.set(v, bottom.unit.value)" @update:unit="u => bottom.set(bottom.value.value, u)" placeholder="auto" />
-        <VisualInput label="L" :modelValue="left.value.value" :unit="left.unit.value" :units="units" allow-negative @update:modelValue="v => left.set(v, left.unit.value)" @update:unit="u => left.set(left.value.value, u)" placeholder="auto" />
-
-      </div>
     </div>
   </div>
 </template>
