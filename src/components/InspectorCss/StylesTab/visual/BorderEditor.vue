@@ -7,7 +7,7 @@
   ║                                                                              ║
   ║  Botão [S] — Shorthand                                                       ║
   ║  ┌─ Modo linked  → gera `border: 2px solid red`                              ║
-  ║  └─ Modo unlinked → gera `border-top: 2px solid red` por lado               ║
+  ║  └─ Modo unlinked → gera `border-top: 2px solid red` por lado                ║
   ║                                                                              ║
   ║  Botão 🔗 — Link/Unlink                                                      ║
   ║  ┌─ Linked   → edita os 4 lados com as mesmas props                          ║

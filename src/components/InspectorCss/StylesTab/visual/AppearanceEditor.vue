@@ -8,6 +8,7 @@ import VisualFieldset from '@/components/ui/VisualFieldset.vue'
 import ColorVarInput from '@/components/ui/ColorVarInput.vue'
 import BoxShadowEditor from './BoxShadowEditor.vue'
 import BorderEditor from './BorderEditor.vue'
+import BorderRadiusEditor from './BorderRadiusEditor.vue'
 
 const props = defineProps({
   ruleGetter: { type: Function, required: true }
@@ -19,7 +20,6 @@ const APPEARANCE_PROPS = [
   'background-color', 'background-image', 'background-size',
   'background-position', 'background-position-x', 'background-position-y',
   'background-repeat', 'background-repeat-x', 'background-repeat-y', 'background-attachment',
-  'border-radius', 'border-top-left-radius', 'border-top-right-radius', 'border-bottom-left-radius', 'border-bottom-right-radius',
   'box-shadow', 'cursor', 'pointer-events', 'user-select', 'resize',
   'filter', 'backdrop-filter', 'mix-blend-mode', 'isolation',
   'transform', 'transform-origin', 'transform-style', 'perspective', 'backface-visibility',
@@ -42,11 +42,6 @@ const bgRepeat     = useProp('background-repeat')
 const bgRepeatX    = useProp('background-repeat-x')
 const bgRepeatY    = useProp('background-repeat-y')
 const bgAttach     = useProp('background-attachment')
-const radius       = useProp('border-radius')
-const radiusTL     = useProp('border-top-left-radius')
-const radiusTR     = useProp('border-top-right-radius')
-const radiusBL     = useProp('border-bottom-left-radius')
-const radiusBR     = useProp('border-bottom-right-radius')
 const cursor       = useProp('cursor')
 const transform    = useProp('transform')
 const transOrigin  = useProp('transform-origin')
@@ -79,12 +74,6 @@ function toggleRepeatLink() {
   }
 }
 
-// Radius
-const isRadiusLinked = ref(true)
-function toggleRadiusLink() {
-  if (isRadiusLinked.value) { radius.set(null); isRadiusLinked.value = false }
-  else { isRadiusLinked.value = true }
-}
 
 const visibilityOptions = [
   { value: 'visible',  label: 'Visible', icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>` },
@@ -187,24 +176,7 @@ const cursorOptions = ['default', 'pointer', 'not-allowed', 'move', 'text', 'zoo
     <BorderEditor :rule-getter="ruleGetter" />
 
     <!-- ⭕ 4. RADIUS -->
-    <VisualFieldset label="Radius">
-      <template #badge>
-        <button @click="toggleRadiusLink" class="p-0.5 rounded hover:bg-blue-100 transition-colors" :class="isRadiusLinked ? 'text-blue-600' : 'text-gray-400'">
-          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path v-if="isRadiusLinked" d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
-            <path v-if="isRadiusLinked" d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 00 7.07 7.07l1.71-1.71" />
-            <path v-else d="M18 6L6 18M6 6l12 12" />
-          </svg>
-        </button>
-      </template>
-      <VisualInput v-if="isRadiusLinked" label="Radius" :modelValue="radius.value.value" :unit="radius.unit.value" :units="['px', '%']" @update:modelValue="v => radius.set(v, radius.unit.value)" @update:unit="u => radius.set(radius.value.value, u)" placeholder="0" />
-      <div v-else class="grid grid-cols-2 gap-2">
-        <VisualInput label="TL" :modelValue="radiusTL.value.value" :unit="radiusTL.unit.value" @update:modelValue="v => radiusTL.set(v, radiusTL.unit.value)" @update:unit="u => radiusTL.set(radiusTL.value.value, u)" />
-        <VisualInput label="TR" :modelValue="radiusTR.value.value" :unit="radiusTR.unit.value" @update:modelValue="v => radiusTR.set(v, radiusTR.unit.value)" @update:unit="u => radiusTR.set(radiusTR.value.value, u)" />
-        <VisualInput label="BL" :modelValue="radiusBL.value.value" :unit="radiusBL.unit.value" @update:modelValue="v => radiusBL.set(v, radiusBL.unit.value)" @update:unit="u => radiusBL.set(radiusBL.value.value, u)" />
-        <VisualInput label="BR" :modelValue="radiusBR.value.value" :unit="radiusBR.unit.value" @update:modelValue="v => radiusBR.set(v, radiusBR.unit.value)" @update:unit="u => radiusBR.set(radiusBR.value.value, u)" />
-      </div>
-    </VisualFieldset>
+    <BorderRadiusEditor :rule-getter="ruleGetter" />
 
     <!-- 🌫 5. BOX SHADOW -->
     <VisualFieldset label="Box Shadow"><BoxShadowEditor :rule-getter="getRule" /></VisualFieldset>
