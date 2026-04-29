@@ -82,6 +82,7 @@ import { useVisualSection } from '@/composables/useVisualSection'
 import VisualInput from '@/components/ui/VisualInput.vue'
 import VisualSelect from '@/components/ui/VisualSelect.vue'
 import VisualFieldset from '@/components/ui/VisualFieldset.vue'
+import VisualSectionHeader from '@/components/ui/VisualSectionHeader.vue'
 import ColorVarInput from '@/components/ui/ColorVarInput.vue'
 
 const props = defineProps({
@@ -345,9 +346,10 @@ const borderStyleOptions = [
 </script>
 
 <template>
-  <VisualFieldset label="Border" collapsible :default-open="hasAnyBorderValue" :has-value="hasAnyBorderValue">
-    <template #badge>
-      <div class="flex items-center gap-1">
+  <div class="flex flex-col gap-2">
+    <!-- Edges Section Header -->
+    <VisualSectionHeader label="Edges">
+      <template #actions>
         <button v-if="isBorderLinked" @click="toggleBorderShorthand" class="px-1.5 h-4 rounded text-[9px] font-bold border transition-all" :class="isBorderShorthand ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white border-gray-200 text-gray-400 hover:border-blue-300'">S</button>
         <button @click="toggleBorderLink" class="p-0.5 rounded hover:bg-blue-100 transition-colors" :class="isBorderLinked ? 'text-blue-600' : 'text-gray-400'">
           <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -356,8 +358,8 @@ const borderStyleOptions = [
             <path v-else d="M18 6L6 18M6 6l12 12" />
           </svg>
         </button>
-      </div>
-    </template>
+      </template>
+    </VisualSectionHeader>
 
     <!-- Linked mode -->
     <div v-if="isBorderLinked" class="flex flex-col gap-2">
@@ -378,5 +380,5 @@ const borderStyleOptions = [
         <ColorVarInput :value="sideDisplay(side, 'c')" @update="v => setSideBorderField(side, 'c', v)" />
       </div>
     </div>
-  </VisualFieldset>
+  </div>
 </template>

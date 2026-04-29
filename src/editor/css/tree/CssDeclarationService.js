@@ -157,21 +157,48 @@ export class CssDeclarationService {
    * @returns {boolean}
    */
   static move(sourceRule, decl, targetRule, index = -1) {
-    if (!sourceRule.astNode || !targetRule.astNode || !decl.astNode) return false
+    const sourceAst = sourceRule.astNode || sourceRule.metadata?.astNode
+    const targetAst = targetRule.astNode || targetRule.metadata?.astNode
+    const declAst   = decl.astNode || decl.metadata?.astNode
 
-    const sourceList    = toRaw(sourceRule.astNode).block?.children
-    const declAst       = toRaw(decl.astNode)
-    const originalIndex = sourceList ? [...sourceList].indexOf(declAst) : -1
-    const removed       = safeRemove(sourceList, declAst)
+    if (!sourceAst || !targetAst || !declAst) return false
+
+    // 1. Move no AST
+    const sourceList    = toRaw(sourceAst).block?.children
+    const rawDeclAst    = toRaw(declAst)
+    const originalIndex = sourceList ? [...sourceList].indexOf(rawDeclAst) : -1
+    const removed       = safeRemove(sourceList, rawDeclAst)
     if (!removed) return false
 
-    const targetBlock = toRaw(targetRule.astNode).block
+    const targetBlock = toRaw(targetAst).block
     if (!targetBlock?.children) return false
 
     let insertAt = index
     if (insertAt >= 0 && sourceRule === targetRule && originalIndex < insertAt) insertAt -= 1
 
-    safeAppend(targetBlock.children, declAst, false, insertAt)
+    safeAppend(targetBlock.children, rawDeclAst, false, insertAt)
+
+    // 2. Move na Logic Tree (mantém a árvore sincronizada para o Explorer)
+    const sourceLogic = sourceRule.type === 'selector' ? sourceRule : sourceRule.logicNode
+    const targetLogic = targetRule.type === 'selector' ? targetRule : targetRule.logicNode
+    const declLogic   = decl.type === 'declaration' ? decl : decl.logicNode
+
+    if (sourceLogic && targetLogic && declLogic && sourceLogic.children) {
+      const logicIndex = sourceLogic.children.findIndex(n => n.id === declLogic.id)
+      if (logicIndex !== -1) {
+        const [realDeclLogic] = sourceLogic.children.splice(logicIndex, 1)
+        let logicInsertAt = index
+        if (logicInsertAt >= 0 && sourceLogic === targetLogic && logicIndex < logicInsertAt) {
+          logicInsertAt -= 1
+        }
+        if (logicInsertAt >= 0) {
+          targetLogic.children.splice(logicInsertAt, 0, realDeclLogic)
+        } else {
+          targetLogic.children.push(realDeclLogic)
+        }
+      }
+    }
+
     return true
   }
 

@@ -2,7 +2,7 @@
 import { watch } from 'vue'
 import { useVisualSection } from '@/composables/useVisualSection'
 import VisualInput from '@/components/ui/VisualInput.vue'
-import VisualToggleGroup from '@/components/ui/VisualToggleGroup.vue'
+import OverflowEditor from './OverflowEditor.vue'
 
 const props = defineProps({
   ruleGetter: { type: Function, required: true }
@@ -11,8 +11,7 @@ const props = defineProps({
 const SIZING_PROPS = [
   'width', 'height',
   'min-width', 'min-height',
-  'max-width', 'max-height',
-  'overflow-x', 'overflow-y'
+  'max-width', 'max-height'
 ]
 
 const { hasAnyValue, useProp } = useVisualSection(() => props.ruleGetter(), SIZING_PROPS)
@@ -26,23 +25,14 @@ const minWidth   = useProp('min-width')
 const minHeight  = useProp('min-height')
 const maxWidth   = useProp('max-width')
 const maxHeight  = useProp('max-height')
-const overflowX  = useProp('overflow-x')
-const overflowY  = useProp('overflow-y')
 
 const units = ['px', 'rem', 'em', '%', 'vh', 'vw', 'fit-content', 'auto']
-
-const overflowOptions = [
-  { value: 'visible', label: 'Visible', icon: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="4" y="4" width="12" height="12"/><path d="M2 2l16 16M18 2L2 18" stroke-opacity=".2"/></svg>` },
-  { value: 'hidden',  label: 'Hidden',  icon: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="4" y="4" width="12" height="12" stroke-dasharray="2 2"/><path d="M7 7l6 6M13 7l-6 6"/></svg>` },
-  { value: 'scroll',  label: 'Scroll',  icon: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="4" y="4" width="12" height="12"/><path d="M16 6v8M6 16h8"/></svg>` },
-  { value: 'auto',    label: 'Auto',    icon: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M10 4v12M4 10h12" stroke-dasharray="2 2"/></svg>` },
-]
 
 defineExpose({ hasAnyValue })
 </script>
 
 <template>
-  <div class="flex flex-col gap-3">
+  <div class="flex flex-col gap-1.5">
     <!-- Width / Height -->
     <div class="grid grid-cols-2 gap-2">
       <VisualInput
@@ -120,23 +110,8 @@ defineExpose({ hasAnyValue })
         placeholder="none"
       />
     </div>
-    <!-- Overflow -->
-    <div class="flex flex-col gap-2 pt-2 border-t border-gray-100 mt-1">
-      <div class="text-[12px] text-blue-700 font-normal" title="overflow: Controla como o conteúdo transbordado é tratado">Overflow</div>
-      <VisualToggleGroup 
-        label="X" 
-        help="overflow-x: Comportamento de transbordamento horizontal"
-        :modelValue="overflowX.raw.value" 
-        @update:modelValue="v => overflowX.set(v)" 
-        :options="overflowOptions" 
-      />
-      <VisualToggleGroup 
-        label="Y" 
-        help="overflow-y: Comportamento de transbordamento vertical"
-        :modelValue="overflowY.raw.value" 
-        @update:modelValue="v => overflowY.set(v)" 
-        :options="overflowOptions" 
-      />
-    </div>
+
+    <!-- Overflow Modular -->
+    <OverflowEditor :rule-getter="props.ruleGetter" />
   </div>
 </template>

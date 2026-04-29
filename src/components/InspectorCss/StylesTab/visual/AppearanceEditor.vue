@@ -23,9 +23,28 @@ const APPEARANCE_PROPS = [
   'box-shadow', 'cursor', 'pointer-events', 'user-select', 'resize',
   'filter', 'backdrop-filter', 'mix-blend-mode', 'isolation',
   'transform', 'transform-origin', 'transform-style', 'perspective', 'backface-visibility',
+  // Tracking for Borders fieldset indicator
+  'border', 'border-width', 'border-style', 'border-color',
+  'border-top', 'border-right', 'border-bottom', 'border-left',
+  'border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width',
+  'border-top-style', 'border-right-style', 'border-bottom-style', 'border-left-style',
+  'border-top-color', 'border-right-color', 'border-bottom-color', 'border-left-color',
+  'border-radius', 'border-top-left-radius', 'border-top-right-radius', 'border-bottom-left-radius', 'border-bottom-right-radius'
 ]
 
 const { hasAnyValue, useProp } = useVisualSection(getRule, APPEARANCE_PROPS)
+
+const hasBorderValue = computed(() => {
+  const borderProps = [
+    'border', 'border-width', 'border-style', 'border-color',
+    'border-top', 'border-right', 'border-bottom', 'border-left',
+    'border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width',
+    'border-top-style', 'border-right-style', 'border-bottom-style', 'border-left-style',
+    'border-top-color', 'border-right-color', 'border-bottom-color', 'border-left-color',
+    'border-radius', 'border-top-left-radius', 'border-top-right-radius', 'border-bottom-left-radius', 'border-bottom-right-radius'
+  ]
+  return borderProps.some(p => !!useProp(p).raw.value)
+})
 
 const emit = defineEmits(['has-value'])
 watch(hasAnyValue, (v) => emit('has-value', v), { immediate: true })
@@ -172,11 +191,12 @@ const cursorOptions = ['default', 'pointer', 'not-allowed', 'move', 'text', 'zoo
       <VisualToggleGroup label="Attach" :modelValue="bgAttach.raw.value" @update:modelValue="v => bgAttach.set(v)" :options="['scroll', 'fixed', 'local'].map(o => ({label: o, value: o}))" />
     </VisualFieldset>
 
-    <!-- 🔲 3. BORDER -->
-    <BorderEditor :rule-getter="ruleGetter" />
-
-    <!-- ⭕ 4. RADIUS -->
-    <BorderRadiusEditor :rule-getter="ruleGetter" />
+    <!-- 🔲 3. BORDERS (Edges + Radius) -->
+    <VisualFieldset label="Borders" collapsible :default-open="hasBorderValue" :has-value="hasBorderValue">
+      <BorderEditor :rule-getter="ruleGetter" />
+      <div class="h-px bg-gray-100/50 my-1 mx-1"></div>
+      <BorderRadiusEditor :rule-getter="ruleGetter" />
+    </VisualFieldset>
 
     <!-- 🌫 5. BOX SHADOW -->
     <VisualFieldset label="Box Shadow"><BoxShadowEditor :rule-getter="getRule" /></VisualFieldset>

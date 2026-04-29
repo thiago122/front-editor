@@ -64,7 +64,7 @@ export function useCssDragDrop() {
     event.preventDefault() // permite o drop
 
     const dragged = dragState.value.node
-    const isContainer = node.type === 'at-rule' || node.type === 'file'
+    const isContainer = node.type === 'at-rule' || node.type === 'file' || node.type === 'selector'
     const rect = event.currentTarget.getBoundingClientRect()
     const relY = event.clientY - rect.top
     const pct  = relY / rect.height // 0..1
@@ -108,6 +108,11 @@ export function useCssDragDrop() {
         moved = CssLogicTreeService.moveRule(logicTree, dragged.id, targetId, insertAt)
       } else if (dragged.type === 'at-rule') {
         moved = CssLogicTreeService.moveAtRule(logicTree, dragged.id, targetId, insertAt)
+      } else if (dragged.type === 'declaration') {
+        const sourceParent = findParentNode(logicTree, dragged.id)
+        if (sourceParent) {
+          moved = CssLogicTreeService.moveDeclaration(sourceParent, dragged, targetNode, insertAt)
+        }
       }
     } else {
       // Drop antes/depois de um nó irmão (comportamento original)
@@ -212,6 +217,9 @@ export function useCssDragDrop() {
   function isValidDropInside(dragged, targetContainer) {
     if (targetContainer.type === 'at-rule' || targetContainer.type === 'file') {
       return dragged.type === 'selector' || dragged.type === 'at-rule'
+    }
+    if (targetContainer.type === 'selector') {
+      return dragged.type === 'declaration'
     }
     return false
   }

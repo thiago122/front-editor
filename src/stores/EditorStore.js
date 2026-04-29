@@ -391,6 +391,7 @@ export const useEditorStore = defineStore('editor', () => {
     if (outlineMode.value) {
       const style = doc.createElement('style')
       style.id = OUTLINE_STYLE_ID
+      style.setAttribute('data-location', 'ignore')
       style.textContent = `
         /* Linhas base sutis para todos */
         * { outline: 1px solid rgba(0, 0, 0, 0.1) !important; outline-offset: -1px; transition: outline-color 0.2s; }
@@ -446,8 +447,9 @@ export const useEditorStore = defineStore('editor', () => {
     if (showEmptyPlaceholder.value) {
       const style = doc.createElement('style')
       style.id = EMPTY_PLACEHOLDER_STYLE_ID
+      style.setAttribute('data-location', 'ignore')
       style.textContent = `
-        [data-node-id]:empty:not(br):not(hr) {
+        [data-node-id]:empty:not(br):not(hr):not(img):not(input):not(svg):not(video):not(iframe):not(canvas):not(button):not(option):not(optgroup):not(select):not(textarea)  {
           min-height: 24px;
           outline: 1.5px dashed rgba(99,102,241,0.5) !important;
           position: relative;
@@ -455,7 +457,7 @@ export const useEditorStore = defineStore('editor', () => {
           align-items: center;
           justify-content: center;
         }
-        [data-node-id]:empty:not(br):not(hr)::before {
+        [data-node-id]:empty:not(br):not(hr):not(img):not(input):not(svg):not(video):not(iframe):not(canvas):not(button):not(option):not(optgroup):not(select):not(textarea)::before {
           content: "vazio" !important;
           font-size: 10px;
           font-family: monospace;

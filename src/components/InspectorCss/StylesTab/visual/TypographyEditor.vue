@@ -186,39 +186,22 @@ const truncateOptions = [
 ]
 
 // ── Font Family: free input handler ──────────────────────────────────────────
-const fontDatalistId = 'vp-font-family-list'
-
-function handleFontInput(e) {
-  font.set(e.target.value || null)
-}
 </script>
 
 <template>
   <div class="flex flex-col gap-2.5">
     <div class="flex flex-col gap-2">
 
-      <!-- ── Font Family (free input + datalist) ── -->
-      <div class="flex items-center gap-1">
-        <div 
-          class="text-[11px] text-blue-700 font-normal tracking-tight min-w-[44px] whitespace-nowrap select-none shrink-0"
-          title="font-family: Define a família tipográfica do elemento"
-        >Font</div>
-        <div class="border flex items-center bg-gray-100 rounded border-blue-200 focus-within:border-blue-400 focus-within:bg-white transition-all overflow-hidden h-6 flex-1">
-          <input
-            type="text"
-            :value="font.raw.value ?? ''"
-            @input="handleFontInput"
-            :list="fontDatalistId"
-            class="h-full grow min-w-0 bg-transparent border-none outline-none px-1.5 text-[11px] font-medium text-gray-800"
-            placeholder="system-ui, sans-serif…"
-            spellcheck="false"
-            autocomplete="off"
-          />
-          <datalist :id="fontDatalistId">
-            <option v-for="f in FONT_SUGGESTIONS" :key="f" :value="f" />
-          </datalist>
-        </div>
-      </div>
+      <!-- Font Family -->
+      <VisualInput 
+        label="Font"
+        help="font-family: Define a família tipográfica do elemento. Permite usar nomes de fontes ou variáveis CSS."
+        :modelValue="font.raw.value ?? ''"
+        :units="[]"
+        :keywords="FONT_SUGGESTIONS"
+        @update:modelValue="v => font.set(v)"
+        placeholder="system-ui, sans-serif…"
+      />
 
       <!-- Size & Color -->
       <div class="grid grid-cols-2 gap-2">

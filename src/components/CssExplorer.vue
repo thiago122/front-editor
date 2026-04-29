@@ -649,7 +649,7 @@ async function createStylesheet(type, href = null) {
   }
 
   await styleStore.rebuildLogicTree(doc, ['on_page', 'internal', 'external'])
-  expandAll()
+  // expandAll()
 }
 
 // ============================================

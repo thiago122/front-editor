@@ -271,7 +271,7 @@ function toggleGapLink() {
 </script>
 
 <template>
-  <div class="flex flex-col gap-4">
+  <div class="flex flex-col gap-1">
     <!-- DISPLAY SELECTION -->
     <VisualSelect
       label="Display"
@@ -283,7 +283,7 @@ function toggleGapLink() {
     />
 
     <!-- FLEX CONTAINER (Conditional) -->
-    <VisualFieldset v-if="isFlex" label="Flex Container" help="Propriedades do elemento como container flexível">
+    <VisualFieldset collapsible defaultOpen v-if="isFlex" label="Flex Container" help="Propriedades do elemento como container flexível">
       <VisualToggleGroup label="Dir" help="flex-direction: Define a direção do eixo principal" :modelValue="flexDirection.raw.value" @update:modelValue="v => flexDirection.set(v)" :options="flexDirOptions" />
       <VisualToggleGroup label="Justify" help="justify-content: Alinhamento no eixo principal" :modelValue="justifyContent.raw.value" @update:modelValue="v => justifyContent.set(v)" :options="justifyOptions" />
       <VisualToggleGroup label="Align" help="align-items: Alinhamento no eixo transversal" :modelValue="alignItems.raw.value" @update:modelValue="v => alignItems.set(v)" :options="alignItemsOptions" />
@@ -331,7 +331,7 @@ function toggleGapLink() {
     </VisualFieldset>
 
     <!-- GRID CONTAINER (Conditional) -->
-    <VisualFieldset v-if="isGrid" label="Grid Container" help="Propriedades do elemento como container de grid">
+    <VisualFieldset collapsible defaultOpen v-if="isGrid" label="Grid Container" help="Propriedades do elemento como container de grid">
       <!-- Grid Structure (Stacked for Sidebar compatibility) -->
       <div class="flex flex-col gap-1.5 ">
         <span class="text-[11px] text-blue-700 font-semibold uppercase tracking-tight opacity-70">Grid Structure</span>
@@ -361,6 +361,7 @@ function toggleGapLink() {
           </div>
         </div>
       </div>
+
       <VisualToggleGroup label="Auto Flow" help="grid-auto-flow: Algoritmo de auto-posicionamento dos itens" :modelValue="gridFlow.raw.value" @update:modelValue="v => gridFlow.set(v)" :options="gridFlowOptions" />
       
       <div class="border-t border-gray-100 my-1.5"></div>
@@ -416,8 +417,7 @@ function toggleGapLink() {
     </VisualFieldset>
 
     <!-- CHILD SETTINGS (Flex/Grid Item) -->
-    <div class="flex flex-col gap-2 mt-4 pt-4 border-t border-gray-100">
-      <VisualFieldset :disabled="!isParentFlex" label="Flex Child" help="Propriedades do item dentro de um container Flex">
+      <VisualFieldset collapsible :defaultOpen="false" :disabled="!isParentFlex" label="Flex Child" help="Propriedades do item dentro de um container Flex">
         <template #badge v-if="!isParentFlex">
           <span class="text-amber-500 font-bold" title="Requer pai com display: flex ou inline-flex">!</span>
         </template>
@@ -432,7 +432,7 @@ function toggleGapLink() {
         </div>
       </VisualFieldset>
 
-      <VisualFieldset :disabled="!isParentGrid" label="Grid Child" help="Propriedades do item dentro de um container Grid">
+      <VisualFieldset collapsible :defaultOpen="false" :disabled="!isParentGrid" label="Grid Child" help="Propriedades do item dentro de um container Grid">
         <template #badge v-if="!isParentGrid">
           <span class="text-amber-500 font-bold" title="Requer pai com display: grid ou inline-grid">!</span>
         </template>
@@ -445,6 +445,6 @@ function toggleGapLink() {
           <VisualToggleGroup label="Just" help="justify-self: Alinhamento horizontal individual" :modelValue="justifySelf.raw.value" @update:modelValue="v => justifySelf.set(v)" :options="alignSelfOptions" />
         </div>
       </VisualFieldset>
-    </div>
+ 
   </div>
 </template>

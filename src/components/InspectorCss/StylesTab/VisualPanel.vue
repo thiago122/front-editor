@@ -165,7 +165,7 @@ const hasValueAppearance  = ref(false)
           <!-- Layout Category -->
           <template v-if="category === 'layout' && rule">
             
-            <VisualSection title="Display & Layout" v-model:show="showDisplay" :hasAnyValue="hasValueDisplay">
+            <VisualSection title="Layout" v-model:show="showDisplay" :hasAnyValue="hasValueDisplay">
               <LayoutEditor
                 @has-value="v => hasValueDisplay = v"
                 :key="activeRuleUid + '_layout'"

@@ -3,6 +3,7 @@ import { ref, reactive, computed, watch } from 'vue'
 import { useVisualSection } from '@/composables/useVisualSection'
 import VisualInput from '@/components/ui/VisualInput.vue'
 import VisualFieldset from '@/components/ui/VisualFieldset.vue'
+import VisualSectionHeader from '@/components/ui/VisualSectionHeader.vue'
 
 const props = defineProps({
   ruleGetter: { type: Function, required: true }
@@ -123,20 +124,22 @@ watch([radiusTL.raw, radiusTR.raw, radiusBR.raw, radiusBL.raw], () => {
 </script>
 
 <template>
-  <VisualFieldset label="Radius" collapsible :default-open="hasAnyRadiusValue" :has-value="hasAnyRadiusValue">
-    <template #badge>
-      <button @click="toggleRadiusLink" class="p-0.5 rounded hover:bg-blue-100 transition-colors" :class="isRadiusLinked ? 'text-blue-600' : 'text-gray-400'">
-        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path v-if="isRadiusLinked" d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
-          <path v-if="isRadiusLinked" d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 00 7.07 7.07l1.71-1.71" />
-          <path v-else d="M18 6L6 18M6 6l12 12" />
-        </svg>
-      </button>
-    </template>
+  <div class="flex flex-col gap-2">
+    <!-- Radius Section Header -->
+    <VisualSectionHeader label="Radius">
+      <template #actions>
+        <button @click="toggleRadiusLink" class="p-0.5 rounded hover:bg-blue-100 transition-colors ml-1" :class="isRadiusLinked ? 'text-blue-600' : 'text-gray-400'">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path v-if="isRadiusLinked" d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
+            <path v-if="isRadiusLinked" d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 00 7.07 7.07l1.71-1.71" />
+            <path v-else d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </template>
+    </VisualSectionHeader>
 
     <div v-if="isRadiusLinked" class="flex flex-col gap-2">
       <VisualInput 
-        label="Radius" 
         :modelValue="radius.value.value" 
         :unit="radius.unit.value" 
         :units="['px', '%', 'rem', 'em']" 
@@ -176,5 +179,5 @@ watch([radiusTL.raw, radiusTR.raw, radiusBR.raw, radiusBL.raw], () => {
         />
       </div>
     </div>
-  </VisualFieldset>
+  </div>
 </template>
