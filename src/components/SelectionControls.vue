@@ -51,34 +51,34 @@ const moveDown = () => {
 </script>
 
 <template>
-  <div v-if="nodeId" class="flex items-center gap-2">
-    <div class="text-sm text-blue-600 bg-blue-100 px-2 rounded">{{ tagName }}</div>
+  <div v-if="nodeId" class="flex items-center gap-1.5 bg-gray-50/80 px-1 py-1 border border-gray-100 h-8">
+    <div class="text-[10px] font-bold tracking-wider uppercase text-blue-600 bg-blue-100/50 px-2 py-0.5 rounded-sm">{{ tagName }}</div>
 
-    <div class="inline-block mr-2 pr-2 border-r border-gray-300"></div>
-    <button
-      @click="selectParent"
-      class="px-2 py-1 hover:bg-white rounded border border-transparent hover:border-gray-200"
-      title="Select Parent"
-    >
-      <IconSelectParent />
-    </button>
+    <div class="w-px h-3 bg-gray-200 mx-0.5"></div>
 
-    <div class="flex gap-1">
+    <div class="flex items-center gap-0.5">
+      <button
+        @click="selectParent"
+        class="p-1 text-gray-500 hover:text-gray-800 hover:bg-white rounded-sm transition-colors"
+        title="Selecionar Pai"
+      >
+        <IconSelectParent />
+      </button>
       <button
         @click="moveUp"
         :disabled="!canMoveUp"
-        class="p-1 hover:bg-white rounded border border-transparent hover:border-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
-        title="Move Up"
-        >
-          <IconChevronUp />
-        </button>
-        <button
-          @click="moveDown"
-          :disabled="!canMoveDown"
-          class="p-1 hover:bg-white rounded border border-transparent hover:border-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
-          title="Move Down"
-        >
-          <IconChevronDown />
+        class="p-1 text-gray-500 hover:text-gray-800 hover:bg-white rounded-sm transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+        title="Mover para Cima"
+      >
+        <IconChevronUp />
+      </button>
+      <button
+        @click="moveDown"
+        :disabled="!canMoveDown"
+        class="p-1 text-gray-500 hover:text-gray-800 hover:bg-white rounded-sm transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+        title="Mover para Baixo"
+      >
+        <IconChevronDown />
       </button>
     </div>
   </div>

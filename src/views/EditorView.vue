@@ -59,6 +59,8 @@ import HtmlImportModal from '@/components/HtmlImportModal.vue'
 import PixelPerfectOverlay from '@/components/PixelPerfectOverlay.vue'
 import PixelPerfectPanel from '@/components/PixelPerfectPanel.vue'
 import { usePixelPerfect } from '@/composables/usePixelPerfect'
+import VariablesPanel from '@/components/VariablesPanel.vue'
+import ShortcutsDropdown from '@/components/ShortcutsDropdown.vue'
 
 import { CssLogicTreeService } from '@/editor/css/tree/CssLogicTreeService.js'
 import { HtmlExportService } from '@/editor/css/export/HtmlExportService.js'
@@ -86,6 +88,7 @@ function startInspectorResize(e)    { startResize(e, inspectorWidth, { min: 200,
 
 const isSaveModalOpen  = ref(false)
 const isImportModalOpen = ref(false)
+const isShortcutsModalOpen = ref(false)
 const activeExplorer   = ref(null) // 'html' | 'css' | null
 
 // ─── Auto-Save ──────────────────────────────────────────────────────────────
@@ -158,6 +161,9 @@ function handleGlobalKeydown(e) {
   } else if (e.altKey && e.key === 'l') {
     e.preventDefault()
     activeExplorer.value = activeExplorer.value === 'html' ? null : 'html'
+  } else if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'c') {
+    e.preventDefault()
+    EditorStore.inspectMode = !EditorStore.inspectMode
   }
 }
 onMounted(()      => window.addEventListener('keydown', handleGlobalKeydown))
@@ -315,55 +321,81 @@ watch(
       <RouterLink to="/editor">Editor</RouterLink>
     </div> -->
 
-    <div class="flex items-center justify-center bg-white border-b border-gray-200 relative z-[1000]">
-        <div class="flex gap-2 items-center">
+    <!-- Header principal -->
+    <header class="flex items-center justify-between px-4 h-12 bg-white border-b border-gray-200 relative z-[99999] shrink-0">
+      
+      <!-- Seção Esquerda: Navegação e Ferramentas -->
+      <div class="flex items-center gap-3 flex-1">
+        
+        <!-- Voltar para Home -->
+        <button
+          v-if="EditorStore.currentDocument"
+          @click="$router.push('/')"
+          title="Voltar para documentos"
+          class="flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-indigo-600 px-2 py-1.5 rounded-sm hover:bg-gray-100 transition-colors"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+          </svg>
+          Docs
+        </button>
 
-              <!-- Voltar para Home (quando veio da lista de documentos) -->
-              <button
-                v-if="EditorStore.currentDocument"
-                @click="$router.push('/')"
-                title="Voltar para documentos"
-                class="flex items-center gap-1 text-[11px] text-gray-500 hover:text-indigo-600 px-2 border-r border-gray-200 transition-colors"
-              >
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-                </svg>
-                Docs
-              </button>
+        <div class="w-px h-4 bg-gray-200" v-if="EditorStore.currentDocument"></div>
 
-              <HistoryControls></HistoryControls>
-              
-              <ClipboardControls :nodeId="EditorStore.selectedNodeId" />
-
-              <!-- Nome do documento/arquivo aberto -->
-              <span
-                v-if="EditorStore.fileName"
-                class="text-[11px] text-gray-500 font-mono px-2 border-l border-gray-200"
-                :title="'Documento: ' + EditorStore.fileName"
-              >
-                📄 {{ EditorStore.fileName }}
-              </span>
-            </div>
-
-      <div class="flex gap-2">
-        <BreakpointeControl :previewWidth="previewWidth" :previewUnit="previewUnit" @update="
-          (e) => {
-            previewWidth = e.width
-            previewUnit = e.unit
-            EditorStore.setPreviewBreakpoint(e.width, e.unit)
-          }
-        " />
+        <!-- Histórico e Clipboard juntos -->
+        <div class="flex items-center gap-1">
+          <HistoryControls />
+          <div class="w-px h-4 bg-gray-200 mx-1"></div>
+          <ClipboardControls :nodeId="EditorStore.selectedNodeId" />
+        </div>
       </div>
 
-      <div>
+      <!-- Seção Central: Título e Responsividade -->
+      <div class="flex items-center justify-center flex-1">
+        <div class="flex items-center gap-2 bg-gray-50/80 px-1 py-1 border border-gray-100 h-8">
+           <div class="flex items-center gap-2 px-2 border-r border-gray-200/60" v-if="EditorStore.fileName">
+             <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+             </svg>
+             <span class="text-[11px] font-semibold text-gray-700 max-w-[150px] truncate" :title="EditorStore.fileName">
+               {{ EditorStore.fileName }}
+             </span>
+           </div>
+           
+           <!-- Breakpoints control -->
+           <BreakpointeControl :previewWidth="previewWidth" :previewUnit="previewUnit" @update="
+            (e) => {
+              previewWidth = e.width
+              previewUnit = e.unit
+              EditorStore.setPreviewBreakpoint(e.width, e.unit)
+            }
+          " />
+        </div>
+      </div>
+
+      <!-- Seção Direita: Controles de Seleção e Atalhos -->
+      <div class="flex items-center justify-end gap-3 flex-1">
         <SelectionControls :nodeId="EditorStore.selectedNodeId" />
-      </div>
-      <div>
-        <Delete :nodeId="EditorStore.selectedNodeId" icon-only custom-class="hover:scale-110" />
-      </div>
 
+        <div class="w-px h-4 bg-gray-200" v-if="EditorStore.selectedNodeId"></div>
 
-    </div><!-- linha -->
+        <Delete v-if="EditorStore.selectedNodeId" :nodeId="EditorStore.selectedNodeId" icon-only custom-class="text-gray-500 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-sm transition-colors" />
+
+        <div class="w-px h-4 bg-gray-200" v-if="EditorStore.selectedNodeId"></div>
+
+        <div class="relative flex items-center">
+          <button @click="isShortcutsModalOpen = !isShortcutsModalOpen" title="Ver Atalhos de Teclado" 
+            class="text-[11px] font-semibold text-gray-500 hover:text-indigo-600 flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm hover:bg-gray-100 transition-colors border border-transparent hover:border-gray-200"
+            :class="isShortcutsModalOpen ? 'bg-gray-100 border-gray-200 text-indigo-600' : ''">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+            </svg>
+            Atalhos
+          </button>
+          <ShortcutsDropdown :isOpen="isShortcutsModalOpen" @close="isShortcutsModalOpen = false" />
+        </div>
+      </div>
+    </header>
 
     <!-- Cursor global durante drag: impede piscar ao sair do handle -->
     <div
@@ -532,6 +564,18 @@ watch(
           </svg>
         </IconSidebarButton>
 
+        <!-- Variáveis (Tokens) -->
+        <IconSidebarButton
+          title="Variáveis CSS (Tokens)"
+          @click="EditorStore.variablesPanel.show = !EditorStore.variablesPanel.show"
+          :class="EditorStore.variablesPanel.show ? 'bg-fuchsia-100 text-fuchsia-600' : 'text-gray-500 hover:text-fuchsia-500 hover:bg-fuchsia-50'"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+          </svg>
+        </IconSidebarButton>
+
         <!-- Input oculto para selecionar arquivo de imagem -->
         <input
           ref="pixelPerfectFileInput"
@@ -564,16 +608,16 @@ watch(
       <!-- col-css: CSS Explorer (REMOVIDO DA ESQUERDA — agora fica à direita do canvas) -->
 
       <!-- col-main: canvas (absorve diferenças via flex-1) -->
-      <div class="flex flex-col h-full w-full overflow-hidden gap-3" id="col-main">
-          <div class="flex justify-between shrink-0 px-4 gap-2 overflow-x-auto w-full text-text-secondary text-xs  border-b border-gray-200 relative z-[1000]">
+      <div class="flex flex-col h-full w-full overflow-hidden bg-[#f1f1f1]" id="col-main">
+          <div class="flex items-center shrink-0 px-4 h-8 gap-2 overflow-x-auto w-full border-b border-gray-200 bg-white relative z-[1000]">
             <InsertTagMenu :nodeId="EditorStore.selectedNodeId" />
-            
-
           </div>
           <div ref="previewContainerEl"
                class="grow shrink-0 overflow-auto flex justify-center overflow-hidden"
-               style="position: relative">
-            <div class="relative shrink-0 flex items-stretch z-0"
+               style="position: relative; background-color: #f1f1f1;">
+
+               
+            <div class="relative shrink-0 flex items-stretch z-0 shadow-lg"
                  :style="{ width: previewWidth + previewUnit, transition: isResizing ? 'none' : 'width 0.3s' }">
               <Preview :html="EditorStore.ctx?.output" class="w-full h-full bg-gray-200 border-0" />
               <!-- Handle Direita -->
@@ -750,6 +794,28 @@ watch(
         </div>
       </template>
       <PixelPerfectPanel :containerEl="previewContainerEl" />
+    </FloatingWindow>
+
+    <FloatingWindow 
+      :show="EditorStore.variablesPanel.show"
+      title="Design Tokens"
+      theme="light"
+      :initialX="EditorStore.variablesPanel.x"
+      :initialY="EditorStore.variablesPanel.y"
+      :initialWidth="300"
+      :initialHeight="450"
+      :closable="true"
+      :closeOnClickOutside="false"
+      @close="EditorStore.variablesPanel.show = false"
+      @move="(pos) => { EditorStore.variablesPanel.x = pos.x; EditorStore.variablesPanel.y = pos.y }"
+    >
+      <template #header-left>
+        <div class="flex items-center gap-2 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest border bg-fuchsia-500/10 text-fuchsia-600 border-fuchsia-500/20">
+          <span class="w-1.5 h-1.5 rounded-full animate-pulse bg-fuchsia-500"></span>
+          Variáveis CSS
+        </div>
+      </template>
+      <VariablesPanel />
     </FloatingWindow>
   </div>
 </template>

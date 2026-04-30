@@ -34,27 +34,30 @@ const duplicate = () => {
 </script>
 
 <template>
-  <div class="flex gap-1">
+  <div class="flex items-center gap-0.5">
     <button
-      class="p-2 rounded-md transition-colors bg-surface-hover text-text-primary"
+      class="p-1.5 rounded-sm transition-colors text-gray-500 hover:text-gray-800 hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent"
       @click="copy"
       :disabled="!hasSelection"
+      title="Copiar"
     >
       <IconCopy />
     </button>
 
     <button
-      class="p-2 rounded-md transition-colors bg-surface-hover text-text-primary"
+      class="p-1.5 rounded-sm transition-colors text-gray-500 hover:text-gray-800 hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent"
       @click="paste"
       :disabled="!canPaste"
+      title="Colar"
     >
       <IconPaste />
     </button>
 
     <button
-      class="p-2 rounded-md transition-colors bg-surface-hover text-text-primary"
+      class="p-1.5 rounded-sm transition-colors text-gray-500 hover:text-gray-800 hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent"
       @click="duplicate"
       :disabled="!hasSelection"
+      title="Duplicar"
     >
       <IconDuplicate />
     </button>

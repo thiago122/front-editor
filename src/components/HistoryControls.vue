@@ -12,11 +12,11 @@ const redo = () => EditorStore.redo()
 </script>
 
 <template>
-  <div class="flex items-center gap-1">
+  <div class="flex items-center gap-0.5">
     <button
       @click="undo"
       :disabled="!unifiedHistory.canUndo"
-      class="p-1.5 rounded-md hover:bg-gray-100 disabled:opacity-30 transition-all text-text-tertiary hover:text-text-secondary"
+      class="p-1.5 rounded-sm hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent transition-all text-gray-500 hover:text-gray-800"
       title="Desfazer (Ctrl+Z)"
     >
       <IconUndo />
@@ -24,7 +24,7 @@ const redo = () => EditorStore.redo()
     <button
       @click="redo"
       :disabled="!unifiedHistory.canRedo"
-      class="p-1.5 rounded-md hover:bg-gray-100 disabled:opacity-30 transition-all text-text-tertiary hover:text-text-secondary"
+      class="p-1.5 rounded-sm hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent transition-all text-gray-500 hover:text-gray-800"
       title="Refazer (Ctrl+Y)"
     >
       <IconRedo />

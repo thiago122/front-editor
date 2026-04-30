@@ -96,6 +96,31 @@ export const useStyleStore = defineStore('style', () => {
    */
   const inspectorSource = ref('element')
 
+  // ── Computed: Variables (Tokens) ──────────────────────────────────────────
+
+  /**
+   * Variáveis globais declaradas no :root.
+   * Depende de `cssLogicTree` e é recalculado via `astMutationKey`.
+   */
+  const globalVariables = computed(() => {
+    // Apenas para registrar dependência da reatividade da tree
+    astMutationKey.value
+    if (!cssLogicTree.value) return []
+    return CssLogicTreeService.getGlobalVariables(toRaw(cssLogicTree.value))
+  })
+
+  /**
+   * Variáveis locais disponíveis para o elemento selecionado atualmente no editor.
+   */
+  const localVariables = computed(() => {
+    astMutationKey.value
+    const editorStore = useEditorStore()
+    const element = editorStore.selectedElement
+    const vp = editorStore.viewport
+    if (!element || !cssLogicTree.value) return []
+    return CssLogicTreeService.getLocalVariablesForElement(element, toRaw(cssLogicTree.value), toRaw(vp))
+  })
+
   // ── Actions ────────────────────────────────────────────────────────────────
 
   function notifyTreeMutation() {
@@ -364,5 +389,7 @@ export const useStyleStore = defineStore('style', () => {
     setManifest,
     getManifest,
     updateFileFromCSS,
+    globalVariables,
+    localVariables,
   }
 })

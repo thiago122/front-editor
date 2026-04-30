@@ -5,6 +5,7 @@ import { CssRuleService } from './CssRuleService.js'
 import { CssAtRuleService } from './CssAtRuleService.js'
 import { CssDeclarationService } from './CssDeclarationService.js'
 import { CssExportService } from '../export/CssExportService.js'
+import { CssVariablesService } from './CssVariablesService.js'
 
 /**
  * CssLogicTreeService  ← Facade / Coordinator
@@ -208,5 +209,23 @@ export class CssLogicTreeService {
    */
   static downloadAllStylesheets(logicTree, includeExternal = false) {
     return CssExportService.downloadAll(logicTree, includeExternal)
+  }
+
+  // ─── Variáveis (Tokens)  →  CssVariablesService ─────────────────────────────
+
+  /**
+   * Retorna as variáveis globais declaradas no :root.
+   * @see CssVariablesService.getGlobalVariables
+   */
+  static getGlobalVariables(logicTree) {
+    return CssVariablesService.getGlobalVariables(logicTree)
+  }
+
+  /**
+   * Retorna as variáveis locais herdadas ou definidas no elemento selecionado.
+   * @see CssVariablesService.getLocalVariablesForElement
+   */
+  static getLocalVariablesForElement(el, logicTree, viewport) {
+    return CssVariablesService.getLocalVariablesForElement(el, logicTree, viewport)
   }
 }

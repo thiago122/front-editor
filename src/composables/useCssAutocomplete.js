@@ -18,6 +18,7 @@
 
 import { ref, computed } from 'vue'
 import { CSS_PROPERTIES, CSS_VALUES } from '@/editor/css/shared/cssProperties'
+import { useStyleStore } from '@/stores/StyleStore'
 
 export function useCssAutocomplete() {
   // ── Estado ──────────────────────────────────────────────────────────────────
@@ -66,10 +67,35 @@ export function useCssAutocomplete() {
    * @param {Function}         onAccept — callback(value)
    */
   function openValue(el, propName, text, onAccept) {
-    const values = CSS_VALUES[propName?.toLowerCase()]
-    if (!values?.length) { close(); return }
+    const values = CSS_VALUES[propName?.toLowerCase()] || []
+    
+    // Injetar Variáveis CSS do Store
+    let varList = []
+    try {
+      const styleStore = useStyleStore()
+      // Usamos um Set para remover duplicatas
+      const uniqueVars = new Set()
+      
+      // Se houver variables locais e globais
+      const allVars = [
+        ...(styleStore.localVariables || []),
+        ...(styleStore.globalVariables || [])
+      ]
+      
+      allVars.forEach(v => {
+        if (v.name) uniqueVars.add(`var(${v.name})`)
+      })
+      
+      varList = Array.from(uniqueVars)
+    } catch (e) {
+      console.warn('[useCssAutocomplete] Erro ao injetar variáveis', e)
+    }
+
+    const allCandidates = [...varList, ...values]
+
+    if (!allCandidates.length) { close(); return }
     inputEl.value  = el
-    candidates.value = values
+    candidates.value = allCandidates
     query.value    = text ?? ''
     activeIdx.value = -1
     mode.value     = 'value'

@@ -70,6 +70,17 @@ export const useEditorStore = defineStore('editor', () => {
     y:        100
   })
 
+  const savedVarsPos = JSON.parse(localStorage.getItem('vars_panel_pos') || 'null')
+  const variablesPanel = ref({
+    show:     false,
+    x:        savedVarsPos?.x ?? window.innerWidth - 320,
+    y:        savedVarsPos?.y ?? 100
+  })
+
+  watch(() => [variablesPanel.value.x, variablesPanel.value.y], ([x, y]) => {
+    localStorage.setItem('vars_panel_pos', JSON.stringify({ x, y }))
+  })
+
   const visualEditor = ref({
     activeRuleUid: null,
     nextZIndex: 10000,
@@ -755,6 +766,8 @@ export const useEditorStore = defineStore('editor', () => {
     htmlEditor,
     cssFileEditor,
     quickCodeEditor,
+    pixelPerfectEditor,
+    variablesPanel,
     quickAttributesOpen,
     openCodeEditor,
     ctx,

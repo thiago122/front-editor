@@ -28,12 +28,13 @@
 
     <span class="decl__colon">:</span>
 
-    <div class="decl__value-wrap">
+    <div class="decl__value-wrap" style="position: relative;" :title="variableValueTooltip">
       <!-- Value -->
       <input
         ref="valueInput"
         class="prop-value decl__value"
         :class="fieldStateClasses()"
+        :style="hasVariable && editingValue === null ? 'padding-right: 20px;' : ''"
         :readonly="!editable"
         :value="displayValue"
         @focus="onValueFocus"
@@ -44,6 +45,17 @@
         @keydown.tab.prevent="onTabValue"
         @keydown.escape.prevent="onEscapeValue"
       />
+      <!-- Token Link -->
+      <button 
+        v-if="hasVariable && editingValue === null" 
+        @click.stop="openVariablesPanel"
+        title="Abrir Design Tokens"
+        style="position: absolute; right: 2px; top: 50%; transform: translateY(-50%); cursor: pointer; background: transparent; border: none; font-size: 10px; opacity: 0.6; padding: 2px;"
+        onmouseover="this.style.opacity=1"
+        onmouseout="this.style.opacity=0.6"
+      >
+        🔗
+      </button>
     </div>
 
     <button v-if="editable" @click.stop="deleteDeclaration(rule, decl)" class="decl__delete">×</button>
@@ -59,6 +71,8 @@
 import { ref, computed } from 'vue'
 import { toggleDeclaration, updateDeclaration, deleteDeclaration } from '@/editor/css/actions/cssDeclarationActions'
 import { useCssAutocomplete } from '@/composables/useCssAutocomplete'
+import { useEditorStore } from '@/stores/EditorStore'
+import { useStyleStore } from '@/stores/StyleStore'
 import CssAutocompleteDropdown from '@/components/CssAutocompleteDropdown.vue'
 
 const emit = defineEmits([
@@ -149,6 +163,36 @@ const displayValue = computed(() =>
     ? editingValue.value
     : (props.decl.important ? props.decl.value + ' !important' : props.decl.value)
 )
+
+const hasVariable = computed(() => {
+  return props.decl.value && props.decl.value.includes('var(--')
+})
+
+const variableValueTooltip = computed(() => {
+  if (!hasVariable.value) return ''
+  
+  const match = props.decl.value.match(/var\((--[^)]+)\)/)
+  if (!match) return ''
+  
+  const varName = match[1]
+  const styleStore = useStyleStore()
+  const allVars = [
+    ...(styleStore.localVariables || []),
+    ...(styleStore.globalVariables || [])
+  ]
+  
+  const found = allVars.find(v => v.name === varName)
+  if (found) {
+    return `Variável: ${varName}\nValor: ${found.value}`
+  }
+  
+  return `Variável: ${varName} (não encontrada/definida)`
+})
+
+function openVariablesPanel() {
+  const editorStore = useEditorStore()
+  editorStore.variablesPanel.show = true
+}
 
 // ── Prop name handlers ────────────────────────────────────────────────────────
 

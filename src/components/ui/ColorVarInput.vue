@@ -1,5 +1,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
+import { useStyleStore } from '@/stores/StyleStore'
+import { getVariableTypeFromName } from '@/composables/useCssVariableTypes'
 
 const props = defineProps({
   value: { type: String, default: '' }
@@ -36,6 +38,38 @@ const pickerColor = computed(() => {
   // fallback
   return '#000000'
 })
+
+// Lógica do Painel de Variáveis (Modo Link)
+const styleStore = useStyleStore()
+
+const availableColors = computed(() => {
+  const globals = styleStore.globalVariables || []
+  const locals = styleStore.localVariables || []
+  
+  // Combina e filtra apenas os tipos de cor
+  const allVars = [...locals, ...globals]
+  const uniqueVars = new Map()
+  
+  allVars.forEach(v => {
+    const type = getVariableTypeFromName(v.name)
+    if ((type === 'color' || type === 'gradient') && !uniqueVars.has(v.name)) {
+      uniqueVars.set(v.name, v)
+    }
+  })
+  
+  return Array.from(uniqueVars.values())
+})
+
+function onVarSelect(e) {
+  const name = e.target.value
+  if (name) {
+    emit('update', `var(${name})`)
+    varText.value = `var(${name})`
+  } else {
+    emit('update', '')
+    varText.value = ''
+  }
+}
 </script>
 
 <template>
@@ -54,19 +88,33 @@ const pickerColor = computed(() => {
       class="w-5 h-full border-none bg-transparent cursor-pointer p-0 ml-1 shrink-0"
     />
 
-    <!-- Text input: hex or var() -->
-    <input 
-      type="text" 
-      :value="varMode ? varText : value"
-      @input="e => { 
-        if (varMode) { varText = e.target.value }
-        emit('update', e.target.value) 
-      }"
-      class="flex-1 bg-transparent border-none outline-none text-[10px] font-mono px-1.5 min-w-0"
-      :class="varMode ? 'text-purple-700 placeholder-purple-300' : 'text-gray-700'"
-      :placeholder="varMode ? 'var(--name)' : '#000000'"
-      spellcheck="false"
-    />
+    <!-- Text input: hex or Select (var mode) -->
+    <template v-if="!varMode">
+      <input 
+        type="text" 
+        :value="value"
+        @input="e => emit('update', e.target.value)"
+        class="flex-1 bg-transparent border-none outline-none text-[10px] font-mono px-1.5 min-w-0 text-gray-700"
+        placeholder="#000000"
+        spellcheck="false"
+      />
+    </template>
+    <template v-else>
+      <select
+        class="flex-1 bg-transparent border-none outline-none text-[10px] font-mono px-1 min-w-0 text-purple-700 cursor-pointer"
+        @change="onVarSelect"
+      >
+        <option value="" disabled :selected="!varText.includes('var(')">-- Escolha uma cor --</option>
+        <option 
+          v-for="token in availableColors" 
+          :key="token.name" 
+          :value="token.name"
+          :selected="varText === `var(${token.name})`"
+        >
+          {{ token.name }}
+        </option>
+      </select>
+    </template>
 
     <!-- Var toggle -->
     <button
