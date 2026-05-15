@@ -3,13 +3,126 @@
 
 import { computed, ref } from 'vue'
 import ASTNode from './ASTNode.vue'
+import CssContextMenu from './CssContextMenu.vue'
+import CreateComponentModal from './CreateComponentModal.vue'
 import { useExplorerDragDrop } from '@/composables/useExplorerDragDrop'
+import { useEditorStore } from '@/stores/EditorStore'
+import { useComponentStore } from '@/stores/ComponentStore'
+import { NodeDispatcher } from '@/editor/dispatchers/NodeDispatcher'
+import { HtmlExportService } from '@/editor/css/export/HtmlExportService'
 
 const { explorerDragState } = useExplorerDragDrop()
 const s = explorerDragState
 
 const showTextNodes = ref(false)
 const showCommentNodes = ref(false)
+
+const EditorStore = useEditorStore()
+const ComponentStore = useComponentStore()
+
+// ── Context Menu ─────────────────────────────────────────────────────────────
+const contextMenu = ref(null) // { x, y, items }
+
+function handleContextMenu({ node, event }) {
+  if (node.type !== 'element') return
+  
+  const items = []
+  
+  // Se já for componente, mostrar opção de editar? (opcional por enquanto)
+  if (node.attrs?.['data-component']) {
+    const componentName = node.attrs['data-component']
+    items.push({ 
+      label: 'Atualizar Master', 
+      icon: '🔄', 
+      action: () => confirmUpdateMaster(node, componentName) 
+    })
+    if (EditorStore.unlockedComponentIds.has(node.nodeId)) {
+      items.push({ 
+        label: 'Bloquear Edição', 
+        icon: '🔒', 
+        action: () => EditorStore.lockComponent(node.nodeId) 
+      })
+    } else {
+      items.push({ 
+        label: 'Editar Componente', 
+        icon: '✏️', 
+        action: () => EditorStore.unlockComponent(node.nodeId) 
+      })
+    }
+  } else {
+    items.push({ 
+      label: 'Criar Componente', 
+      icon: '📦', 
+      action: () => openCreateModal(node) 
+    })
+  }
+
+  contextMenu.value = { x: event.clientX, y: event.clientY, items }
+}
+
+async function confirmUpdateMaster(node, name) {
+  if (!confirm(`Deseja atualizar o componente mestre "${name}" com as alterações desta instância? Todas as outras instâncias na página também serão atualizadas.`)) {
+    return
+  }
+
+  isCreating.value = true // Reusamos o loading do modal
+  try {
+    const el = EditorStore.getIframeDoc()?.querySelector(`[data-node-id="${node.nodeId}"]`)
+    if (!el) throw new Error('Elemento não encontrado no preview')
+
+    const html = HtmlExportService.generateNodeHtml(el)
+    
+    // 1. Salva no servidor
+    const success = await ComponentStore.saveComponent(name, html)
+    
+    if (success) {
+      // 2. Atualiza todas as instâncias na tela
+      NodeDispatcher.updateComponentMaster(name, html)
+      console.log(`[ASTExplorer] Master "${name}" atualizado e instâncias sincronizadas.`)
+    }
+  } catch (e) {
+    alert('Erro ao atualizar master: ' + e.message)
+  } finally {
+    isCreating.value = false
+  }
+}
+
+// ── Create Component Modal ───────────────────────────────────────────────────
+const showCreateModal = ref(false)
+const nodeToComponent = ref(null)
+const isCreating = ref(false)
+
+function openCreateModal(node) {
+  nodeToComponent.value = node
+  showCreateModal.value = true
+}
+
+async function confirmCreateComponent(name) {
+  if (!nodeToComponent.value) return
+  
+  isCreating.value = true
+  try {
+    // 1. Pega o elemento real no iframe para extrair o HTML limpo
+    const el = EditorStore.getIframeDoc()?.querySelector(`[data-node-id="${nodeToComponent.value.nodeId}"]`)
+    if (!el) throw new Error('Elemento não encontrado no preview')
+
+    const html = HtmlExportService.generateNodeHtml(el)
+    
+    // 2. Salva no servidor
+    const success = await ComponentStore.saveComponent(name, html)
+    
+    if (success) {
+      // 3. Marca como componente no editor
+      NodeDispatcher.createComponent(nodeToComponent.value.nodeId, name)
+      showCreateModal.value = false
+    }
+  } catch (e) {
+    alert('Erro ao criar componente: ' + e.message)
+  } finally {
+    isCreating.value = false
+    nodeToComponent.value = null
+  }
+}
 
 const props = defineProps({
   ast: Object,
@@ -55,6 +168,7 @@ const openPath = computed(() => {
           :openPath="openPath"
           :show-text-nodes="showTextNodes"
           :show-comment-nodes="showCommentNodes"
+          @contextmenu="handleContextMenu"
         />
       </div>
     </div>
@@ -89,4 +203,18 @@ const openPath = computed(() => {
       />
     </template>
   </Teleport>
+
+  <!-- Context Menu Rendering -->
+  <CssContextMenu 
+    :menu="contextMenu" 
+    @close="contextMenu = null" 
+  />
+
+  <!-- Create Component Modal -->
+  <CreateComponentModal
+    :is-open="showCreateModal"
+    :loading="isCreating"
+    @close="showCreateModal = false"
+    @confirm="confirmCreateComponent"
+  />
 </template>

@@ -20,6 +20,7 @@ import InspectorPanel from '@/components/InspectorCss/InspectorPanel.vue'
 import HighlightOverlay from '@/components/HighlightOverlay.vue'
 import ASTExplorer from '@/components/ASTExplorer.vue'
 import CssExplorer from '@/components/CssExplorer.vue'
+import ComponentExplorer from '@/components/ComponentExplorer.vue'
 import Preview from '@/components/Preview.vue'
 import Breadcrumbs from '@/components/Breadcrumbs.vue'
 import CodeEditor from '@/components/CodeEditor.vue'
@@ -89,7 +90,7 @@ function startInspectorResize(e)    { startResize(e, inspectorWidth, { min: 200,
 const isSaveModalOpen  = ref(false)
 const isImportModalOpen = ref(false)
 const isShortcutsModalOpen = ref(false)
-const activeExplorer   = ref(null) // 'html' | 'css' | null
+const activeExplorer   = ref('html') // 'html' | 'css' | 'components' | null
 
 // ─── Auto-Save ──────────────────────────────────────────────────────────────
 
@@ -161,6 +162,9 @@ function handleGlobalKeydown(e) {
   } else if (e.altKey && e.key === 'l') {
     e.preventDefault()
     activeExplorer.value = activeExplorer.value === 'html' ? null : 'html'
+  } else if (e.altKey && e.key === 'c') {
+    e.preventDefault()
+    activeExplorer.value = activeExplorer.value === 'components' ? null : 'components'
   } else if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'c') {
     e.preventDefault()
     EditorStore.inspectMode = !EditorStore.inspectMode
@@ -486,6 +490,11 @@ watch(
           <IconLayer />
         </IconSidebarButton>
 
+        <IconSidebarButton title="Componentes (Alt+C)" @click="activeExplorer = activeExplorer === 'components' ? null : 'components'"
+          :class="activeExplorer === 'components' ? 'bg-gray-200' : ''">
+          <IconComponent />
+        </IconSidebarButton>
+
         <IconSidebarButton 
           title="HTML do Elemento" 
           @click="EditorStore.selectedNodeId ? EditorStore.openCodeEditor('html', EditorStore.selectedNodeId) : null"
@@ -597,6 +606,24 @@ watch(
           <ASTExplorer :ast="EditorStore.ctx.ast" :selectedNodeId="EditorStore.selectedNodeId" />
         </AsidePanel>
         <!-- Handle de resize: col-layer -->
+        <div
+          class="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-blue-400/40 transition-colors z-50"
+          title="Arrastar para redimensionar"
+          @mousedown="startLayerResize"
+        />
+      </template>
+
+      <!-- col-components: Component Explorer -->
+      <template v-if="activeExplorer === 'components'">
+        <AsidePanel
+          id="col-components"
+          title="Componentes"
+          :style="{ width: layerWidth + 'px', minWidth: '160px', maxWidth: '520px' }"
+          style2="position: relative; z-index: var(--z-panel)"
+        >
+          <ComponentExplorer />
+        </AsidePanel>
+        <!-- Handle de resize: col-components -->
         <div
           class="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-blue-400/40 transition-colors z-50"
           title="Arrastar para redimensionar"

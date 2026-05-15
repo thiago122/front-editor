@@ -77,7 +77,7 @@ export class DocumentNormalizer {
       ? newLinks + '\n  ' + ignoreLinks.join('\n  ')
       : newLinks
 
-    // 5. Injeta logo após <head>
+    // 5. Injeta links do editor logo após <head>
     return html.replace(/(<head\b[^>]*>)/i, `$1\n  ${allNewLinks}`)
   }
 
@@ -108,6 +108,7 @@ export class DocumentNormalizer {
       'editor-ui-styles',
       'editor-outline-mode',
       'editor-empty-placeholder',
+      'editor-component-styles',
     ])
 
     // 1. Remove estilos injetados pelo editor, MAS PRESERVA on_page.

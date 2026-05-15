@@ -15,6 +15,7 @@ import { ApiService } from '@/services/ApiService'
 import { CssExportService } from '@/editor/css/export/CssExportService'
 import { DocumentNormalizer } from '@/editor/css/export/DocumentNormalizer'
 import { editorHooks } from '@/editor/HookManager'
+import { useComponentStore } from './ComponentStore'
 
 export const useEditorStore = defineStore('editor', () => {
   // --- STATE ---
@@ -34,7 +35,11 @@ export const useEditorStore = defineStore('editor', () => {
   const previewContainer = ref(null) // wrapper do <Preview> — base para position:absolute do overlay
   const viewport         = ref({ width: window.innerWidth, height: window.innerHeight })
   const previewBreakpoint = ref({ width: 1280, unit: 'px' }) // breakpoint selecionado pelo usuário
-  const manipulation = ref(null)
+  
+  const pipeline = new Pipeline()
+  pipeline.use(htmlPlugin())
+
+  const manipulation = ref(new ManipulationEngine(getContext, getIframeDoc, pipeline))
   const clipboard         = ref({ type: null, data: null }) // Clipboard tipado
   const showCssExplorer   = ref(false)                      // CSS Explorer visível ao lado do inspector
   
@@ -91,6 +96,47 @@ export const useEditorStore = defineStore('editor', () => {
       dynamics:   { show: false, x: 0, y: 0, width: 350, height: 400, zIndex: 10000 },
     }
   })
+
+  /** IDs de instâncias de componentes que o usuário abriu para edição */
+  const unlockedComponentIds = ref(new Set())
+
+  function unlockComponent(nodeId) {
+    unlockedComponentIds.value.add(nodeId)
+  }
+
+  function lockComponent(nodeId) {
+    unlockedComponentIds.value.delete(nodeId)
+  }
+
+  function isNodeInsideLockedComponent(nodeId) {
+    if (!ctx.value?.ast) return false
+    
+    // 1. Encontra o nó na AST para ver se ele mesmo é um componente
+    const node = findNodeById(ctx.value.ast, nodeId)
+    if (!node) return false
+
+    // 2. Se ele for um componente e estiver travado
+    if (node.attrs?.['data-component'] && !unlockedComponentIds.value.has(nodeId)) {
+      return true
+    }
+
+    // 3. Verifica os ancestrais
+    let currentId = nodeId
+    while (true) {
+      const parent = getParent(currentId)
+      if (!parent) break
+      
+      if (parent.attrs?.['data-component']) {
+        // Se achou um pai componente, e ele NÃO está na lista de desbloqueados, então o nó filho está travado.
+        if (!unlockedComponentIds.value.has(parent.nodeId)) {
+          return true
+        }
+      }
+      currentId = parent.nodeId
+    }
+
+    return false 
+  }
 
   function bringPanelToTop(categoryId) {
     const panel = visualEditor.value.panels[categoryId]
@@ -204,9 +250,6 @@ export const useEditorStore = defineStore('editor', () => {
     details: [],      // lista de arquivos salvos ou erros
   })
 
-  const pipeline = new Pipeline()
-  pipeline.use(htmlPlugin())
-
   // ── Hooks nativos do editor ─────────────────────────────────────────────────
   // Prioridade 1 garante que todos estes hooks rodam ANTES de qualquer hook externo (padrão: 10).
 
@@ -291,6 +334,51 @@ export const useEditorStore = defineStore('editor', () => {
     payload.html = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML
   }, 5)
 
+  // 4. Serializa componentes antes de salvar: substitui elementos com data-component por <component name="...">
+  editorHooks.on('document:beforeSave', (payload) => {
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(payload.html, 'text/html')
+    
+    doc.querySelectorAll('[data-component]').forEach(el => {
+      const name = el.getAttribute('data-component')
+      const placeholder = doc.createElement('component')
+      placeholder.setAttribute('name', name.endsWith('.html') ? name : `${name}.html`)
+      el.replaceWith(placeholder)
+    })
+
+    payload.html = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML
+  }, 2)
+
+  // 5. Desserializa componentes após a leitura: substitui <component> pelo conteúdo real
+  editorHooks.on('document:afterRead', async (payload) => {
+    const componentStore = useComponentStore()
+    await componentStore.loadComponents()
+
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(payload.html, 'text/html')
+    const placeholders = doc.querySelectorAll('component')
+
+    if (placeholders.length === 0) return
+
+    placeholders.forEach(placeholder => {
+      const fullName = placeholder.getAttribute('name')
+      const name = fullName.replace('.html', '')
+      const component = componentStore.components.find(c => c.name === name || c.path === fullName)
+      
+      if (component) {
+        const temp = document.createElement('div')
+        temp.innerHTML = component.html
+        const componentEl = temp.firstElementChild
+        if (componentEl) {
+          componentEl.setAttribute('data-component', name)
+          placeholder.replaceWith(componentEl)
+        }
+      }
+    })
+
+    payload.html = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML
+  })
+
   const styleStore = useStyleStore()
 
   // --- GETTERS ---
@@ -308,7 +396,9 @@ export const useEditorStore = defineStore('editor', () => {
 
   // manipulation engine
   function initEngine(iframeDoc) {
-    manipulation.value = new ManipulationEngine(getContext, getIframeDoc, pipeline)
+    // Engine já inicializada no setup, agora usa getters dinâmicos.
+    // Apenas garantimos que o histórico saiba da engine atual se necessário.
+    // (O construtor da ManipulationEngine já faz history.setEngine(this))
   }
 
   function getIframeDoc() {
@@ -367,6 +457,7 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function selectParent() {
+    if (!manipulation.value) return
     const parent = manipulation.value.getParent(selectedNodeId.value)
     if (parent) {
       selectNode(parent.nodeId) // selectNode atualiza nodeId + selectedElement juntos
@@ -374,6 +465,7 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function getParent(nodeId) {
+    if (!manipulation.value) return null
     return manipulation.value.getParent(nodeId)
   }
 
@@ -579,6 +671,38 @@ export const useEditorStore = defineStore('editor', () => {
     }
   }
 
+  /**
+   * Atualiza todas as instâncias de um componente no documento atual.
+   * @param {string} name - Nome do componente (ex: 'header')
+   * @param {string} html - Novo HTML mestre do componente
+   */
+  function refreshComponentInstances(name, html) {
+    if (!ctx.value?.ast) return
+
+    const instances = []
+    
+    // Função recursiva para achar todas as instâncias na AST
+    const findInstances = (node) => {
+      if (node.attrs?.['data-component'] === name) {
+        instances.push(node.nodeId)
+      }
+      if (node.children) {
+        node.children.forEach(findInstances)
+      }
+    }
+    
+    findInstances(ctx.value.ast)
+    
+    if (instances.length === 0) return
+
+    console.log(`[EditorStore] Refreshing ${instances.length} instances of component: ${name}`)
+
+    // Executa a atualização em cada instância
+    instances.forEach(nodeId => {
+      manipulation.value.updateNodeFromHtml(nodeId, html)
+    })
+  }
+
   // ── API Backend ──────────────────────────────────────────────────────────
 
   /**
@@ -595,16 +719,21 @@ export const useEditorStore = defineStore('editor', () => {
 
       await editorHooks.emitAsync('document:beforeOpen', { doc, docPath })
 
+      currentDocument.value = doc
+
       const { html, manifest, baseUrl } = await ApiService.readDocument(docPath)
       console.log('[EditorStore] html recebido, length:', html?.length)
+
+      const readPayload = { html }
+      await editorHooks.emitAsync('document:afterRead', readPayload)
+      const processedHtml = readPayload.html
 
       // Armazena o manifesto como fonte de verdade no StyleStore
       styleStore.setManifest(manifest ?? [])
 
       // Injeta <link> com URLs absolutas para o iframe renderizar os CSS
-      const preparedHtml = DocumentNormalizer.prepareForEditor(html, manifest ?? [], baseUrl ?? '')
+      const preparedHtml = DocumentNormalizer.prepareForEditor(processedHtml, manifest ?? [], baseUrl ?? '')
 
-      currentDocument.value = doc
       fileName.value        = doc.title ?? docPath
       loadHTML(preparedHtml)
       console.log('[EditorStore] loadHTML chamado, ctx:', !!ctx.value)
@@ -791,6 +920,7 @@ export const useEditorStore = defineStore('editor', () => {
     openDocument,
     openDocumentByPath,
     saveDocument,
+    refreshComponentInstances,
     fileAccessSupported: FileAccessService.isSupported(),
     loadHTML,
     viewport,
@@ -820,6 +950,10 @@ export const useEditorStore = defineStore('editor', () => {
     visualEditor,
     toggleVisualPanel,
     bringPanelToTop,
+    unlockedComponentIds,
+    unlockComponent,
+    lockComponent,
+    isNodeInsideLockedComponent,
   }
 })
 

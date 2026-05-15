@@ -80,4 +80,14 @@ export const NodeDispatcher = {
     const newNode = cmd.execute()
     if (newNode) store.selectedNodeId = newNode.nodeId
   },
+
+  createComponent(nodeId, componentName) {
+    const store = useEditorStore()
+    store.manipulation.createComponent(nodeId, componentName)
+  },
+
+  updateComponentMaster(name, html) {
+    const store = useEditorStore()
+    store.refreshComponentInstances(name, html)
+  }
 }

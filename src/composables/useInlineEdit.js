@@ -168,6 +168,12 @@ export function useInlineEdit(iframeRef) {
   function start(el) {
     if (editingEl) return // já está editando outro elemento
 
+    // Bloqueia se estiver dentro de um componente travado
+    if (EditorStore.isNodeInsideLockedComponent(el.dataset?.nodeId)) {
+      console.warn('[useInlineEdit] Node is locked, cannot start edit.')
+      return
+    }
+
     editingEl    = el
     originalHTML = el.innerHTML
     isCancelling = false
@@ -286,6 +292,11 @@ export function useInlineEdit(iframeRef) {
     doc.addEventListener('dblclick', (e) => {
       const el  = e.target.closest('[data-node-id]')
       if (!el) return
+
+      // Bloqueia se estiver dentro de um componente travado
+      if (EditorStore.isNodeInsideLockedComponent(el.dataset.nodeId)) {
+        return
+      }
 
       const tag = el.tagName.toLowerCase()
       if (TEXT_EDITABLE_TAGS.includes(tag)) {

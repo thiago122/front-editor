@@ -201,6 +201,26 @@ export class BackendAdapter {
   // eslint-disable-next-line no-unused-vars
   savePageCss(docId, css) { return Promise.resolve() }
 
+  // ── Componentes ────────────────────────────────────────────────────────────
+
+  /**
+   * Lista todos os componentes disponíveis.
+   * @param {string} [docId='']
+   * @returns {Promise<Array<{name: string, path: string, html: string}>>}
+   */
+  // eslint-disable-next-line no-unused-vars
+  listComponents(docId = '') { throw new Error('Not implemented') }
+
+  /**
+   * Salva um componente no servidor.
+   * @param {string} name - Nome ou path relativo (ex: 'cards/my-card')
+   * @param {string} html - Conteúdo HTML do componente
+   * @param {string} [docId='']
+   * @returns {Promise<void>}
+   */
+  // eslint-disable-next-line no-unused-vars
+  saveComponent(name, html, docId = '') { throw new Error('Not implemented') }
+
   // ── Auth ───────────────────────────────────────────────────────────────────
 
   /**

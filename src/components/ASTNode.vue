@@ -11,13 +11,14 @@ const EditorStore = useEditorStore()
 const { startDrag, explorerDragState } = useExplorerDragDrop()
 
 const isDragging    = computed(() => explorerDragState.nodeId.value === props.node.nodeId)
+const isComponent   = computed(() => props.node.attrs?.['data-component'])
 
 const isDragAllowed = computed(() =>
   props.node.type === 'element' &&
   !DRAG_RESTRICTED_TAGS.has(props.node.tag?.toLowerCase())
 )
 
-const emit = defineEmits(['select'])
+const emit = defineEmits(['select', 'contextmenu'])
 
 const props = defineProps({
   node: {
@@ -25,6 +26,10 @@ const props = defineProps({
     required: true,
   },
   selectedNodeId: String,
+  isLocked: {
+    type: Boolean,
+    default: false
+  },
   openPath: {
     type: Array,
     default: () => [],
@@ -37,6 +42,20 @@ const props = defineProps({
     type: Boolean,
     default: true
   }
+})
+
+/**
+ * COMPONENT LOCK LOGIC
+ */
+const isComponentRoot = computed(() => !!props.node.attrs?.['data-component'])
+const isUnlocked      = computed(() => EditorStore.unlockedComponentIds.has(props.node.nodeId))
+
+// Um nó está bloqueado se o pai já estiver bloqueado, 
+// ou se ele for a raiz de um componente ainda não desbloqueado.
+const effectivelyLocked = computed(() => {
+  if (props.isLocked) return true
+  if (isComponentRoot.value && !isUnlocked.value) return true
+  return false
 })
 
 /**
@@ -131,17 +150,25 @@ function onSelect() {
       class="node-row flex items-center h-6 cursor-pointer rounded-sm px-1.5 group transition-all duration-75"
       :class="{ 
         'bg-blue-100 text-blue-900 shadow-sm': isSelected,
-        'hover:bg-gray-50': !isSelected,
+        'bg-gray-100/50 ring-1 ring-purple-400/30': isComponentRoot && !isSelected,
+        'hover:bg-gray-50': !isSelected && !isComponentRoot,
         'has-children': visibleChildren.length,
         'opacity-40': isDragging,
+        'opacity-80': effectivelyLocked && !isComponentRoot
       }"
       @mouseenter="onMouseEnter"
       @mouseleave="onMouseLeave"
       @click.stop="onSelect"
+      @contextmenu.prevent="emit('contextmenu', { node, event: $event })"
     >
-      <!-- DRAG HANDLE — visível no hover, só para elementos arrastáveis -->
+      <!-- LOCK ICON (para indicar herança de trava) -->
+      <div v-if="effectivelyLocked && !isComponentRoot" class="mr-1 text-[10px] text-gray-400">
+        🔒
+      </div>
+
+      <!-- DRAG HANDLE — desabilitado se estiver bloqueado (exceto se for a própria raiz do componente) -->
       <div
-        v-if="isDragAllowed"
+        v-if="isDragAllowed && (!effectivelyLocked || isComponentRoot)"
         class="w-3.5 h-4 flex items-center justify-center mr-0.5 rounded opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 transition-opacity shrink-0"
         title="Arrastar"
         @mousedown.stop="startDrag(node.nodeId, $event)"
@@ -154,6 +181,7 @@ function onSelect() {
         </svg>
       </div>
       <div v-else class="w-3.5 shrink-0" />
+      
       <!-- TOGGLE ICON -->
       <div
         v-if="visibleChildren.length"
@@ -173,6 +201,11 @@ function onSelect() {
         <template v-if="node.type === 'element'">
           <span class="text-indigo-600 font-bold">{{ node.tag }}</span>
           
+          <!-- COMPONENT BADGE -->
+          <span v-if="isComponentRoot" class="bg-purple-100 text-purple-700 px-1 rounded-[2px] text-[9px] font-bold uppercase tracking-tight flex items-center gap-1">
+             {{ isUnlocked ? '🔓' : '📦' }} {{ node.attrs['data-component'] }}
+          </span>
+
           <!-- ID PREVIEW -->
           <span v-if="idAttr" class="text-orange-600 opacity-90">#{{ idAttr }}</span>
 
@@ -189,14 +222,11 @@ function onSelect() {
         <template v-else-if="node.type === 'comment'">
           <span class="text-green-600 opacity-80">&lt;!-- {{ node.value?.trim() }} --&gt;</span>
         </template>
-        <template v-else>
-           <span class="text-gray-400">{{ node.type }}</span>
-        </template>
       </div>
 
       <!-- NODE ACTIONS TOOLBAR -->
       <div 
-        v-if="node.type === 'element'"
+        v-if="node.type === 'element' && (!effectivelyLocked || isComponentRoot)"
         class="ml-auto pl-2 opacity-0 group-hover:opacity-100 transition-opacity z-10"
         :class="{ 'opacity-100': isSelected }"
       >
@@ -212,10 +242,12 @@ function onSelect() {
         :key="child.nodeId"
         :node="child"
         :selectedNodeId="selectedNodeId"
+        :isLocked="effectivelyLocked"
         :openPath="openPath"
         :show-text-nodes="showTextNodes"
         :show-comment-nodes="showCommentNodes"
         @select="emit('select', $event)"
+        @contextmenu="emit('contextmenu', $event)"
       />
     </div>
   </div>

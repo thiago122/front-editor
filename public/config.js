@@ -38,6 +38,10 @@ window.__EDITOR_CONFIG__ = {
     createFolder:     { method: 'POST',   url: 'http://editor.test/api/?action=create_folder'       },
     renameFolder:     { method: 'POST',   url: 'http://editor.test/api/?action=rename_folder'       },
     trashFolder:      { method: 'POST',   url: 'http://editor.test/api/?action=trash_folder'        },
+    
+    // Componentes
+    listComponents:   { method: 'GET',    url: 'http://editor.test/api/?action=list_components'     },
+    saveComponent:    { method: 'POST',   url: 'http://editor.test/api/?action=save_component'     },
   },
 
   // ── WordPress (ignorado em standalone) ─────────────────────────────────────

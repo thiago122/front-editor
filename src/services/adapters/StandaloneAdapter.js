@@ -137,6 +137,16 @@ export class StandaloneAdapter extends BackendAdapter {
     return call('saveManifest', { body: { manifest, docPath: docId } })
   }
 
+  // ── Componentes ────────────────────────────────────────────────────────────
+
+  listComponents(docId = '') {
+    return call('listComponents', { params: { docPath: docId } })
+  }
+
+  saveComponent(name, html, docId = '') {
+    return call('saveComponent', { body: { name, html, docPath: docId } })
+  }
+
   // savePageCss → no-op herdado do BackendAdapter (standalone não tem CSS por página)
   // refreshAuth → no-op herdado do BackendAdapter (standalone não tem auth)
 }

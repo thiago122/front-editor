@@ -52,7 +52,7 @@
       <!-- Empty State -->
       <InspectorEmptyState v-if="!editorStore.selectedElement && !(styleStore.inspectorSource === 'explorer' && styleStore.ruleGroups.length)" />
 
-      <div v-else class="flex-1 overflow-y-auto font-mono leading-normal bg-white custom-scrollbar">
+      <div v-else class="flex-1 overflow-y-auto font-mono leading-normal bg-white custom-scrollbar relative">
 
         <!-- STYLES TAB -->
         <template v-if="activeTab === 'Styles'">
@@ -87,7 +87,7 @@
       <div 
         @click="editorStore.quickAttributesOpen = !editorStore.quickAttributesOpen"
         class="px-3 py-2 flex items-center justify-between cursor-pointer bg-slate-100 hover:bg-slate-200 transition-colors group border-b border-gray-200"
-        title="Gerenciar atributos (Alt+C para adicionar classe)"
+        title="Gerenciar atributos (Alt+A para adicionar classe)"
       >
         <div class="flex items-center gap-2 min-w-0">
           <span :class="editorStore.quickAttributesOpen ? 'rotate-90' : ''" class="text-[8px] text-slate-500 transition-transform">▶</span>
@@ -166,12 +166,12 @@ function openQuickClass() {
 }
 
 // Alt+K global → abre Quick Selector
-// Alt+C global → abre Quick Class (Atributos)
+// Alt+A global → abre Quick Class (Atributos)
 function onKeydown(e) {
   if (e.altKey && e.key === 'k') {
     e.preventDefault()
     openRuleCreator()
-  } else if (e.altKey && e.key === 'c') {
+  } else if (e.altKey && e.key === 'a') {
     e.preventDefault()
     openQuickClass()
   } else if (e.key === 'Escape') {

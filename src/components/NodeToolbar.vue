@@ -31,13 +31,14 @@ const isSelected = computed(() => EditorStore.selectedNodeId === props.nodeId)
 
 const parent = computed(() => EditorStore.getParent(props.nodeId))
 
+const isInsideLocked = computed(() => EditorStore.isNodeInsideLockedComponent(props.nodeId))
+const isComponentRoot = computed(() => !!EditorStore.getNode(props.nodeId)?.attrs?.['data-component'])
+
 const canEditText = computed(() => {
-  // We need to find the actual DOM element for this check if variant is explorer
-  // But wait, we can just check the tag name from the node data if we had it.
-  // ASTNode has the node data. Let's assume we might need to find the element
-  // if variant is overlay, or just check the node's tag if we pass it.
-  
-  // For now, let's use the element from store IF it matches our nodeId
+  // Se está dentro de um componente travado, não pode editar texto
+  if (isInsideLocked.value) return false
+
+  // For agora, usamos o elemento do store SE ele bater com o nosso nodeId
   const el = EditorStore.selectedNodeId === props.nodeId ? EditorStore.selectedElement : null
   if (!el) return false
   return TEXT_EDITABLE_TAGS.includes(el.tagName.toLowerCase())
@@ -148,6 +149,7 @@ function onTagSelected(tag) {
 
     <!-- Insert After -->
     <button
+      v-if="!isInsideLocked || isComponentRoot"
       class="toolbar-btn font-bold"
       title="Inserir tag após"
       @click.stop="openAutocomplete($event, 'after')"
@@ -155,6 +157,7 @@ function onTagSelected(tag) {
 
     <!-- Insert Child -->
     <button
+      v-if="!isInsideLocked"
       class="toolbar-btn font-bold"
       title="Inserir tag dentro"
       @click.stop="openAutocomplete($event, 'child')"
@@ -162,6 +165,7 @@ function onTagSelected(tag) {
 
     <!-- Duplicate -->
     <button
+      v-if="!isInsideLocked || isComponentRoot"
       class="toolbar-btn text-amber-500"
       title="Duplicar"
       @click.stop="duplicateNode"
@@ -185,6 +189,7 @@ function onTagSelected(tag) {
 
     <!-- Delete -->
     <button
+      v-if="!isInsideLocked || isComponentRoot"
       class="toolbar-btn btn-danger"
       title="Deletar"
       @click.stop="deleteNode"

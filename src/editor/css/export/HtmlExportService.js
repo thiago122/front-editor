@@ -38,6 +38,32 @@ export class HtmlExportService {
     return doctype + iframeDoc.documentElement.outerHTML
   }
 
+  /**
+   * Extrai o HTML de um elemento específico, removendo atributos internos do editor.
+   * @param {HTMLElement} el 
+   * @returns {string}
+   */
+  static generateNodeHtml(el) {
+    if (!el) return ''
+    const clone = el.cloneNode(true)
+    
+    // Limpeza recursiva de atributos internos
+    const clean = (node) => {
+      if (node.nodeType === 1) { // ELEMENT_NODE
+        node.removeAttribute('data-node-id')
+        node.removeAttribute('data-selected')
+        node.removeAttribute('data-editor-hovered')
+        node.removeAttribute('data-component') // O master não deve ter este atributo
+        
+        // Limpa recursivamente os filhos
+        Array.from(node.children).forEach(clean)
+      }
+    }
+    
+    clean(clone)
+    return clone.outerHTML
+  }
+
   // ─── Download (navegador) ───────────────────────────────────────────────────
 
   /**

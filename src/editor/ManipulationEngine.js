@@ -542,4 +542,61 @@ export class ManipulationEngine {
       args: [nodeId, name, oldValue ?? null],
     })
   }
+
+  /**
+   * Transforma um nó em um componente adicionando o atributo data-component.
+   * @param {string} nodeId 
+   * @param {string} componentName 
+   */
+  updateNodeFromHtml(nodeId, html) {
+    const ctx = this.getCtx()
+    const node = findNodeById(ctx.ast, nodeId)
+    if (!node || node.type !== 'element') return false
+
+    try {
+      const fragment = this.pipeline.parseFragment(html)
+      const newNode = fragment.find(n => n.type === 'element')
+      if (!newNode) return false
+
+      history.beginTransaction()
+
+      // 1. Atualiza Atributos (exceto os protegidos)
+      const protectedAttrs = ['data-node-id', 'data-component']
+      const oldAttrs = { ...node.attrs }
+      
+      // Remove atributos que não existem mais no novo HTML
+      Object.keys(oldAttrs).forEach(key => {
+        if (!protectedAttrs.includes(key) && (!newNode.attrs || !(key in newNode.attrs))) {
+          this.removeAttribute(nodeId, key)
+        }
+      })
+
+      // Adiciona/Atualiza novos atributos
+      if (newNode.attrs) {
+        Object.entries(newNode.attrs).forEach(([key, val]) => {
+          if (!protectedAttrs.includes(key)) {
+            this.setAttribute(nodeId, key, val)
+          }
+        })
+      }
+
+      // 2. Atualiza Conteúdo Interno (filhos)
+      const innerHtml = newNode.children
+        .map(child => this.pipeline.astToCode(child))
+        .join('')
+      
+      this.updateInnerContent(nodeId, innerHtml)
+
+      history.commit()
+      return true
+    } catch (e) {
+      console.error('[ManipulationEngine] updateNodeFromHtml failed:', e)
+      history.rollback()
+      return false
+    }
+  }
+
+  createComponent(nodeId, componentName) {
+    this.setAttribute(nodeId, 'data-component', componentName)
+  }
 }

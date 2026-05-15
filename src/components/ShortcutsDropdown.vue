@@ -40,8 +40,11 @@
               <ShortcutItem keys="Alt + K" title="Criar Seletor Rápido">
                 Foca no input de criação de regras CSS (Inspector).
               </ShortcutItem>
-              <ShortcutItem keys="Alt + C" title="Atributos Rápidos">
-                Abre o painel para adicionar classes ou IDs.
+              <ShortcutItem keys="Alt + A" title="Atributos Rápidos">
+                Abre o painel para adicionar classes ou IDs (Inspector).
+              </ShortcutItem>
+              <ShortcutItem keys="Alt + C" title="Componentes">
+                Abre ou fecha a biblioteca de componentes à esquerda.
               </ShortcutItem>
               <ShortcutItem keys="Ctrl + F" title="Buscar no CSS">
                 Foca no campo de busca do Explorador CSS.
