@@ -544,11 +544,13 @@ export class ManipulationEngine {
   }
 
   /**
-   * Transforma um nó em um componente adicionando o atributo data-component.
-   * @param {string} nodeId 
-   * @param {string} componentName 
+   * Atualiza um nó (atributos + conteúdo) a partir de um HTML string.
+   * Se slotSnapshots for fornecido, preserva o conteúdo e atributos extras dos slots.
+   * @param {string} nodeId
+   * @param {string} html
+   * @param {Map<string, { children, extraAttrs, replace }>} [slotSnapshots]
    */
-  updateNodeFromHtml(nodeId, html) {
+  updateNodeFromHtml(nodeId, html, slotSnapshots = new Map()) {
     const ctx = this.getCtx()
     const node = findNodeById(ctx.ast, nodeId)
     if (!node || node.type !== 'element') return false
@@ -560,7 +562,7 @@ export class ManipulationEngine {
 
       history.beginTransaction()
 
-      // 1. Atualiza Atributos (exceto os protegidos)
+      // 1. Atualiza Atributos do elemento raiz (exceto os protegidos)
       const protectedAttrs = ['data-node-id', 'data-component']
       const oldAttrs = { ...node.attrs }
       
@@ -580,7 +582,12 @@ export class ManipulationEngine {
         })
       }
 
-      // 2. Atualiza Conteúdo Interno (filhos)
+      // 2. Se há snapshots de slots, re-injetamos o conteúdo do usuário nos slots do novo HTML
+      if (slotSnapshots.size > 0) {
+        this._injectSlotSnapshots(newNode, slotSnapshots)
+      }
+
+      // 3. Atualiza Conteúdo Interno (filhos) — agora com slots já re-injetados
       const innerHtml = newNode.children
         .map(child => this.pipeline.astToCode(child))
         .join('')
@@ -594,6 +601,46 @@ export class ManipulationEngine {
       history.rollback()
       return false
     }
+  }
+
+  /**
+   * Re-injeta o conteúdo e atributos extras dos slots num nó AST (novo HTML do master).
+   * Modifica o nó in-place antes de serializar para innerHtml.
+   * @param {object} newNode - Nó AST do master já parseado
+   * @param {Map<string, { children, extraAttrs, replace }>} slotSnapshots
+   */
+  _injectSlotSnapshots(newNode, slotSnapshots) {
+    newNode.children?.forEach(child => {
+      const slotName = child.attrs?.['data-slot']
+      if (slotName === undefined || !slotSnapshots.has(slotName)) return
+
+      const snapshot = slotSnapshots.get(slotName)
+
+      // Conteúdo: usa o que o usuário colocou, se houver; senão, mantém fallback do master
+      if (snapshot.children.length > 0) {
+        child.children = snapshot.children
+      }
+
+      // Merge de atributos extras que o usuário adicionou na instância
+      Object.entries(snapshot.extraAttrs).forEach(([k, v]) => {
+        if (k === 'class' && child.attrs?.class) {
+          // Merge de classes: union, sem duplicatas
+          const merged = new Set(child.attrs.class.split(/\s+/).filter(Boolean))
+          v.split(/\s+/).filter(Boolean).forEach(c => merged.add(c))
+          child.attrs.class = [...merged].join(' ')
+        } else if (k === 'style' && child.attrs?.style) {
+          // Merge de style: instância vence no conflito
+          child.attrs.style = child.attrs.style + '; ' + v
+        } else {
+          child.attrs[k] = v
+        }
+      })
+
+      // Propaga data-slot-replace se o usuário tinha definido na instância
+      if (snapshot.replace) {
+        child.attrs['data-slot-replace'] = ''
+      }
+    })
   }
 
   createComponent(nodeId, componentName) {

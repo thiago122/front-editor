@@ -57,8 +57,62 @@ function handleContextMenu({ node, event }) {
     })
   }
 
+  // ── Opções de Slot (para qualquer elemento que não seja raiz de componente) ──
+  const isInsideComponent = !!EditorStore.getParent(node.nodeId)?.attrs?.['data-component'] ||
+    isAncestorComponent(node.nodeId)
+
+  if (!node.attrs?.['data-component'] && isInsideComponent) {
+    items.push({ divider: true })
+
+    if (node.attrs?.['data-slot'] !== undefined) {
+      // É um slot: opções de gestão
+      const hasHideEmpty = node.attrs?.['data-slot-hide-empty'] !== undefined
+      items.push({ 
+        label: hasHideEmpty ? 'Remover Hide-If-Empty' : 'Esconder Se Vazio',
+        icon: hasHideEmpty ? '👁' : '🙈',
+        action: () => {
+          if (hasHideEmpty) {
+            EditorStore.manipulation.removeAttribute(node.nodeId, 'data-slot-hide-empty')
+          } else {
+            EditorStore.manipulation.setAttribute(node.nodeId, 'data-slot-hide-empty', '')
+          }
+        }
+      })
+      items.push({ 
+        label: 'Remover Slot', 
+        icon: '✕',
+        action: () => EditorStore.manipulation.removeAttribute(node.nodeId, 'data-slot') 
+      })
+    } else {
+      // Não é slot: opção de transformar
+      items.push({ 
+        label: 'Transformar em Slot', 
+        icon: '◈',
+        action: () => {
+          const slotName = prompt('Nome do slot (ex: content, footer, sidebar):', 'default')
+          if (slotName) {
+            EditorStore.manipulation.setAttribute(node.nodeId, 'data-slot', slotName.trim())
+          }
+        }
+      })
+    }
+  }
+
   contextMenu.value = { x: event.clientX, y: event.clientY, items }
 }
+
+/**
+ * Verifica se algum ancestral do nó é um componente (raiz de data-component).
+ */
+function isAncestorComponent(nodeId) {
+  let current = EditorStore.getParent(nodeId)
+  while (current) {
+    if (current.attrs?.['data-component']) return true
+    current = EditorStore.getParent(current.nodeId)
+  }
+  return false
+}
+
 
 async function confirmUpdateMaster(node, name) {
   if (!confirm(`Deseja atualizar o componente mestre "${name}" com as alterações desta instância? Todas as outras instâncias na página também serão atualizadas.`)) {

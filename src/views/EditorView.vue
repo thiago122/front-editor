@@ -94,43 +94,13 @@ const activeExplorer   = ref('html') // 'html' | 'css' | 'components' | null
 
 // ─── Auto-Save ──────────────────────────────────────────────────────────────
 
-/** Guarda o objeto { html, savedAt } se existir um backup na sessão anterior. */
-const pendingSave = ref(null)
+// Auto-save e recuperação de sessão desabilitados temporariamente para corrigir race conditions
+// const pendingSave = ref(null)
+// let autoSaveTimer = null
 
-/** ID do intervalo — guardado para limpar ao desmontar o componente. */
-let autoSaveTimer = null
-
-/**
- * Executa o auto-save: gera o HTML atual do iframe e persiste no localStorage.
- * Chamado pelo intervalo periódico.
- */
-function runAutoSave() {
-  const doc = EditorStore.getIframeDoc()
-  const html = HtmlExportService.generateHtml(doc)
-  AutoSaveService.save(html)
-  // Se há documento aberto via API, salva também no backend
-  if (EditorStore.currentDocument) {
-    EditorStore.saveDocument().catch(console.error)
-  }
-}
-
-/**
- * Usuário optou por restaurar a sessão salva.
- * Carrega o HTML no editor e descarta o backup.
- */
-function handleRestoreSave(html) {
-  input.value = html
-  AutoSaveService.clear()
-  pendingSave.value = null
-}
-
-/**
- * Usuário optou por descartar a sessão salva.
- * O AutoSaveRecoveryBanner já chama AutoSaveService.clear() antes de emitir.
- */
-function handleDiscardSave() {
-  pendingSave.value = null
-}
+// function runAutoSave() { ... }
+// function handleRestoreSave(html) { ... }
+// function handleDiscardSave() { ... }
 
 /** Baixa todas as stylesheets CSS editáveis como arquivos .css */
 function downloadCss() {
@@ -203,7 +173,7 @@ const handleHtmlLoad = (newHtml) => {
 
 onMounted(async () => {
   // Verifica se existe backup da sessão anterior antes de carregar a página
-  pendingSave.value = AutoSaveService.load()
+  // pendingSave.value = AutoSaveService.load()
 
   // Se houver um path na URL, carrega o documento correspondente
   const path = route.query.path
@@ -216,7 +186,7 @@ onMounted(async () => {
   }
 
   // Inicia o auto-save periódico após carregar a página
-  autoSaveTimer = setInterval(runAutoSave, AUTOSAVE_INTERVAL_MS)
+  // autoSaveTimer = setInterval(runAutoSave, AUTOSAVE_INTERVAL_MS)
 })
 
 // Observa mudanças na URL (navegação entre documentos)
@@ -227,7 +197,7 @@ watch(() => route.query.path, async (newPath) => {
 })
 
 onUnmounted(() => {
-  clearInterval(autoSaveTimer)
+  // clearInterval(autoSaveTimer)
 })
 
 const inputHTML = `
@@ -312,14 +282,14 @@ watch(
 <template>
   <div class="flex flex-col grow shrink-0 h-full max-h-full overflow-hidden">
 
-    <!-- Banner de recuperação de sessão (aparece somente se há backup no localStorage) -->
-    <AutoSaveRecoveryBanner
+    <!-- Banner de recuperação de sessão desabilitado temporariamente -->
+    <!-- <AutoSaveRecoveryBanner
       v-if="pendingSave"
       :save="pendingSave"
       @restore="handleRestoreSave"
       @discard="handleDiscardSave"
       class="z-[1000]"
-    />
+    /> -->
     <!-- <div class="flex justify-center bg-gray-200">
       <RouterLink to="/">Home</RouterLink>
       <RouterLink to="/editor">Editor</RouterLink>

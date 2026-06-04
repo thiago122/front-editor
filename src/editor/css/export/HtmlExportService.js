@@ -34,8 +34,54 @@ export class HtmlExportService {
       console.warn('[HtmlExportService] iframeDoc não disponível.')
       return ''
     }
+
+    // Clona o documento para não mutar o iframe em produção
+    const clone = iframeDoc.documentElement.cloneNode(true)
+    HtmlExportService._processSlots(clone)
+
     const doctype = '<!DOCTYPE html>\n'
-    return doctype + iframeDoc.documentElement.outerHTML
+    return doctype + clone.outerHTML
+  }
+
+  /**
+   * Processa todos os elementos com data-slot no clone do documento,
+   * aplicando as regras de export: data-slot-replace, data-slot-hide-empty,
+   * e limpando atributos de controle do editor.
+   * @param {HTMLElement} root
+   */
+  static _processSlots(root) {
+    const SLOT_CONTROL_ATTRS = ['data-slot', 'data-slot-replace', 'data-slot-hide-empty', 'data-slot-no-fallback']
+
+    // Processa do mais profundo para o mais superficial para evitar
+    // que o replace quebre referências de nós ainda não processados
+    const slots = Array.from(root.querySelectorAll('[data-slot]')).reverse()
+
+    slots.forEach(el => {
+      const isEmpty = el.children.length === 0 && el.textContent.trim() === ''
+      const shouldReplace = el.hasAttribute('data-slot-replace')
+      const shouldHideEmpty = el.hasAttribute('data-slot-hide-empty')
+
+      // 1. Remover atributos de controle
+      SLOT_CONTROL_ATTRS.forEach(attr => el.removeAttribute(attr))
+
+      // 2. data-slot-hide-empty: remove o elemento se vazio
+      if (shouldHideEmpty && isEmpty) {
+        el.remove()
+        return
+      }
+
+      // 3. data-slot-replace: substitui o elemento pelos seus filhos
+      if (shouldReplace) {
+        const parent = el.parentNode
+        if (parent) {
+          // Move todos os filhos para antes do elemento
+          while (el.firstChild) {
+            parent.insertBefore(el.firstChild, el)
+          }
+          el.remove()
+        }
+      }
+    })
   }
 
   /**

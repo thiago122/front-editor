@@ -49,10 +49,13 @@ const props = defineProps({
  */
 const isComponentRoot = computed(() => !!props.node.attrs?.['data-component'])
 const isUnlocked      = computed(() => EditorStore.unlockedComponentIds.has(props.node.nodeId))
+const isSlotRoot      = computed(() => props.node.attrs?.['data-slot'] !== undefined)
 
 // Um nó está bloqueado se o pai já estiver bloqueado, 
 // ou se ele for a raiz de um componente ainda não desbloqueado.
+// Exceção: nós com data-slot (e seus filhos) estão sempre livres para edição.
 const effectivelyLocked = computed(() => {
+  if (isSlotRoot.value) return false // Slot root é sempre editável
   if (props.isLocked) return true
   if (isComponentRoot.value && !isUnlocked.value) return true
   return false
@@ -151,7 +154,8 @@ function onSelect() {
       :class="{ 
         'bg-blue-100 text-blue-900 shadow-sm': isSelected,
         'bg-gray-100/50 ring-1 ring-purple-400/30': isComponentRoot && !isSelected,
-        'hover:bg-gray-50': !isSelected && !isComponentRoot,
+        'bg-violet-50/50 ring-1 ring-violet-300/50': isSlotRoot && !isSelected && !isComponentRoot,
+        'hover:bg-gray-50': !isSelected && !isComponentRoot && !isSlotRoot,
         'has-children': visibleChildren.length,
         'opacity-40': isDragging,
         'opacity-80': effectivelyLocked && !isComponentRoot
@@ -161,8 +165,12 @@ function onSelect() {
       @click.stop="onSelect"
       @contextmenu.prevent="emit('contextmenu', { node, event: $event })"
     >
+      <!-- SLOT ICON -->
+      <div v-if="isSlotRoot" class="mr-1 text-[10px] text-violet-500" title="Slot editável">
+        ◈
+      </div>
       <!-- LOCK ICON (para indicar herança de trava) -->
-      <div v-if="effectivelyLocked && !isComponentRoot" class="mr-1 text-[10px] text-gray-400">
+      <div v-else-if="effectivelyLocked && !isComponentRoot" class="mr-1 text-[10px] text-gray-400">
         🔒
       </div>
 
@@ -204,6 +212,11 @@ function onSelect() {
           <!-- COMPONENT BADGE -->
           <span v-if="isComponentRoot" class="bg-purple-100 text-purple-700 px-1 rounded-[2px] text-[9px] font-bold uppercase tracking-tight flex items-center gap-1">
              {{ isUnlocked ? '🔓' : '📦' }} {{ node.attrs['data-component'] }}
+          </span>
+
+          <!-- SLOT BADGE -->
+          <span v-if="isSlotRoot" class="bg-violet-100 text-violet-700 px-1 rounded-[2px] text-[9px] font-bold uppercase tracking-tight flex items-center gap-1">
+            slot:{{ node.attrs['data-slot'] || 'default' }}
           </span>
 
           <!-- ID PREVIEW -->

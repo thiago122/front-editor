@@ -16,6 +16,7 @@ import { CssExportService } from '@/editor/css/export/CssExportService'
 import { DocumentNormalizer } from '@/editor/css/export/DocumentNormalizer'
 import { editorHooks } from '@/editor/HookManager'
 import { useComponentStore } from './ComponentStore'
+import { AutoSaveService } from '@/editor/css/export/AutoSaveService'
 
 export const useEditorStore = defineStore('editor', () => {
   // --- STATE ---
@@ -115,22 +116,29 @@ export const useEditorStore = defineStore('editor', () => {
     const node = findNodeById(ctx.value.ast, nodeId)
     if (!node) return false
 
-    // 2. Se ele for um componente e estiver travado
+    // 2. Se ele for um componente-raiz e estiver travado
     if (node.attrs?.['data-component'] && !unlockedComponentIds.value.has(nodeId)) {
       return true
     }
 
-    // 3. Verifica os ancestrais
+    // 3. Verifica os ancestrais, parando se encontrar um slot antes do componente
     let currentId = nodeId
     while (true) {
       const parent = getParent(currentId)
       if (!parent) break
-      
+
+      // Se o nó atual (ou algum ancestral direto) for um slot, ele está livre para edição
+      const current = findNodeById(ctx.value.ast, currentId)
+      if (current?.attrs?.['data-slot'] !== undefined) {
+        return false // Está dentro de um slot — libera edição
+      }
+
       if (parent.attrs?.['data-component']) {
-        // Se achou um pai componente, e ele NÃO está na lista de desbloqueados, então o nó filho está travado.
+        // Achou um pai componente antes de achar um slot
         if (!unlockedComponentIds.value.has(parent.nodeId)) {
-          return true
+          return true // Travado
         }
+        break // Componente desbloqueado — para de subir
       }
       currentId = parent.nodeId
     }
@@ -672,7 +680,8 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   /**
-   * Atualiza todas as instâncias de um componente no documento atual.
+   * Atualiza todas as instâncias de um componente no documento atual,
+   * preservando o conteúdo dos slots definidos pelo usuário.
    * @param {string} name - Nome do componente (ex: 'header')
    * @param {string} html - Novo HTML mestre do componente
    */
@@ -697,10 +706,51 @@ export const useEditorStore = defineStore('editor', () => {
 
     console.log(`[EditorStore] Refreshing ${instances.length} instances of component: ${name}`)
 
-    // Executa a atualização em cada instância
+    // Para cada instância: extrai snapshot dos slots ANTES de atualizar
     instances.forEach(nodeId => {
-      manipulation.value.updateNodeFromHtml(nodeId, html)
+      const instanceNode = findNodeById(ctx.value.ast, nodeId)
+      const slotSnapshots = extractSlotSnapshots(instanceNode)
+      manipulation.value.updateNodeFromHtml(nodeId, html, slotSnapshots)
     })
+  }
+
+  /**
+   * Extrai um mapa de { slotName → { children, extraAttrs } } de uma instância de componente.
+   * Usado para preservar o conteúdo editado nos slots durante o hot-swap do master.
+   * @param {object} node - Nó AST da instância
+   * @returns {Map<string, { children: object[], extraAttrs: object }>}
+   */
+  function extractSlotSnapshots(node) {
+    const snapshots = new Map()
+    if (!node?.children) return snapshots
+
+    const SLOT_CONTROL_ATTRS = ['data-slot', 'data-slot-replace', 'data-slot-hide-empty', 'data-slot-no-fallback', 'data-node-id']
+
+    const findSlots = (children) => {
+      children.forEach(child => {
+        const slotName = child.attrs?.['data-slot']
+        if (slotName !== undefined) {
+          // Atributos que o usuário adicionou além dos de controle
+          const extraAttrs = {}
+          if (child.attrs) {
+            Object.entries(child.attrs).forEach(([k, v]) => {
+              if (!SLOT_CONTROL_ATTRS.includes(k)) {
+                extraAttrs[k] = v
+              }
+            })
+          }
+          snapshots.set(slotName, {
+            children: child.children ?? [],
+            extraAttrs,
+            replace: child.attrs?.['data-slot-replace'] !== undefined,
+          })
+        }
+        // Não entra recursivamente — slots são filhos diretos do componente-raiz
+      })
+    }
+
+    findSlots(node.children)
+    return snapshots
   }
 
   // ── API Backend ──────────────────────────────────────────────────────────
@@ -785,11 +835,25 @@ export const useEditorStore = defineStore('editor', () => {
    * 4. Salva todos os CSS internos editáveis
    * 5. Salva o manifesto atual
    */
+  let _isSaving = false
+
   async function saveDocument() {
+    if (_isSaving) {
+      console.warn('[EditorStore] saveDocument ignorado: salvamento já em andamento.')
+      return false
+    }
+    _isSaving = true
+
     const doc = currentDocument.value
-    if (!doc) return false
+    if (!doc) {
+      _isSaving = false
+      return false
+    }
     const iframeDoc = getIframeDoc()
-    if (!iframeDoc) return false
+    if (!iframeDoc) {
+      _isSaving = false
+      return false
+    }
 
     // Inicia feedback visual
     saveState.value = {
@@ -849,6 +913,7 @@ export const useEditorStore = defineStore('editor', () => {
       if (saveState.value.status !== 'error') {
         saveState.value.status  = 'success'
         saveState.value.message = 'Documento salvo com sucesso!'
+        AutoSaveService.clear()
       } else {
         saveState.value.message = 'Houve problemas ao salvar alguns arquivos.'
       }
@@ -861,6 +926,7 @@ export const useEditorStore = defineStore('editor', () => {
       saveState.value.message = 'Erro crítico ao salvar'
       saveState.value.details.push(e.message)
     } finally {
+      _isSaving = false
       // Oculta a mensagem após alguns segundos se for sucesso
       if (saveState.value.status === 'success') {
         setTimeout(() => {
