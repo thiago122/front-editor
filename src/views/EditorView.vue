@@ -704,12 +704,8 @@ watch(
           "
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="1.5"
-              d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
-            />
+            <rect x="4" y="4" width="12" height="12" rx="2" stroke-width="1.5" />
+            <rect x="8" y="8" width="12" height="12" rx="2" stroke-width="1.5" opacity="0.6" />
           </svg>
         </IconSidebarButton>
 
