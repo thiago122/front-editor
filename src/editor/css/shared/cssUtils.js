@@ -1,7 +1,8 @@
+import { parse } from 'css-tree'
 import {
   PSEUDO_STATES,
   PSEUDO_ELEMENT_REGEX,
-  INHERITED_PROPERTIES,
+  INHERITED_PROPERTIES_SET,
   COLOR_KEYWORDS
 } from './cssConstants.js'
 
@@ -43,7 +44,7 @@ export function cleanSelectorForMatching(selector) {
  * @returns {boolean} True if property is inherited
  */
 export function isInheritedProperty(prop) {
-  return INHERITED_PROPERTIES.includes(prop)
+  return INHERITED_PROPERTIES_SET.has(prop)
 }
 
 /**
@@ -75,28 +76,120 @@ export function isColorValue(value) {
   )
 }
 
+// ─── Specificity (Selectors Level 4 §17) ────────────────────────────────────
+//
+// Calculado sobre o AST do css-tree, NÃO por regex. Motivos:
+//   - regex contava "::before" 2× (como pseudo-classe E pseudo-elemento)
+//   - :is()/:not()/:has() devem usar a specificity do arg MAIS específico
+//   - :where() contribui 0
+//   - seletor universal "*" contribui 0
+//
+// Formato [a, b, c, d] = [inline, id, classe/attr/pseudo-classe, tipo/pseudo-elemento].
+// `a` (inline) é sempre 0 aqui — inline tem caminho próprio (SPECIFICITY_INLINE).
+
+// Pseudo-classes funcionais que assumem a specificity do arg mais específico.
+const FUNCTIONAL_MOST_SPECIFIC = new Set(['is', 'not', 'has'])
+// Pseudo-classes que contam como pseudo-classe E adicionam o "of <S>" mais específico.
+const NTH_WITH_SELECTOR = new Set(['nth-child', 'nth-last-child'])
+
+/** Compara duas tuplas de specificity. >0 se a > b. */
+function compareSpecificity(a, b) {
+  for (let i = 0; i < 4; i++) {
+    if (a[i] !== b[i]) return a[i] - b[i]
+  }
+  return 0
+}
+
+/** Retorna a maior specificity entre os seletores de um nó SelectorList. */
+function maxSpecificityOfList(selectorListNode) {
+  let best = [0, 0, 0, 0]
+  selectorListNode.children?.forEach((sel) => {
+    const s = specificityOfSelector(sel)
+    if (compareSpecificity(s, best) > 0) best = s
+  })
+  return best
+}
+
+/** Acha o nó SelectorList dentro dos filhos de uma PseudoClassSelector (arg). */
+function findArgSelectorList(pseudoNode) {
+  if (!pseudoNode.children) return null
+  for (const child of pseudoNode.children) {
+    if (child.type === 'SelectorList') return child
+  }
+  return null
+}
+
+/** Calcula a specificity de um único nó 'Selector' do css-tree. */
+function specificityOfSelector(selectorNode) {
+  let id = 0, cls = 0, type = 0
+  selectorNode.children?.forEach((node) => {
+    switch (node.type) {
+      case 'IdSelector':
+        id++
+        break
+      case 'ClassSelector':
+      case 'AttributeSelector':
+        cls++
+        break
+      case 'TypeSelector':
+        // Seletor universal "*" não conta.
+        if (node.name !== '*') type++
+        break
+      case 'PseudoElementSelector':
+        type++
+        break
+      case 'PseudoClassSelector': {
+        const name = (node.name || '').toLowerCase()
+        if (name === 'where') break // contribui 0
+
+        const argList = findArgSelectorList(node)
+        if (FUNCTIONAL_MOST_SPECIFIC.has(name) && argList) {
+          const [, mb, mc, md] = maxSpecificityOfList(argList)
+          id += mb; cls += mc; type += md
+        } else if (NTH_WITH_SELECTOR.has(name) && argList) {
+          // A pseudo-classe conta + o "of <S>" mais específico.
+          cls++
+          const [, mb, mc, md] = maxSpecificityOfList(argList)
+          id += mb; cls += mc; type += md
+        } else {
+          cls++ // pseudo-classe normal (:hover, :first-child, etc.)
+        }
+        break
+      }
+      // Combinator, WhiteSpace, NestingSelector, Raw → ignorados
+    }
+  })
+  return [0, id, cls, type]
+}
+
 /**
- * Calculate CSS selector specificity
+ * Calcula specificity a partir de um nó AST do css-tree (Selector / SelectorList / Raw).
+ * Reusa o AST já parseado (ex: Rule.prelude no CssExplorerTreeBuilder) — sem reparse.
+ * @param {object} node - Nó css-tree
+ * @returns {number[]} [inline, id, class, tag]
+ */
+export function getSpecificityFromAst(node) {
+  if (!node) return [0, 0, 0, 0]
+  if (node.type === 'SelectorList') return maxSpecificityOfList(node)
+  if (node.type === 'Selector') return specificityOfSelector(node)
+  // Prelude em modo tolerante pode vir como Raw — cai pro parser de string.
+  if (node.type === 'Raw' && typeof node.value === 'string') return getSpecificity(node.value)
+  return [0, 0, 0, 0]
+}
+
+/**
+ * Calculate CSS selector specificity from a selector string.
+ * Parseia com css-tree e delega para getSpecificityFromAst (Selectors L4 correto).
+ * Para listas separadas por vírgula, retorna a specificity do seletor mais específico.
  * @param {string} selector - CSS selector
  * @returns {number[]} Specificity array [inline, id, class, tag]
  */
 export function getSpecificity(selector) {
-  let a = 0, b = 0, c = 0, d = 0
-
-  // IDs
-  const ids = selector.match(/#[\w-]+/g)
-  if (ids) b = ids.length
-
-  // Classes, attributes, pseudo-classes
-  const classes = selector.match(/\.[\w-]+/g)
-  const attrs = selector.match(/\[[^\]]+\]/g)
-  const pseudoClasses = selector.match(/:(?!not|is|where|has)[\w-]+/g)
-  c = (classes?.length || 0) + (attrs?.length || 0) + (pseudoClasses?.length || 0)
-
-  // Elements and pseudo-elements
-  const elements = selector.match(/(?:^|[\s>+~])(?!#|\.|:)[a-z][\w-]*/gi)
-  const pseudoElements = selector.match(/::[\w-]+/g)
-  d = (elements?.length || 0) + (pseudoElements?.length || 0)
-
-  return [a, b, c, d]
+  if (!selector || typeof selector !== 'string') return [0, 0, 0, 0]
+  try {
+    const ast = parse(selector, { context: 'selectorList' })
+    return getSpecificityFromAst(ast)
+  } catch {
+    return [0, 0, 0, 0]
+  }
 }

@@ -81,15 +81,6 @@ const attributes = computed(() => {
 const idAttr = computed(() => props.node.attrs?.id)
 const classAttr = computed(() => props.node.attrs?.class)
 
-/**
- * TREE HELPERS
- */
-function containsNode(root, nodeId) {
-  if (!nodeId) return false
-  if (root.nodeId === nodeId) return true
-  return root.children?.some((child) => containsNode(child, nodeId))
-}
-
 const visibleChildren = computed(() => {
   if (!props.node.children) return []
   return props.node.children.filter(child => {
@@ -109,8 +100,7 @@ const isOpen = computed(() => {
   if (closedManually.value) return false
   return (
     openedManually.value ||
-    props.openPath.includes(props.node.nodeId) ||
-    containsNode(props.node, props.selectedNodeId)
+    props.openPath.includes(props.node.nodeId)
   )
 })
 

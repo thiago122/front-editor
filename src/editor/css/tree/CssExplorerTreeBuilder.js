@@ -1,7 +1,7 @@
 import { generate } from 'css-tree'
 import { generateId } from '../../../utils/ids.js'
 import { CSS_LOCATIONS } from '../shared/cssConstants.js'
-import { getSpecificity } from '../shared/cssUtils.js'
+import { getSpecificityFromAst } from '../shared/cssUtils.js'
 
 /**
  * CssExplorerTreeBuilder Class
@@ -113,7 +113,8 @@ export class CssExplorerTreeBuilder {
     if (node.type === 'Rule') {
       logicNode.type = 'selector'
       logicNode.label = generate(node.prelude)
-      logicNode.metadata.specificity = getSpecificity(logicNode.label)
+      // Specificity calculada no AST já parseado (node.prelude) — sem reparse.
+      logicNode.metadata.specificity = getSpecificityFromAst(node.prelude)
 
       // Add declarations and nested rules
       if (node.block?.children) {

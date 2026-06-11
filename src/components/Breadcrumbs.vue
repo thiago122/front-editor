@@ -4,14 +4,19 @@
 // stores
 import { computed, ref, watch, nextTick } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
-import { findPath } from '@/utils/ast.js'
+import { findNodeById } from '@/utils/ast.js'
 const EditorStore = useEditorStore()
 
 const containerRef = ref(null)
 
+// openPath da store: array de nodeIds do root até o nó selecionado.
+// EditorStore.ast é um shallowRef — triggerRef(ast) é chamado após cada mutação.
 const path = computed(() => {
-  if (!EditorStore.ctx?.ast || !EditorStore.selectedNodeId) return []
-  return findPath(EditorStore.ctx.ast, EditorStore.selectedNodeId) || []
+  const ids = EditorStore.openPath
+  const rawAst = EditorStore.ast
+  if (!ids?.length || !rawAst) return []
+  // Resolve cada id para o objeto nó completo (necessário para label())
+  return ids.map(id => findNodeById(rawAst, id)).filter(Boolean)
 })
 
 // Auto-scroll to end when selection changes

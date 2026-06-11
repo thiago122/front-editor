@@ -1,5 +1,5 @@
 <template>
-  <div ref="ruleEl" class="rule">
+  <div ref="ruleEl" class="rule" :class="{ 'rule--inactive': isInactive }">
       <!-- Source file / origin — acima do seletor -->
       <div class="rule__meta">
         <!-- ícone: revelar esta regra no CSS Explorer -->
@@ -33,6 +33,11 @@
         </button>
         <div class="rule__origin">
           <span class="rule__origin-label">{{ originLabel }}</span>
+          <span
+            v-if="isInactive"
+            class="rule__inactive-badge"
+            title="Este @media/@container não aplica no viewport atual — editável para ajustar outros breakpoints"
+          >inativo</span>
         </div>
 
         <!-- Botões de clipboard -->
@@ -284,6 +289,10 @@ const hasCategoryProps = computed(() => {
 
 const INDENT_SIZE = 7
 const indentPx = computed(() => ((props.rule.context?.length ?? 0) + 1) * INDENT_SIZE + 'px')
+
+// Regra inativa: @media/@container que não casa o viewport atual.
+// Mostrada (e editável) para permitir ajustar outros breakpoints — não recebe strike.
+const isInactive = computed(() => props.rule.active === false)
 const ruleEl = ref(null)
 
 const originLabel = computed(() => {
@@ -500,6 +509,26 @@ function onRemoveIfEmpty(decl) {
   flex: 1;
 }
 .rule__origin-label { font-weight: 600; }
+
+/* Badge de regra inativa (@media/@container fora do viewport atual) */
+.rule__inactive-badge {
+  margin-left: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #b45309;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 3px;
+  padding: 0 4px;
+  line-height: 1.4;
+  cursor: help;
+}
+
+/* Fade só no corpo da regra inativa — meta/origin/badge ficam legíveis.
+   Mantém editável (opacity não bloqueia ponteiro). */
+.rule--inactive .rule__body { opacity: 0.55; }
 
 /* Meta row (origin + clipboard buttons) */
 .rule__meta {

@@ -1,6 +1,6 @@
 // EditorStore.js
 
-import { ref, computed, watch, markRaw, toRaw } from 'vue'
+import { ref, shallowRef, triggerRef, computed, watch, markRaw, toRaw } from 'vue'
 import { defineStore } from 'pinia'
 import { Pipeline } from '@/editor/pipeline/pipeline'
 import { htmlPlugin } from '@/editor/pipeline/plugins/html-plugin'
@@ -17,6 +17,20 @@ import { DocumentNormalizer } from '@/editor/css/export/DocumentNormalizer'
 import { editorHooks } from '@/editor/HookManager'
 import { useComponentStore } from './ComponentStore'
 import { AutoSaveService } from '@/editor/css/export/AutoSaveService'
+
+// ─── AST path helper (runs on raw objects, no Vue proxy overhead) ─────────────
+function _findPath(node, targetId, path) {
+  if (!node) return null
+  const p = [...path, node.nodeId]
+  if (node.nodeId === targetId) return p
+  const children = node.children
+  if (!children) return null
+  for (let i = 0; i < children.length; i++) {
+    const result = _findPath(children[i], targetId, p)
+    if (result) return result
+  }
+  return null
+}
 
 export const useEditorStore = defineStore('editor', () => {
   // --- STATE ---
@@ -294,6 +308,12 @@ export const useEditorStore = defineStore('editor', () => {
       el.style.removeProperty('outline')
     })
 
+    // Remove a variável --tag-name injetada pelo Outline Mode (label de hover).
+    // É escrita inline nos elementos sob hover; nunca deve vazar para o HTML salvo.
+    doc.querySelectorAll('[style*="--tag-name"]').forEach((el) => {
+      el.style.removeProperty('--tag-name')
+    })
+
     // Remove atributos style que ficaram vazios após as remoções acima
     doc.querySelectorAll('[style]').forEach((el) => {
       if (!el.getAttribute('style').trim()) el.removeAttribute('style')
@@ -390,16 +410,62 @@ export const useEditorStore = defineStore('editor', () => {
   const styleStore = useStyleStore()
 
   // --- GETTERS ---
-  const ast = computed(() => ctx.value?.ast)
-  const selectedNode = computed(() => findNodeById(ast.value, selectedNodeId.value))
+
+  /**
+   * Ref raso (shallowRef) apontando para o nó raiz do AST.
+   * É raw (não observado profundamente pelo Vue).
+   * Use triggerRef(ast) via notifyAstMutation() para forçar re-render após mutações in-place.
+   */
+  const ast = shallowRef(null)
+
+  /**
+   * Sinaliza ao Vue que o AST foi mutado in-place.
+   * triggerRef() força todos os watchers/computed de `ast` a re-executarem,
+   * mesmo que a referência do objeto não tenha mudado.
+   */
+  function notifyAstMutation() {
+    triggerRef(ast)
+    // Mantemos astMutationKey para computed que precisam de um número (ex: openPath, selectedNode)
+    astMutationKey.value++
+  }
+
+  /**
+   * Incrementado após qualquer mutação no AST (insert, remove, move, attr).
+   * Consumidores devem ler este valor em computed que não dependem de `ast` diretamente.
+   */
+  const astMutationKey = ref(0)
+
+  const selectedNode = computed(() => {
+    astMutationKey.value
+    const rawAst = ast.value
+    return rawAst ? findNodeById(rawAst, selectedNodeId.value) : null
+  })
+
   const hoveredElement = computed(() => {
     if (!hoveredNodeId.value) return null
     const doc = getIframeDoc()
     return doc?.querySelector(`[data-node-id="${hoveredNodeId.value}"]`)
   })
 
+  /**
+   * Caminho de nodeIds do root até o nó selecionado.
+   * Calculado na store com `toRaw` para evitar custo de Proxy.
+   * Passado como prop para ASTExplorer → elimina o findPath recursivo em cada componente.
+   */
+  const openPath = computed(() => {
+    astMutationKey.value
+    if (!selectedNodeId.value || !ast.value) return []
+    return _findPath(toRaw(ast.value), selectedNodeId.value, []) || []
+  })
+
   function loadHTML(rawHTML) {
-    ctx.value = pipeline.run(rawHTML)
+    // markRaw: impede o Vue de criar Proxies reativos profundos no AST.
+    // Mutações são sinalizadas via notifyAstMutation() → triggerRef(ast).
+    const result = markRaw(pipeline.run(rawHTML))
+    ctx.value = result
+    ast.value = result.ast   // shallowRef: atribuir novo valor notifica subscribers
+    // astMutationKey também sobe para acionar computed dependentes
+    astMutationKey.value++
   }
 
   // manipulation engine
@@ -490,6 +556,32 @@ export const useEditorStore = defineStore('editor', () => {
   const OUTLINE_STYLE_ID = 'editor-outline-mode'
   const EMPTY_PLACEHOLDER_STYLE_ID = 'editor-empty-placeholder'
 
+  // ── Label de tag do Outline Mode (lazy) ──────────────────────────────────────
+  // O tooltip de hover usa `content: var(--tag-name)`. Em vez de injetar a variável
+  // inline em TODOS os elementos a cada applyEditorStyles (O(N) writes = invalida
+  // layout), populamos apenas o elemento sob o cursor, via um único listener
+  // delegado de mouseover (O(1) por hover).
+  let _tagNameDoc = null
+  function _onTagNameHover(e) {
+    const el = e.target
+    if (el?.nodeType === 1 && el.tagName && !el.style.getPropertyValue('--tag-name')) {
+      el.style.setProperty('--tag-name', `'${el.tagName.toLowerCase()}'`)
+    }
+  }
+  function detachTagNameLabel() {
+    if (_tagNameDoc) {
+      _tagNameDoc.removeEventListener('mouseover', _onTagNameHover)
+      _tagNameDoc = null
+    }
+  }
+  function attachTagNameLabel(doc) {
+    if (_tagNameDoc === doc) return  // já anexado neste doc
+    detachTagNameLabel()
+    if (!doc) return
+    doc.addEventListener('mouseover', _onTagNameHover)
+    _tagNameDoc = doc
+  }
+
   /**
    * Aplica ou remove estilos utilitários (outline, placeholders) no documento do iframe.
    * Centralizado para garantir consistência no load inicial e em reloads.
@@ -544,13 +636,10 @@ export const useEditorStore = defineStore('editor', () => {
       `
       doc.head.appendChild(style)
 
-      // Injeta o nome da tag como variável CSS em todos os elementos (estratégia para labels)
-      // Nota: Para performance, poderíamos fazer isso apenas sob demanda, mas no iframe pequeno é OK.
-      doc.querySelectorAll('*').forEach(el => {
-        if (el.tagName && !el.style.getPropertyValue('--tag-name')) {
-          el.style.setProperty('--tag-name', `'${el.tagName.toLowerCase()}'`)
-        }
-      })
+      // Label lazy: popula --tag-name só no elemento sob hover (ver attachTagNameLabel).
+      attachTagNameLabel(doc)
+    } else {
+      detachTagNameLabel()
     }
 
     // 2. Empty Placeholders
@@ -956,6 +1045,14 @@ export const useEditorStore = defineStore('editor', () => {
     }
   })
 
+  // ── Ouve mutações do ManipulationEngine → notifica Vue via astMutationKey ──
+  // ManipulationEngine opera sobre o AST bruto (markRaw). Esses hooks são
+  // o único canal de sinalização de mudança para o sistema reativo do Vue.
+  editorHooks.on('node:afterInsert',   notifyAstMutation)
+  editorHooks.on('node:afterRemove',   notifyAstMutation)
+  editorHooks.on('node:afterMove',     notifyAstMutation)
+  editorHooks.on('node:afterAttribute', notifyAstMutation)
+
   return {
     triggerInlineEdit,
     htmlEditor,
@@ -966,6 +1063,10 @@ export const useEditorStore = defineStore('editor', () => {
     quickAttributesOpen,
     openCodeEditor,
     ctx,
+    ast,
+    astMutationKey,
+    notifyAstMutation,
+    openPath,
     selectNode,
     selectedNode,
     selectedNodeId,

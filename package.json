@@ -15,7 +15,8 @@
     "build:bridge": "vite build --config vite.bridge.config.ts",
     "build:all": "npm run build && npm run build:bridge",
     "type-check": "vue-tsc --build",
-    "format": "prettier --write --experimental-cli src/"
+    "format": "prettier --write --experimental-cli src/",
+    "gen:inherited": "node scripts/gen-inherited-properties.mjs"
   },
   "dependencies": {
     "@codemirror/lang-css": "^6.3.1",
@@ -40,6 +41,7 @@
     "@vue/tsconfig": "^0.8.1",
     "autoprefixer": "^10.4.23",
     "jsdom": "^27.2.0",
+    "mdn-data": "^2.12.2",
     "npm-run-all2": "^8.0.4",
     "postcss": "^8.5.6",
     "prettier": "^3.6.2",

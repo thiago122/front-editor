@@ -1,6 +1,5 @@
 <template>
   <div class="decl" @keydown="ac.onKeydown($event)">
-
     <input
       v-if="editable"
       type="checkbox"
@@ -28,7 +27,7 @@
 
     <span class="decl__colon">:</span>
 
-    <div class="decl__value-wrap" style="position: relative;" :title="variableValueTooltip">
+    <div class="decl__value-wrap" style="position: relative" :title="variableValueTooltip">
       <!-- Value -->
       <input
         ref="valueInput"
@@ -46,11 +45,22 @@
         @keydown.escape.prevent="onEscapeValue"
       />
       <!-- Token Link -->
-      <button 
-        v-if="hasVariable && editingValue === null" 
+      <button
+        v-if="hasVariable && editingValue === null"
         @click.stop="openVariablesPanel"
         title="Abrir Design Tokens"
-        style="position: absolute; right: 2px; top: 50%; transform: translateY(-50%); cursor: pointer; background: transparent; border: none; font-size: 10px; opacity: 0.6; padding: 2px;"
+        style="
+          position: absolute;
+          right: 2px;
+          top: 50%;
+          transform: translateY(-50%);
+          cursor: pointer;
+          background: transparent;
+          border: none;
+          font-size: 10px;
+          opacity: 0.6;
+          padding: 2px;
+        "
         onmouseover="this.style.opacity=1"
         onmouseout="this.style.opacity=0.6"
       >
@@ -58,7 +68,9 @@
       </button>
     </div>
 
-    <button v-if="editable" @click.stop="deleteDeclaration(rule, decl)" class="decl__delete">×</button>
+    <button v-if="editable" @click.stop="deleteDeclaration(rule, decl)" class="decl__delete">
+      ×
+    </button>
 
     <!-- Autocomplete dropdown (prop) -->
     <CssAutocompleteDropdown :ac="ac" :anchor="propInput" v-if="acTarget === 'prop'" />
@@ -69,7 +81,11 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { toggleDeclaration, updateDeclaration, deleteDeclaration } from '@/editor/css/actions/cssDeclarationActions'
+import {
+  toggleDeclaration,
+  updateDeclaration,
+  deleteDeclaration,
+} from '@/editor/css/actions/cssDeclarationActions'
 import { useCssAutocomplete } from '@/composables/useCssAutocomplete'
 import { useEditorStore } from '@/stores/EditorStore'
 import { useStyleStore } from '@/stores/StyleStore'
@@ -77,7 +93,7 @@ import CssAutocompleteDropdown from '@/components/CssAutocompleteDropdown.vue'
 
 const emit = defineEmits([
   'request-new-decl', // emitido quando Enter no value da última declaração
-  'remove-if-empty',  // emitido quando Escape com prop+value vazios (declaração descartada)
+  'remove-if-empty', // emitido quando Escape com prop+value vazios (declaração descartada)
 ])
 
 const props = defineProps({
@@ -86,10 +102,10 @@ const props = defineProps({
   editable: { type: Boolean, default: false },
 })
 
-const ac         = useCssAutocomplete()
-const propInput  = ref(null)
+const ac = useCssAutocomplete()
+const propInput = ref(null)
 const valueInput = ref(null)
-const acTarget   = ref(null)  // 'prop' | 'value' | null — qual input está com dropdown
+const acTarget = ref(null) // 'prop' | 'value' | null — qual input está com dropdown
 
 // ── Numeric scrubbing (Up/Down sobre número) ─────────────────────────────
 // Encontra o número mais próximo do cursor e ajusta pelo delta.
@@ -100,26 +116,26 @@ function nudgeNumberAtCursor(str, cursorPos, delta) {
   let match
   while ((match = numberRegex.exec(str)) !== null) {
     const start = match.index
-    const end   = start + match[0].length
+    const end = start + match[0].length
     // Cursor dentro ou imediatamente adjacente ao número
     if (cursorPos >= start && cursorPos <= end) {
-      const original  = match[0]
-      const newVal    = parseFloat(original) + delta
+      const original = match[0]
+      const newVal = parseFloat(original) + delta
 
       // Preserva casas decimais: max entre o original e o delta
-      const origDec   = (original.split('.')[1] ?? '').length
-      const deltaDec  = (String(Math.abs(delta)).split('.')[1] ?? '').length
+      const origDec = (original.split('.')[1] ?? '').length
+      const deltaDec = (String(Math.abs(delta)).split('.')[1] ?? '').length
       const precision = Math.max(origDec, deltaDec)
-      const newStr    = precision > 0 ? newVal.toFixed(precision) : String(Math.round(newVal))
+      const newStr = precision > 0 ? newVal.toFixed(precision) : String(Math.round(newVal))
 
       return {
-        newValue:       str.slice(0, start) + newStr + str.slice(end),
+        newValue: str.slice(0, start) + newStr + str.slice(end),
         selectionStart: start,
-        selectionEnd:   start + newStr.length,
+        selectionEnd: start + newStr.length,
       }
     }
   }
-  return null  // nenhum número no cursor → comportamento padrão
+  return null // nenhum número no cursor → comportamento padrão
 }
 
 function onValueArrow(e) {
@@ -128,14 +144,14 @@ function onValueArrow(e) {
   // Se o autocomplete está navegando, deixa ele tratar
   if (ac.isActive.value) return
 
-  const direction   = e.key === 'ArrowUp' ? 1 : -1
-  const multiplier  = e.shiftKey ? 10 : e.altKey ? 0.1 : 1
-  const delta       = direction * multiplier
+  const direction = e.key === 'ArrowUp' ? 1 : -1
+  const multiplier = e.shiftKey ? 10 : e.altKey ? 0.1 : 1
+  const delta = direction * multiplier
 
-  const input     = e.target
-  const rawValue  = editingValue.value ?? input.value
-  const result    = nudgeNumberAtCursor(rawValue, input.selectionStart, delta)
-  if (!result) return  // sem número no cursor → não interfere
+  const input = e.target
+  const rawValue = editingValue.value ?? input.value
+  const result = nudgeNumberAtCursor(rawValue, input.selectionStart, delta)
+  if (!result) return // sem número no cursor → não interfere
 
   e.preventDefault()
 
@@ -161,7 +177,9 @@ const editingValue = ref(null)
 const displayValue = computed(() =>
   editingValue.value !== null
     ? editingValue.value
-    : (props.decl.important ? props.decl.value + ' !important' : props.decl.value)
+    : props.decl.important
+      ? props.decl.value + ' !important'
+      : props.decl.value,
 )
 
 const hasVariable = computed(() => {
@@ -170,22 +188,19 @@ const hasVariable = computed(() => {
 
 const variableValueTooltip = computed(() => {
   if (!hasVariable.value) return ''
-  
+
   const match = props.decl.value.match(/var\((--[^)]+)\)/)
   if (!match) return ''
-  
+
   const varName = match[1]
   const styleStore = useStyleStore()
-  const allVars = [
-    ...(styleStore.localVariables || []),
-    ...(styleStore.globalVariables || [])
-  ]
-  
-  const found = allVars.find(v => v.name === varName)
+  const allVars = [...(styleStore.localVariables || []), ...(styleStore.globalVariables || [])]
+
+  const found = allVars.find((v) => v.name === varName)
   if (found) {
     return `Variável: ${varName}\nValor: ${found.value}`
   }
-  
+
   return `Variável: ${varName} (não encontrada/definida)`
 })
 
@@ -200,7 +215,7 @@ function onPropFocus(e) {
   if (!props.editable) return
   e.target.select()
   acTarget.value = 'prop'
-  ac.openProp(propInput.value, e.target.value, accepted => {
+  ac.openProp(propInput.value, e.target.value, (accepted) => {
     updateDeclaration(props.rule, props.decl, 'prop', accepted)
     // Após aceitar a prop, foca o value
     setTimeout(() => valueInput.value?.focus(), 0)
@@ -213,7 +228,7 @@ function onPropInput(e) {
   acTarget.value = 'prop'
   ac.updateQuery(e.target.value)
   if (!ac.isActive.value) {
-    ac.openProp(propInput.value, e.target.value, accepted => {
+    ac.openProp(propInput.value, e.target.value, (accepted) => {
       updateDeclaration(props.rule, props.decl, 'prop', accepted)
       setTimeout(() => valueInput.value?.focus(), 0)
     })
@@ -221,7 +236,7 @@ function onPropInput(e) {
 }
 
 function onPropBlur(e) {
-  const typed = e.target.value  // captura AGORA — dentro do setTimeout Vue pode ter re-renderizado e revertido el.value
+  const typed = e.target.value // captura AGORA — dentro do setTimeout Vue pode ter re-renderizado e revertido el.value
   setTimeout(() => {
     ac.close()
     acTarget.value = null
@@ -244,9 +259,11 @@ function onValueFocus(e) {
   e.target.select()
   // rAF extra de segurança para o caso de algum re-render síncrono ainda pendente
   const el = e.target
-  requestAnimationFrame(() => { el.select() })
+  requestAnimationFrame(() => {
+    el.select()
+  })
   acTarget.value = 'value'
-  ac.openValue(valueInput.value, props.decl.prop, e.target.value, accepted => {
+  ac.openValue(valueInput.value, props.decl.prop, e.target.value, (accepted) => {
     editingValue.value = null
     updateDeclaration(props.rule, props.decl, 'value', accepted)
   })
@@ -254,11 +271,11 @@ function onValueFocus(e) {
 
 function onValueInput(e) {
   if (!props.editable) return
-  editingValue.value = e.target.value  // mantém em sincronia com o que o usuário digita
+  editingValue.value = e.target.value // mantém em sincronia com o que o usuário digita
   acTarget.value = 'value'
   ac.updateQuery(e.target.value)
   if (!ac.isActive.value) {
-    ac.openValue(valueInput.value, props.decl.prop, e.target.value, accepted => {
+    ac.openValue(valueInput.value, props.decl.prop, e.target.value, (accepted) => {
       editingValue.value = null
       updateDeclaration(props.rule, props.decl, 'value', accepted)
     })
@@ -270,7 +287,7 @@ function onValueBlur(e) {
   setTimeout(() => {
     ac.close()
     acTarget.value = null
-    editingValue.value = null  // libera o anchor — Vue volta a usar decl.value
+    editingValue.value = null // libera o anchor — Vue volta a usar decl.value
     // Se ainda é placeholder intocado e o foco foi para FORA da declaração → descarta
     if (isDeclEmpty() && !propInput.value?.matches(':focus')) {
       emit('remove-if-empty')
@@ -292,7 +309,7 @@ function onFocusNextDecl(e) {
   // Cede controle ao autocomplete se: item selecionado OU único item na lista (implicit accept)
   if (ac.isActive.value && (ac.activeIdx.value >= 0 || ac.suggestions.value.length === 1)) return
   const currentDecl = e.target.closest('.decl')
-  const nextDecl    = currentDecl?.nextElementSibling
+  const nextDecl = currentDecl?.nextElementSibling
   e.preventDefault()
   e.stopPropagation()
   e.target.blur()
@@ -314,9 +331,11 @@ function onFocusNextDecl(e) {
 function onTabProp(e) {
   if (e.shiftKey) {
     // Fecha autocomplete se aberto
-    if (ac.isActive.value) { ac.close() }
+    if (ac.isActive.value) {
+      ac.close()
+    }
     const currentDecl = e.target.closest('.decl')
-    const prevDecl    = currentDecl?.previousElementSibling
+    const prevDecl = currentDecl?.previousElementSibling
     e.preventDefault()
     e.stopPropagation()
     if (prevDecl?.classList.contains('decl')) {
@@ -349,7 +368,9 @@ function onTabProp(e) {
  */
 function onTabValue(e) {
   if (e.shiftKey) {
-    if (ac.isActive.value) { ac.close() }
+    if (ac.isActive.value) {
+      ac.close()
+    }
     e.preventDefault()
     e.stopPropagation()
     e.target.blur()
@@ -361,11 +382,11 @@ function onTabValue(e) {
 }
 
 // Valores padrão que CssDeclarationService.create coloca numa nova declaração
-const DEFAULT_PROP  = 'property'
+const DEFAULT_PROP = 'property'
 const DEFAULT_VALUE = 'value'
 
 function isDeclEmpty() {
-  const p = (props.decl.prop  ?? '').trim()
+  const p = (props.decl.prop ?? '').trim()
   const v = (props.decl.value ?? '').trim()
   return (!p || p === DEFAULT_PROP) && (!v || v === DEFAULT_VALUE)
 }
@@ -373,23 +394,32 @@ function isDeclEmpty() {
 function onEscapeProp(e) {
   if (!props.editable) return
   // Fecha autocomplete se estiver aberto
-  if (ac.isActive.value) { ac.close(); return }
+  if (ac.isActive.value) {
+    ac.close()
+    return
+  }
   e.target.blur()
   if (isDeclEmpty()) emit('remove-if-empty')
 }
 
 function onEscapeValue(e) {
   if (!props.editable) return
-  if (ac.isActive.value) { ac.close(); return }
+  if (ac.isActive.value) {
+    ac.close()
+    return
+  }
   e.target.blur()
   if (isDeclEmpty()) emit('remove-if-empty')
 }
 
 function fieldStateClasses() {
-  return [
-    props.editable ? 'is-editable' : 'is-readonly',
-    (props.decl.overridden || props.decl.disabled) ? 'is-inactive' : '',
-  ]
+  return {
+    'is-editable': props.editable,
+    'is-readonly': !props.editable,
+    // 'is-inactive': props.decl.overridden || props.decl.disabled,
+    'is-disabled': props.decl.disabled,
+    'is-overridden': props.decl.overridden,
+  }
 }
 </script>
 
@@ -413,8 +443,12 @@ function fieldStateClasses() {
   opacity: 0;
   transition: opacity 0.1s;
 }
-.rule:hover .decl__checkbox { opacity: 1; }
-.decl__checkbox.is-faded { opacity: 0.3; }
+.rule:hover .decl__checkbox {
+  opacity: 1;
+}
+.decl__checkbox.is-faded {
+  opacity: 0.3;
+}
 
 /* Prop name */
 .decl__prop {
@@ -425,10 +459,16 @@ function fieldStateClasses() {
   padding: 0;
   flex-shrink: 0;
 }
-.decl__prop.is-editable { cursor: text; }
+.decl__prop.is-editable {
+  cursor: text;
+}
 .decl__prop.is-editable:hover,
-.decl__prop.is-editable:focus { background: #f9fafb; }
-.decl__prop.is-readonly { pointer-events: none; }
+.decl__prop.is-editable:focus {
+  background: #f9fafb;
+}
+.decl__prop.is-readonly {
+  pointer-events: none;
+}
 
 /* Colon */
 .decl__colon {
@@ -453,14 +493,22 @@ function fieldStateClasses() {
   padding: 0;
   line-height: 1;
 }
-.decl__value.is-editable { cursor: text; }
+.decl__value.is-editable {
+  cursor: text;
+}
 .decl__value.is-editable:hover,
-.decl__value.is-editable:focus { background: #eff6ff; }
-.decl__value.is-readonly { pointer-events: none; }
+.decl__value.is-editable:focus {
+  background: #eff6ff;
+}
+.decl__value.is-readonly {
+  pointer-events: none;
+}
 
 /* Declaração inativa */
-.is-inactive {
+.is-disabled {
   opacity: 0.3;
+}
+.is-overridden {
   text-decoration: line-through;
 }
 
@@ -473,9 +521,15 @@ function fieldStateClasses() {
   border: none;
   cursor: pointer;
   padding: 0;
-  transition: color 0.15s, opacity 0.15s;
+  transition:
+    color 0.15s,
+    opacity 0.15s;
   margin-right: 4px;
 }
-.decl:hover .decl__delete { opacity: 1; }
-.decl__delete:hover { color: #ef4444; }
+.decl:hover .decl__delete {
+  opacity: 1;
+}
+.decl__delete:hover {
+  color: #ef4444;
+}
 </style>

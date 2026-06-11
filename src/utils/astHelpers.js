@@ -64,7 +64,6 @@ export function safeAppend(list, data, prepend = false, index = -1) {
   }
 }
 
-
 /**
  * Safely removes a node from a css-tree list or plain array.
  * Handles both the css-tree List (linked-list with .head/.next) and Array types.
@@ -178,7 +177,6 @@ export function extractFromLogicTree(nodes, targetId) {
   return null
 }
 
-
 /**
  * Marks declarations as `overridden` based on CSS specificity and !important.
  * Rules:
@@ -192,26 +190,26 @@ export function extractFromLogicTree(nodes, targetId) {
  * @param {Array} groups - Ordered array of rule groups (target first, then inherited)
  */
 export function calculateOverrides(groups) {
-  const flatRules = groups.flatMap(g => g.rules)
+  const flatRules = groups.flatMap((g) => g.rules)
 
   // Regras de pseudo-elementos (::selection, ::before, etc.) aplicam-se a contextos
   // completamente diferentes de regras normais — nunca competem entre si.
   // Ex: ::selection { color } NÃO sobrescreve body { color }.
   // Agrupamos por pseudoSubSection e calculamos os vencedores independentemente.
   const rulesByContext = new Map()
-  flatRules.forEach(rule => {
+  flatRules.forEach((rule) => {
     const ctx = rule.pseudoSubSection ?? '__default__'
     if (!rulesByContext.has(ctx)) rulesByContext.set(ctx, [])
     rulesByContext.get(ctx).push(rule)
   })
 
-  rulesByContext.forEach(rules => {
+  rulesByContext.forEach((rules) => {
     // Map<prop, { ruleUid, important }>
     const winners = new Map()
 
-    rules.forEach(rule => {
+    rules.forEach((rule) => {
       if (!rule.active) return
-      rule.declarations.forEach(decl => {
+      rule.declarations.forEach((decl) => {
         if (decl.disabled) return
         const curr = winners.get(decl.prop)
         if (!curr) {
@@ -226,8 +224,16 @@ export function calculateOverrides(groups) {
       })
     })
 
-    rules.forEach(rule => {
-      rule.declarations.forEach(decl => {
+    rules.forEach((rule) => {
+      // Regras inativas (ex: @media/@container que não casam o viewport atual)
+      // não participam da cascata corrente. São exibidas para permitir editar
+      // outros breakpoints, mas NUNCA marcadas como overridden — strike-through
+      // aqui enganaria o usuário (a regra não perdeu, ela simplesmente não aplica).
+      if (!rule.active) {
+        rule.declarations.forEach((decl) => { decl.overridden = false })
+        return
+      }
+      rule.declarations.forEach((decl) => {
         const winner = winners.get(decl.prop)
         decl.overridden = !!winner && winner.ruleUid !== rule.uid
       })

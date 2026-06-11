@@ -73,15 +73,42 @@ export const PSEUDO_ELEMENT_REGEX =
 // ============================================================================
 
 /**
- * CSS properties that are inherited by default
+ * CSS properties that are inherited by default.
+ *
+ * Fonte de verdade: mdn-data (specs W3C) — gerado por
+ * scripts/gen-inherited-properties.mjs (build-time). NÃO editar à mão:
+ * rode o script e cole o resultado. Critério: inherited=true, status
+ * standard/experimental, sem custom props.
+ *
+ * Lookup via INHERITED_PROPERTIES_SET (O(1)) — ver isInheritedProperty().
+ *
+ * 119 propriedades herdadas — gerado por scripts/gen-inherited-properties.mjs
  */
 export const INHERITED_PROPERTIES = [
-  'color', 'font', 'font-family', 'font-size', 'font-weight', 'font-style', 'font-variant',
-  'line-height', 'letter-spacing', 'text-align', 'text-indent', 'text-transform', 'white-space',
-  'word-spacing', 'text-shadow', 'list-style', 'list-style-type', 'list-style-position',
-  'list-style-image', 'visibility', 'cursor', 'quotes', 'border-collapse', 'border-spacing',
-  'caption-side', 'pointer-events', 'speak', 'direction', 'writing-mode'
+  'accent-color', 'border-collapse', 'border-spacing', 'caption-side', 'caret', 'caret-color',
+  'caret-shape', 'clip-rule', 'color', 'color-interpolation-filters', 'color-scheme', 'cursor',
+  'direction', 'dominant-baseline', 'empty-cells', 'fill', 'fill-opacity', 'fill-rule',
+  'font', 'font-family', 'font-feature-settings', 'font-kerning', 'font-language-override', 'font-optical-sizing',
+  'font-palette', 'font-size', 'font-size-adjust', 'font-stretch', 'font-style', 'font-synthesis',
+  'font-synthesis-position', 'font-synthesis-small-caps', 'font-synthesis-style', 'font-synthesis-weight', 'font-variant', 'font-variant-alternates',
+  'font-variant-caps', 'font-variant-east-asian', 'font-variant-emoji', 'font-variant-ligatures', 'font-variant-numeric', 'font-variant-position',
+  'font-variation-settings', 'font-weight', 'forced-color-adjust', 'hanging-punctuation', 'hyphenate-character', 'hyphenate-limit-chars',
+  'hyphens', 'image-orientation', 'image-rendering', 'image-resolution', 'interpolate-size', 'letter-spacing',
+  'line-break', 'line-height', 'line-height-step', 'list-style', 'list-style-image', 'list-style-position',
+  'list-style-type', 'marker', 'marker-end', 'marker-mid', 'marker-start', 'math-depth',
+  'math-shift', 'math-style', 'object-position', 'orphans', 'overflow-wrap', 'paint-order',
+  'pointer-events', 'print-color-adjust', 'quotes', 'ruby-align', 'ruby-merge', 'ruby-position',
+  'scrollbar-color', 'stroke', 'stroke-dasharray', 'stroke-dashoffset', 'stroke-linecap', 'stroke-linejoin',
+  'stroke-miterlimit', 'stroke-opacity', 'stroke-width', 'tab-size', 'text-align', 'text-align-last',
+  'text-anchor', 'text-combine-upright', 'text-decoration-skip', 'text-decoration-skip-ink', 'text-emphasis', 'text-emphasis-color',
+  'text-emphasis-position', 'text-emphasis-style', 'text-indent', 'text-justify', 'text-orientation', 'text-rendering',
+  'text-shadow', 'text-size-adjust', 'text-spacing-trim', 'text-transform', 'text-underline-offset', 'text-underline-position',
+  'text-wrap', 'text-wrap-mode', 'text-wrap-style', 'visibility', 'white-space', 'white-space-collapse',
+  'widows', 'word-break', 'word-spacing', 'word-wrap', 'writing-mode',
 ]
+
+/** Set para lookup O(1) — usado por isInheritedProperty(). */
+export const INHERITED_PROPERTIES_SET = new Set(INHERITED_PROPERTIES)
 
 
 // ============================================================================

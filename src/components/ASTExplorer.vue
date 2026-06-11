@@ -1,7 +1,7 @@
 <script setup>
 // ASTExplorer.vue
 
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import ASTNode from './ASTNode.vue'
 import CssContextMenu from './CssContextMenu.vue'
 import CreateComponentModal from './CreateComponentModal.vue'
@@ -181,21 +181,10 @@ async function confirmCreateComponent(name) {
 const props = defineProps({
   ast: Object,
   selectedNodeId: String,
-})
-
-function findPath(node, targetId, path = []) {
-  if (!node) return null
-  if (node.nodeId === targetId) return [...path, node.nodeId]
-  for (const child of node.children || []) {
-    const result = findPath(child, targetId, [...path, node.nodeId])
-    if (result) return result
-  }
-  return null
-}
-
-const openPath = computed(() => {
-  if (!props.selectedNodeId) return []
-  return findPath(props.ast, props.selectedNodeId) || []
+  openPath: {
+    type: Array,
+    default: () => [],
+  },
 })
 </script>
 

@@ -541,6 +541,8 @@ export class ManipulationEngine {
       type: 'setAttribute',
       args: [nodeId, name, oldValue ?? null],
     })
+
+    editorHooks.emit('node:afterAttribute', { nodeId, name, value: undefined, oldValue })
   }
 
   /**

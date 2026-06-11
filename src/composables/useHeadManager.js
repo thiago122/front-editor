@@ -97,6 +97,9 @@ export function useHeadManager() {
           children: [],
         }
       })
+
+    // Sinaliza para o Vue que o AST mudou (ctx é markRaw, então Vue não detecta sozinho)
+    editorStore.notifyAstMutation()
   }
 
   // ── CRUD ─────────────────────────────────────────────────────────────────────

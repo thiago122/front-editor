@@ -25,14 +25,14 @@ function getNodeZone(ast, nodeId) {
 
 // ── Estado reativo público ─────────────────────────────────────────────────────
 export const explorerDragState = {
-  active:    ref(false),
-  nodeId:    ref(null),     // nodeId do nó sendo arrastado
-  indicator: ref(null),     // { parentId, siblingId, position, lineY, lineX, lineW }
+  active: ref(false),
+  nodeId: ref(null), // nodeId do nó sendo arrastado
+  indicator: ref(null), // { parentId, siblingId, position, lineY, lineX, lineW }
 }
 
 // ── Estado interno ─────────────────────────────────────────────────────────────
-let _startX      = 0
-let _startY      = 0
+let _startX = 0
+let _startY = 0
 let _dragStarted = false
 const DRAG_THRESHOLD = 5 // px mínimos antes de ativar drag
 
@@ -40,8 +40,20 @@ const DRAG_THRESHOLD = 5 // px mínimos antes de ativar drag
 
 /** Elementos void que não podem ter filhos */
 const VOID_ELEMENTS = new Set([
-  'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
-  'link', 'meta', 'param', 'source', 'track', 'wbr',
+  'area',
+  'base',
+  'br',
+  'col',
+  'embed',
+  'hr',
+  'img',
+  'input',
+  'link',
+  'meta',
+  'param',
+  'source',
+  'track',
+  'wbr',
 ])
 
 /**
@@ -86,24 +98,25 @@ function getDropIndicator(clientX, clientY) {
   const relY = rect.height > 0 ? (clientY - rect.top) / rect.height : 0.5
 
   // Descobre se o nó alvo é um container (pode receber filhos)
-  const targetTag = targetRow.closest('.ast-node')
-    ?.querySelector(':scope > [data-ast-node-id]')
-    ?.closest('.ast-node')
-    ?.dataset.tag
-    ?? targetRow.textContent?.match(/^\s*(\w+)/)?.[1]?.toLowerCase()
-    ?? ''
+  const targetTag =
+    targetRow
+      .closest('.ast-node')
+      ?.querySelector(':scope > [data-ast-node-id]')
+      ?.closest('.ast-node')?.dataset.tag ??
+    targetRow.textContent?.match(/^\s*(\w+)/)?.[1]?.toLowerCase() ??
+    ''
 
   // Lê o tag do próprio targetRow para saber se é void
   // (o data-ast-node-id é o nodeId, o tag está no conteúdo da row — mas é melhor
   //  usar um data-attribute; por ora usamos heurística: se tem children wrapper visível
   //  OU não é void)
-  const astNodeDiv    = targetRow.closest('.ast-node')
-  const tagName       = (targetRow.dataset.tag ?? '').toLowerCase()
+  const astNodeDiv = targetRow.closest('.ast-node')
+  const tagName = (targetRow.dataset.tag ?? '').toLowerCase()
   const canHaveChildren = !VOID_ELEMENTS.has(tagName) && tagName !== ''
 
   // ── Calcular posição com base nas zonas ─────────────────────────────────
   const parentAstNode = astNodeDiv?.parentElement?.closest('.ast-node')
-  const parentRow     = parentAstNode?.querySelector(':scope > [data-ast-node-id]')
+  const parentRow = parentAstNode?.querySelector(':scope > [data-ast-node-id]')
 
   if (canHaveChildren) {
     // 3 zonas: top 25% → before | middle 50% → inside | bottom 25% → after
@@ -120,7 +133,7 @@ function getDropIndicator(clientX, clientY) {
 
   // Void ou texto → 2 zonas clássicas (50/50)
   if (parentRow) {
-    const position = relY < 0.50 ? 'before' : 'after'
+    const position = relY < 0.5 ? 'before' : 'after'
     return buildVisualIndicator(targetRow, parentRow, targetNodeId, position)
   }
 
@@ -153,7 +166,7 @@ function buildVisualIndicator(siblingRow, parentRow, siblingId, position) {
 
   return {
     parentId,
-    siblingId,   // nodeId do irmão — usado para lookup no AST em onMouseUp
+    siblingId, // nodeId do irmão — usado para lookup no AST em onMouseUp
     position,
     lineY,
     lineX: parentRect.left,
@@ -164,8 +177,8 @@ function buildVisualIndicator(siblingRow, parentRow, siblingId, position) {
 // ── Handlers de mouse ──────────────────────────────────────────────────────────
 
 function reset() {
-  explorerDragState.active.value    = false
-  explorerDragState.nodeId.value    = null
+  explorerDragState.active.value = false
+  explorerDragState.nodeId.value = null
   explorerDragState.indicator.value = null
   _dragStarted = false
 }
@@ -185,8 +198,8 @@ function onMouseMove(e) {
 
 function onMouseUp() {
   document.removeEventListener('mousemove', onMouseMove)
-  document.removeEventListener('mouseup',   onMouseUp)
-  document.body.style.cursor     = ''
+  document.removeEventListener('mouseup', onMouseUp)
+  document.body.style.cursor = ''
   document.body.style.userSelect = ''
 
   if (_dragStarted && explorerDragState.indicator.value) {
@@ -200,14 +213,16 @@ function onMouseUp() {
 
     // 1. Tag restrita (script, style, head, body, etc.) → bloqueado
     if (draggedNode && DRAG_RESTRICTED_TAGS.has(draggedNode.tag?.toLowerCase())) {
-      reset(); return
+      reset()
+      return
     }
 
     // 2. Move cross-zone (head ↔ body) → bloqueado
     const sourceZone = getNodeZone(ast, dragNodeId)
     const targetZone = getNodeZone(ast, parentId)
     if (sourceZone !== targetZone) {
-      reset(); return
+      reset()
+      return
     }
     // ────────────────────────────────────────────────────────────────────
 
@@ -245,9 +260,9 @@ function startDrag(nodeId, event) {
   explorerDragState.nodeId.value = nodeId
 
   document.addEventListener('mousemove', onMouseMove)
-  document.addEventListener('mouseup',   onMouseUp)
+  document.addEventListener('mouseup', onMouseUp)
 
-  document.body.style.cursor     = 'grabbing'
+  document.body.style.cursor = 'grabbing'
   document.body.style.userSelect = 'none'
 }
 

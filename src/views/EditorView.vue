@@ -747,7 +747,7 @@ watch(
           :style="{ width: layerWidth + 'px', minWidth: '160px', maxWidth: '520px' }"
           style2="position: relative; z-index: var(--z-panel)"
         >
-          <ASTExplorer :ast="EditorStore.ctx.ast" :selectedNodeId="EditorStore.selectedNodeId" />
+          <ASTExplorer :ast="EditorStore.ast" :selectedNodeId="EditorStore.selectedNodeId" :openPath="EditorStore.openPath" />
         </AsidePanel>
         <!-- Handle de resize: col-layer -->
         <div

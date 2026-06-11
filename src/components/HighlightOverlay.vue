@@ -39,7 +39,9 @@ function scheduleLayout() {
   })
 }
 
-function onLayout() { scheduleLayout() }
+function onLayout() { 
+  scheduleLayout() 
+}
 
 function attachScrollListener(iframe) {
   try { iframeWin?.removeEventListener('scroll', onLayout) } catch { /* ignore */ }

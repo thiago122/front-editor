@@ -73,7 +73,7 @@
         </template>
 
         <!-- COMPUTED TAB -->
-        <ComputedTab v-else-if="activeTab === 'Computed'" />
+        <ComputedTab v-else-if="activeTab === 'Computed'" :active="activeTab === 'Computed'" />
       </div>
     </template>
 
@@ -244,21 +244,27 @@ const summaryClasses = computed(() => {
 
 // ── Refresh ───────────────────────────────────────────────────────────────────
 
+let refreshTimeout = null
 function refresh() {
-  console.log('[InspectorPanel] refresh() rodando. inspectorSource:', styleStore.inspectorSource, 'selectedRuleId:', styleStore.selectedRuleId)
-  styleStore.updateInspectorRules(
-    editorStore.selectedElement,
-    editorStore.viewport,
-    styleStore.selectedRuleId,
-  )
+  if (refreshTimeout) clearTimeout(refreshTimeout)
+  refreshTimeout = setTimeout(() => {
+    // console.log('[InspectorPanel] refresh() rodando. inspectorSource:', styleStore.inspectorSource, 'selectedRuleId:', styleStore.selectedRuleId)
+    styleStore.updateInspectorRules(
+      editorStore.selectedElement,
+      editorStore.viewport,
+      styleStore.selectedRuleId,
+    )
+  }, 10)
 }
 
-watch(() => editorStore.selectedElement, refresh)
-watch(() => styleStore.astMutationKey, refresh)
-watch(() => editorStore.viewport, refresh)
-watch(() => styleStore.activePseudoTab, refresh)
-watch(() => styleStore.inspectorSource, refresh)
-watch(() => styleStore.selectedRuleId, refresh)
+watch([
+  () => editorStore.selectedElement,
+  () => styleStore.astMutationKey,
+  () => editorStore.viewport,
+  () => styleStore.activePseudoTab,
+  () => styleStore.inspectorSource,
+  () => styleStore.selectedRuleId
+], refresh)
 
 // ── MutationObserver ──────────────────────────────────────────────────────────
 // Watches class/id/style on the selected element directly in the DOM.

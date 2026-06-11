@@ -11,21 +11,28 @@ import { useEditorStore } from '@/stores/EditorStore'
 
 // ── Estado reativo público ─────────────────────────────────────────────────────
 export const dragState = {
-  active:    ref(false),
-  nodeId:    ref(null),       // nodeId do nó sendo arrastado
-  indicator: ref(null),       // { parentId, index, lineY, lineX, lineW }
+  active: ref(false),
+  nodeId: ref(null), // nodeId do nó sendo arrastado
+  indicator: ref(null), // { parentId, index, lineY, lineX, lineW }
 }
 
 // ── Estado interno (módulo-level, não reativo) ─────────────────────────────────
-let _iframeRef   = null   // Ref<HTMLIFrameElement> — definida em setup()
-let _startX      = 0
-let _startY      = 0
+let _iframeRef = null // Ref<HTMLIFrameElement> — definida em setup()
+let _startX = 0
+let _startY = 0
 let _dragStarted = false
-const DRAG_THRESHOLD = 5  // px mínimos antes de ativar drag
+const DRAG_THRESHOLD = 5 // px mínimos antes de ativar drag
 
 // Tags que não podem ser pai de destino
 const REJECT_AS_PARENT = new Set([
-  'html', 'head', 'script', 'style', 'meta', 'link', 'title', 'base',
+  'html',
+  'head',
+  'script',
+  'style',
+  'meta',
+  'link',
+  'title',
+  'base',
 ])
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -66,15 +73,13 @@ function getDropTarget(clientX, clientY) {
   if (!el) return null
   if (el.dataset.nodeId === dragState.nodeId.value) return null
 
-  const tag       = el.tagName.toLowerCase()
-  const elRect    = el.getBoundingClientRect()
+  const tag = el.tagName.toLowerCase()
+  const elRect = el.getBoundingClientRect()
   const iframeRect = iframe.getBoundingClientRect()
-  const parentEl  = el.parentElement?.closest('[data-node-id]')
+  const parentEl = el.parentElement?.closest('[data-node-id]')
 
   // Posição relativa do mouse dentro do elemento (0 = topo, 1 = base)
-  const relY = elRect.height > 0
-    ? (clientY - iframeRect.top - elRect.top) / elRect.height
-    : 0.5
+  const relY = elRect.height > 0 ? (clientY - iframeRect.top - elRect.top) / elRect.height : 0.5
 
   if (relY < 0.25 && parentEl) {
     return buildIndicator(el, parentEl, 'before', iframeRect)
@@ -95,28 +100,28 @@ function buildIndicator(siblingEl, parentEl, position, iframeRect) {
   if (!parentNodeId) return null
 
   let index = 0
-  let lineY  = 0
-  let lineX  = 0
-  let lineW  = 0
+  let lineY = 0
+  let lineX = 0
+  let lineW = 0
 
   // getBoundingClientRect() é relativo ao viewport do iframe.
   // Somamos iframeRect para obter coords no viewport principal.
   const parentRect = parentEl.getBoundingClientRect()
 
   if (position === 'inside') {
-    const children  = [...parentEl.children].filter(c => c.dataset?.nodeId)
-    index           = children.length
+    const children = [...parentEl.children].filter((c) => c.dataset?.nodeId)
+    index = children.length
     const lastChild = children[children.length - 1]
-    const refRect   = lastChild?.getBoundingClientRect()
-    lineY = iframeRect.top  + (refRect ? refRect.bottom : parentRect.top + 4)
+    const refRect = lastChild?.getBoundingClientRect()
+    lineY = iframeRect.top + (refRect ? refRect.bottom : parentRect.top + 4)
     lineX = iframeRect.left + parentRect.left
     lineW = parentRect.width
   } else {
-    const siblings = [...parentEl.children].filter(c => c.dataset?.nodeId)
-    const sibIdx   = siblings.indexOf(siblingEl)
-    index          = position === 'before' ? Math.max(0, sibIdx) : sibIdx + 1
-    const sbRect   = siblingEl.getBoundingClientRect()
-    lineY = iframeRect.top  + (position === 'before' ? sbRect.top : sbRect.bottom)
+    const siblings = [...parentEl.children].filter((c) => c.dataset?.nodeId)
+    const sibIdx = siblings.indexOf(siblingEl)
+    index = position === 'before' ? Math.max(0, sibIdx) : sibIdx + 1
+    const sbRect = siblingEl.getBoundingClientRect()
+    lineY = iframeRect.top + (position === 'before' ? sbRect.top : sbRect.bottom)
     lineX = iframeRect.left + parentRect.left
     lineW = parentRect.width
   }
@@ -141,22 +146,18 @@ function onMouseMove(e) {
 
 function onMouseUp() {
   document.removeEventListener('mousemove', onMouseMove)
-  document.removeEventListener('mouseup',   onMouseUp)
-  document.body.style.cursor     = ''
+  document.removeEventListener('mouseup', onMouseUp)
+  document.body.style.cursor = ''
   document.body.style.userSelect = ''
 
   if (_dragStarted && dragState.indicator.value) {
     const EditorStore = useEditorStore()
     const { parentId, index } = dragState.indicator.value
-    EditorStore.manipulation.moveNodeToParent(
-      dragState.nodeId.value,
-      parentId,
-      index,
-    )
+    EditorStore.manipulation.moveNodeToParent(dragState.nodeId.value, parentId, index)
   }
 
-  dragState.active.value    = false
-  dragState.nodeId.value    = null
+  dragState.active.value = false
+  dragState.nodeId.value = null
   dragState.indicator.value = null
   _dragStarted = false
 }
@@ -183,9 +184,9 @@ function startDrag(nodeId, event) {
   dragState.nodeId.value = nodeId
 
   document.addEventListener('mousemove', onMouseMove)
-  document.addEventListener('mouseup',   onMouseUp)
+  document.addEventListener('mouseup', onMouseUp)
 
-  document.body.style.cursor     = 'grabbing'
+  document.body.style.cursor = 'grabbing'
   document.body.style.userSelect = 'none'
 }
 

@@ -40,8 +40,24 @@ function updateComputedProperties() {
   computedProperties.value = props.sort((a, b) => a.name.localeCompare(b.name))
 }
 
-// Watch for element changes
-watch(() => store.selectedElement, () => {
-  updateComputedProperties()
-}, { immediate: true })
+// Watch for element changes and active tab changes
+const props = defineProps({
+  active: {
+    type: Boolean,
+    default: false,
+  },
+})
+
+// Watch for element and active tab state
+watch(
+  [() => store.selectedElement, () => props.active],
+  ([newEl, isActive]) => {
+    if (isActive && newEl) {
+      updateComputedProperties()
+    } else if (!newEl) {
+      computedProperties.value = []
+    }
+  },
+  { immediate: true }
+)
 </script>
