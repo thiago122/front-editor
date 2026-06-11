@@ -87,7 +87,7 @@ export class Pipeline {
     const nodes = Array.isArray(node) ? node : [node]
 
     nodes.forEach((n) => {
-      if (!n.nodeId) n.nodeId = generateNodeId()
+      if (!n.nodeId) n.nodeId = this.generateId()
       if (n.children) this._assignIds(n.children)
     })
   }

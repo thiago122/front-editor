@@ -192,22 +192,6 @@ export class ManipulationEngine {
   }
 
   /**
-   * Move um nó uma posição acima (-1) ou abaixo (+1) entre os irmãos.
-   * Chamado pelo MoveCommand via NodeDispatcher.
-   */
-  move(nodeId, direction) {
-    const ctx = this.getCtx()
-    const result = findParentAndIndex(ctx.ast, nodeId)
-    if (!result) return
-
-    const { parent, index } = result
-    const toIndex = index + direction
-
-    if (toIndex < 0 || toIndex >= parent.children.length) return
-    this.moveNodeAt(parent.nodeId, index, toIndex)
-  }
-
-  /**
    * Move um nó para outro pai — ou reordena dentro do mesmo pai.
    * Usa removeNodeAt + insertNodeAt para todas as situações, pois:
    *  - moveNodeAt dependia de _syncMoveDom, que falhava silenciosamente quando
@@ -470,9 +454,13 @@ export class ManipulationEngine {
     return false
   }
 
+  /**
+   * Move um nó uma posição acima (-1) ou abaixo (+1) entre os irmãos.
+   * Chamado pelo MoveCommand via NodeDispatcher.
+   */
   move(nodeId, direction) {
     const ctx = this.getCtx()
-    const { parent, index } = findParentAndIndex(ctx.ast, nodeId)
+    const { parent, index } = findParentAndIndex(ctx.ast, nodeId) || {}
 
     if (!parent || index === -1) return
 
