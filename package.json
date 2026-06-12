@@ -17,7 +17,8 @@
     "type-check": "vue-tsc --build",
     "lint": "eslint src/ scripts/",
     "format": "prettier --write --experimental-cli src/",
-    "gen:inherited": "node scripts/gen-inherited-properties.mjs"
+    "gen:inherited": "node scripts/gen-inherited-properties.mjs",
+    "gen:shorthands": "node scripts/gen-shorthand-map.mjs"
   },
   "dependencies": {
     "@codemirror/lang-css": "^6.3.1",

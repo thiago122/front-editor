@@ -2,6 +2,7 @@
  * AST Helper Functions
  * Reusable utilities for manipulating CSS Abstract Syntax Trees
  */
+import { SHORTHAND_LEAVES } from '@/editor/css/shared/cssConstants.js'
 
 /**
  * Safely appends (or inserts at a given index) data into various list types.
@@ -177,6 +178,11 @@ export function extractFromLogicTree(nodes, targetId) {
   return null
 }
 
+// Expande prop para suas longhands-folha; longhand pura compete por si mesma.
+function leavesOf(prop) {
+  return SHORTHAND_LEAVES[prop] ?? [prop]
+}
+
 /**
  * Marks declarations as `overridden` based on CSS specificity and !important.
  * Rules:
@@ -185,6 +191,9 @@ export function extractFromLogicTree(nodes, targetId) {
  *      specificity, as guaranteed by sortRulesBySpecificity) wins.
  *   3. Among non-important declarations, the first encountered wins.
  *   4. Disabled declarations never win and are never marked as winners.
+ *   5. Shorthands competem por longhand-FOLHA (SHORTHAND_LEAVES, gerado do
+ *      mdn-data): `margin` vencedor risca `margin-top` perdedor; um shorthand
+ *      perdedor só é riscado se TODAS as folhas dele perderem — igual Chrome.
  *
  * Mutates groups in place.
  * @param {Array} groups - Ordered array of rule groups (target first, then inherited)
@@ -204,23 +213,25 @@ export function calculateOverrides(groups) {
   })
 
   rulesByContext.forEach((rules) => {
-    // Map<prop, { ruleUid, important }>
+    // Map<longhand-folha, { ruleUid, important }>
     const winners = new Map()
 
     rules.forEach((rule) => {
       if (!rule.active) return
       rule.declarations.forEach((decl) => {
         if (decl.disabled) return
-        const curr = winners.get(decl.prop)
-        if (!curr) {
-          // Primeira ocorrência sempre vence inicialmente
-          winners.set(decl.prop, { ruleUid: rule.uid, important: decl.important })
-        } else if (decl.important && !curr.important) {
-          // !important bate qualquer não-important independente de especificidade
-          winners.set(decl.prop, { ruleUid: rule.uid, important: true })
+        for (const leaf of leavesOf(decl.prop)) {
+          const curr = winners.get(leaf)
+          if (!curr) {
+            // Primeira ocorrência sempre vence inicialmente
+            winners.set(leaf, { ruleUid: rule.uid, important: decl.important })
+          } else if (decl.important && !curr.important) {
+            // !important bate qualquer não-important independente de especificidade
+            winners.set(leaf, { ruleUid: rule.uid, important: true })
+          }
+          // Dois !important: o primeiro (maior especificidade) já venceu.
+          // Dois não-important: o primeiro já venceu.
         }
-        // Dois !important: o primeiro (maior especificidade) já venceu.
-        // Dois não-important: o primeiro já venceu.
       })
     })
 
@@ -234,8 +245,11 @@ export function calculateOverrides(groups) {
         return
       }
       rule.declarations.forEach((decl) => {
-        const winner = winners.get(decl.prop)
-        decl.overridden = !!winner && winner.ruleUid !== rule.uid
+        // Riscada só se TODAS as folhas foram vencidas por outra regra.
+        decl.overridden = leavesOf(decl.prop).every((leaf) => {
+          const winner = winners.get(leaf)
+          return !!winner && winner.ruleUid !== rule.uid
+        })
       })
     })
   })

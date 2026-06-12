@@ -80,3 +80,62 @@ describe('calculateOverrides', () => {
     expect(r1.declarations.every((d) => d.overridden === false)).toBe(true)
   })
 })
+
+describe('calculateOverrides — shorthand vs longhand (Chrome DevTools)', () => {
+  it('shorthand vencedor risca a longhand perdedora', () => {
+    const winner = rule([{ prop: 'margin' }])
+    const loser = rule([{ prop: 'margin-top' }])
+    calculateOverrides(groups(winner, loser))
+    expect(winner.declarations[0].overridden).toBe(false)
+    expect(loser.declarations[0].overridden).toBe(true)
+  })
+
+  it('longhand vencedora NÃO risca o shorthand (outras folhas dele ainda valem)', () => {
+    const winner = rule([{ prop: 'margin-top' }])
+    const loser = rule([{ prop: 'margin' }])
+    calculateOverrides(groups(winner, loser))
+    expect(winner.declarations[0].overridden).toBe(false)
+    // margin perdeu só o margin-top; right/bottom/left continuam dele
+    expect(loser.declarations[0].overridden).toBe(false)
+  })
+
+  it('shorthand é riscado quando TODAS as folhas perdem', () => {
+    const winner = rule([
+      { prop: 'margin-top' }, { prop: 'margin-right' },
+      { prop: 'margin-bottom' }, { prop: 'margin-left' },
+    ])
+    const loser = rule([{ prop: 'margin' }])
+    calculateOverrides(groups(winner, loser))
+    expect(loser.declarations[0].overridden).toBe(true)
+  })
+
+  it('expansão recursiva: border risca border-top-width', () => {
+    const winner = rule([{ prop: 'border' }])
+    const loser = rule([{ prop: 'border-top-width' }])
+    calculateOverrides(groups(winner, loser))
+    expect(loser.declarations[0].overridden).toBe(true)
+  })
+
+  it('shorthands aninhados competem entre si (border vs border-width)', () => {
+    const winner = rule([{ prop: 'border' }])
+    const loser = rule([{ prop: 'border-width' }])
+    calculateOverrides(groups(winner, loser))
+    // border cobre todas as folhas de border-width
+    expect(loser.declarations[0].overridden).toBe(true)
+  })
+
+  it('longhand !important vence shorthand anterior (só naquela folha)', () => {
+    const sh = rule([{ prop: 'margin' }])
+    const lh = rule([{ prop: 'margin-top', important: true }])
+    calculateOverrides(groups(sh, lh))
+    expect(lh.declarations[0].overridden).toBe(false)
+    expect(sh.declarations[0].overridden).toBe(false) // perdeu só 1 de 4 folhas
+  })
+
+  it('propriedades sem relação shorthand seguem como antes', () => {
+    const r1 = rule([{ prop: 'display' }])
+    const r2 = rule([{ prop: 'display' }])
+    calculateOverrides(groups(r1, r2))
+    expect(r2.declarations[0].overridden).toBe(true)
+  })
+})
