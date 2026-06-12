@@ -7,10 +7,10 @@ import { usePixelPerfect } from '@/composables/usePixelPerfect'
 
 const {
   enabled, imageUrl, opacity, offsetX, offsetY,
-  positionType, interactive, opacityFraction, loadImage, center, clear,
+  positionType, interactive, loadImage, center, clear,
 } = usePixelPerfect()
 
-const props = defineProps({
+defineProps({
   containerEl: { type: Object, default: null },
 })
 

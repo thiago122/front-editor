@@ -3,9 +3,7 @@ import { defineStore } from 'pinia'
 import { CssAstService } from '@/editor/css/ast/CssAstService'
 import { CssLogicTreeService } from '@/editor/css/tree/CssLogicTreeService'
 import { calculateOverrides, findCssNode } from '@/utils/astHelpers'
-import { CssExportService } from '@/editor/css/export/CssExportService'
 import { useEditorStore } from './EditorStore'
-import { generateId } from '@/utils/ids.js'
 import { unifiedHistory } from '@/editor/history/UnifiedHistoryManager'
 
 // ─── Internal helper ──────────────────────────────────────────────────────────

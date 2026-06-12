@@ -126,21 +126,6 @@ async function handleRenameConfirm(newName) {
   }
 }
 
-async function handleTrashConfirm() {
-  if (!selectedDoc.value) return
-  trashLoading.value = true
-  try {
-    await ApiService.trashDocument(selectedDoc.value.path)
-    documents.value = await ApiService.listDocuments()
-    isTrashConfirmOpen.value = false
-    selectedDoc.value = null
-  } catch (e) {
-    alert('Erro ao excluir: ' + e.message)
-  } finally {
-    trashLoading.value = false
-  }
-}
-
 async function handleCreateFolderConfirm(name) {
   if (!name) return
   createFolderLoading.value = true

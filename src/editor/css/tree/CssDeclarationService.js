@@ -1,7 +1,6 @@
 import { toRaw } from 'vue'
 import { CssAstService } from '../ast/CssAstService.js'
 import { safeAppend, safeRemove } from '@/utils/astHelpers'
-import { findCssNode } from './_logicTreeHelpers.js'
 import { generateId } from '@/utils/ids.js'
 import { generate } from 'css-tree'
 

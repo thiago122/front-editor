@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import { ApiService } from '@/services/ApiService'
 import { useEditorStore } from './EditorStore'

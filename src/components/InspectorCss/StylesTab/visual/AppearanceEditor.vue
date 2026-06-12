@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, watch, computed } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useVisualSection } from '@/composables/useVisualSection'
 import VisualInput from '@/components/ui/VisualInput.vue'
 import VisualSelect from '@/components/ui/VisualSelect.vue'

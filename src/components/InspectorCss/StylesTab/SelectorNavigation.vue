@@ -38,7 +38,6 @@
 
 <script setup>
 import { computed } from 'vue'
-import { useEditorStore } from '@/stores/EditorStore'
 import { useStyleStore } from '@/stores/StyleStore'
 import { createRule } from '@/editor/css/actions/cssRuleActions'
 

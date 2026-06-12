@@ -1,5 +1,5 @@
 <script setup>
-import { computed, watch } from 'vue'
+import { watch } from 'vue'
 import { useVisualSection } from '@/composables/useVisualSection'
 import VisualInput from '@/components/ui/VisualInput.vue'
 import VisualSelect from '@/components/ui/VisualSelect.vue'
@@ -26,8 +26,6 @@ const zIndex   = useProp('z-index')
 
 const posOptions = ['static', 'relative', 'absolute', 'fixed', 'sticky']
 const units = ['px', 'rem', 'em', '%', 'vh', 'vw']
-
-const isStatic = computed(() => !position.raw.value || position.raw.value === 'static')
 
 defineExpose({ hasAnyValue })
 </script>

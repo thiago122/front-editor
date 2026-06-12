@@ -29,50 +29,7 @@ function attrsToString(attrs = {}) {
     .join(' ')
 }
 
-function astToHTML(node) {
-  if (!node) return ''
-  if (node.type === 'text') return node.value
-  if (node.type === 'comment') return ``
-
-  if (node.type === 'element') {
-    const tag = node.tag.toLowerCase()
-
-    // 1. Prepara os atributos (incluindo o ID de renderização)
-    const attrsData = { ...node.attrs, 'data-node-id': node.nodeId }
-    const attrsStr = attrsToString(attrsData)
-    const openingTag = `<${tag}${attrsStr ? ' ' + attrsStr : ''}>`
-
-    // 2. Lista oficial de elementos que não podem ter fechamento nem filhos
-    const voidElements = [
-      'area',
-      'base',
-      'br',
-      'col',
-      'embed',
-      'hr',
-      'img',
-      'input',
-      'link',
-      'meta',
-      'param',
-      'source',
-      'track',
-      'wbr',
-    ]
-
-    if (voidElements.includes(tag)) {
-      return openingTag // Retorna apenas <br ...>
-    }
-
-    // 3. Para elementos normais, processa filhos e fecha a tag
-    const children = (node.children || []).map(astToHTML).join('')
-    return `${openingTag}${children}</${tag}>`
-  }
-
-  return ''
-}
-
-export function htmlPlugin({ doctype = '<!DOCTYPE html>' } = {}) {
+export function htmlPlugin({ doctype: _doctype = '<!DOCTYPE html>' } = {}) {
   /**
    * DOM → AST
    */

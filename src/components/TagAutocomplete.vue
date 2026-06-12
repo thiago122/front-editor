@@ -13,7 +13,7 @@
 import { ref, computed, nextTick, onMounted } from 'vue'
 import { HTML_TAGS } from '@/editor/html/htmlTags'
 
-const props = defineProps({
+defineProps({
   /** Estilo de posicionamento (position:fixed calculado pelo pai) */
   style: { type: Object, default: () => ({}) },
 })

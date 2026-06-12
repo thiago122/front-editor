@@ -1,8 +1,7 @@
 <script setup>
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { useVisualSection } from '@/composables/useVisualSection'
 import VisualInput from '@/components/ui/VisualInput.vue'
-import VisualFieldset from '@/components/ui/VisualFieldset.vue'
 import VisualSectionHeader from '@/components/ui/VisualSectionHeader.vue'
 
 const props = defineProps({
@@ -25,10 +24,6 @@ const radiusTL = useProp('border-top-left-radius')
 const radiusTR = useProp('border-top-right-radius')
 const radiusBR = useProp('border-bottom-right-radius')
 const radiusBL = useProp('border-bottom-left-radius')
-
-const hasAnyRadiusValue = computed(() => 
-  RADIUS_PROPS.some(p => !!useProp(p).raw.value)
-)
 
 // ── UI State ──────────────────────────────────────────────────────────────────
 

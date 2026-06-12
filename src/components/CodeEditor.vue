@@ -12,10 +12,9 @@
  * verificar morphdom
  */
 
-import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick, toRaw } from 'vue'
+import { computed, ref, watch, onMounted, nextTick, toRaw } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
 import { useStyleStore } from '@/stores/StyleStore'
-import { getCleanNode } from '@/utils/ast'
 import { debounce } from 'lodash-es'
 // CodeMirror 6 imports
 import { EditorView, basicSetup } from 'codemirror'
@@ -184,7 +183,7 @@ watch(
     () => props.targetId,
     () => styleStore.cssLogicTree
   ], 
-  ([mode, targetId, tree]) => {
+  ([_mode, targetId, _tree]) => {
     if (!props.show) return
 
     if (editorContainer.value) {

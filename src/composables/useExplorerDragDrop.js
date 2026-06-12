@@ -97,15 +97,6 @@ function getDropIndicator(clientX, clientY) {
   const rect = targetRow.getBoundingClientRect()
   const relY = rect.height > 0 ? (clientY - rect.top) / rect.height : 0.5
 
-  // Descobre se o nó alvo é um container (pode receber filhos)
-  const targetTag =
-    targetRow
-      .closest('.ast-node')
-      ?.querySelector(':scope > [data-ast-node-id]')
-      ?.closest('.ast-node')?.dataset.tag ??
-    targetRow.textContent?.match(/^\s*(\w+)/)?.[1]?.toLowerCase() ??
-    ''
-
   // Lê o tag do próprio targetRow para saber se é void
   // (o data-ast-node-id é o nodeId, o tag está no conteúdo da row — mas é melhor
   //  usar um data-attribute; por ora usamos heurística: se tem children wrapper visível

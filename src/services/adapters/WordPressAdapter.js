@@ -71,7 +71,7 @@ export class WordPressAdapter extends BackendAdapter {
     throw new Error('[WordPressAdapter] listDocuments: não implementado')
   }
 
-  createDocument(docId) {
+  createDocument(_docId) {
     // TODO: POST /wp-json/visual-editor/v1/document
     throw new Error('[WordPressAdapter] createDocument: não implementado')
   }

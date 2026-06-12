@@ -131,7 +131,7 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   // manipulation engine
-  function initEngine(iframeDoc) {
+  function initEngine(_iframeDoc) {
     // Engine já inicializada no setup, agora usa getters dinâmicos.
     // Apenas garantimos que o histórico saiba da engine atual se necessário.
     // (O construtor da ManipulationEngine já faz history.setEngine(this))
@@ -253,7 +253,7 @@ export const useEditorStore = defineStore('editor', () => {
   function setPreviewBreakpoint(width, unit) {
     previewBreakpoint.value = { width, unit }
   }
-  function handleHover({ id, source }) {
+  function handleHover({ id, source: _source }) {
     hoveredNodeId.value = id
 
     // 1. Limpa o hover anterior em ambos os documentos

@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, onUnmounted } from 'vue'
 
-const props = defineProps({
+defineProps({
   isOpen: Boolean,
   title: String,
   message: String,

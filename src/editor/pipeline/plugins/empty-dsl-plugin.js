@@ -2,11 +2,11 @@ export function emptyDSLPlugin() {
   return {
     name: 'empty-dsl',
 
-    tokenize(ctx) {
+    tokenize(_ctx) {
       // futuro: detectar {{ }} ou comentários especiais
     },
 
-    transformAST(ctx) {
+    transformAST(_ctx) {
       // futuro: transformar AST
     },
   }

@@ -11,7 +11,6 @@ const EditorStore = useEditorStore()
 const { startDrag, explorerDragState } = useExplorerDragDrop()
 
 const isDragging    = computed(() => explorerDragState.nodeId.value === props.node.nodeId)
-const isComponent   = computed(() => props.node.attrs?.['data-component'])
 
 const isDragAllowed = computed(() =>
   props.node.type === 'element' &&
@@ -71,11 +70,6 @@ const closedManually = ref(false) // Override explícito: fecha mesmo se o nó e
  * COMPUTED FLAGS
  */
 const isSelected = computed(() => props.node.nodeId === props.selectedNodeId)
-
-const attributes = computed(() => {
-  if (props.node.type !== 'element' || !props.node.attrs) return []
-  return Object.entries(props.node.attrs).map(([name, value]) => ({ name, value }))
-})
 
 // Quick access to important attributes for display
 const idAttr = computed(() => props.node.attrs?.id)

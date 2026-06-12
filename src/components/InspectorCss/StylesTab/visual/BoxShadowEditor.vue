@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { useCssProperty } from '@/composables/useCssProperty'
 import VisualInput from '@/components/ui/VisualInput.vue'
 import VisualToggleGroup from '@/components/ui/VisualToggleGroup.vue'

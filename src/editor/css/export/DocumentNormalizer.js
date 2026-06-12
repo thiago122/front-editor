@@ -98,7 +98,7 @@ export class DocumentNormalizer {
    * @param {string} docPath    Caminho relativo do documento (ex: 'subpasta/index.html')
    * @returns {string}          HTML pronto para gravar em disco
    */
-  static prepareForSave(html, manifest, docPath) {
+  static prepareForSave(html, manifest, _docPath) {
     const parser = new DOMParser()
     const doc = parser.parseFromString(html, 'text/html')
     const head = doc.head

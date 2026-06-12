@@ -27,8 +27,6 @@ const EditorStore = useEditorStore()
 
 // ── Checks ────────────────────────────────────────────────────────────────────
 
-const isSelected = computed(() => EditorStore.selectedNodeId === props.nodeId)
-
 const parent = computed(() => EditorStore.getParent(props.nodeId))
 
 const isInsideLocked = computed(() => EditorStore.isNodeInsideLockedComponent(props.nodeId))

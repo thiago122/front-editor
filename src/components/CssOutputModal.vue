@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
 
-const props = defineProps({
+defineProps({
   isOpen: Boolean
 })
 

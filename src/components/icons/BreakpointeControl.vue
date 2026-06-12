@@ -83,7 +83,7 @@ import IconBreakpointLG from '@/components/icons/IconBreakpointLG.vue'
 import IconBreakpointXL from '@/components/icons/IconBreakpointXL.vue'
 import IconBreakpoint2XL from '@/components/icons/IconBreakpoint2XL.vue'
 
-const props = defineProps({
+defineProps({
   previewWidth: {
     type: Number,
     default: 1280,

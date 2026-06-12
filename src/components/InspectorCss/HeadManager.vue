@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
-import { useHeadManager, HEAD_TAGS } from '@/composables/useHeadManager'
+import { useHeadManager } from '@/composables/useHeadManager'
 
 const editorStore = useEditorStore()
 const {
@@ -11,7 +11,6 @@ const {
   removeAttribute,
   setTextContent,
   removeElement,
-  syncContext,
 } = useHeadManager()
 
 // ── Forçar reatividade quando o iframe muda ──────────────────────────────────

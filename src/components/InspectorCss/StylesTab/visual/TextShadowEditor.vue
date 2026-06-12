@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { useCssProperty } from '@/composables/useCssProperty'
 
 const props = defineProps({
@@ -43,7 +43,6 @@ function parseSingleShadow(raw) {
   let color = 'rgba(0,0,0,0.5)'
 
   // Extract color: try rgba/rgb/hsl/hex first at any position
-  const colorRx = /rgba?\([^)]+\)|hsla?\([^)]+\)|#[0-9a-fA-F]{3,8}|\b[a-z]+\b/gi
   const colorMatch = rest.match(/rgba?\([^)]+\)|hsla?\([^)]+\)|#[0-9a-fA-F]{3,8}/)
 
   if (colorMatch) {

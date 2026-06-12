@@ -81,7 +81,6 @@ import { ref, reactive, computed, watch } from 'vue'
 import { useVisualSection } from '@/composables/useVisualSection'
 import VisualInput from '@/components/ui/VisualInput.vue'
 import VisualSelect from '@/components/ui/VisualSelect.vue'
-import VisualFieldset from '@/components/ui/VisualFieldset.vue'
 import VisualSectionHeader from '@/components/ui/VisualSectionHeader.vue'
 import ColorVarInput from '@/components/ui/ColorVarInput.vue'
 
@@ -99,10 +98,6 @@ const BORDER_PROPS = [
 ]
 
 const { useProp } = useVisualSection(getRule, BORDER_PROPS)
-
-const hasAnyBorderValue = computed(() =>
-  BORDER_PROPS.some(p => !!useProp(p).raw.value)
-)
 
 const border       = useProp('border')
 const borderW      = useProp('border-width')
@@ -252,7 +247,6 @@ function toggleSideShorthand(side) {
 
 function setBorderField(field, value, unit) {
   if (isBorderShorthand.value) {
-    const w = field === 'w' ? fmtVal(value, unit || bdU.value) : border.raw.value ? parseBorderSh(border.raw.value).w + (parseBorderSh(border.raw.value).u) : ''
     const s = field === 's' ? value : bdS.value
     const c = field === 'c' ? value : bdC.value
     const wFmt = field === 'w' ? fmtVal(value, unit || bdU.value) : (bdW.value ? fmtVal(bdW.value, bdU.value) : null)

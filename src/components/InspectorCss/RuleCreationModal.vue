@@ -26,7 +26,7 @@
 <script setup>
 import RuleCreator from './RuleCreator.vue'
 
-const props = defineProps({
+defineProps({
   show: {
     type: Boolean,
     default: false

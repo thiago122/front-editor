@@ -3,7 +3,6 @@ import { watch } from 'vue'
 import { useVisualSection } from '@/composables/useVisualSection'
 import VisualSelect from '@/components/ui/VisualSelect.vue'
 import VisualInput from '@/components/ui/VisualInput.vue'
-import VisualToggleGroup from '@/components/ui/VisualToggleGroup.vue'
 
 const props = defineProps({
   ruleGetter: { type: Function, required: true }

@@ -204,7 +204,6 @@ const ac          = useCssAutocomplete()
 const emit = defineEmits(['close'])
 
 // ── UI state ──────────────────────────────────────────────────────────────────
-const showPanel   = ref(true)
 const mutationTick = ref(0)  // incrementado após cada mutação para forçar re-compute
 
 const addingClass   = ref(false)
@@ -214,8 +213,6 @@ const editingClass  = ref(null)   // nome da classe sendo renomeada
 const editClassValue = ref('')
 const editClassInput = ref(null)
 
-const addingId  = ref(false)
-const newIdValue = ref('')
 const editingId  = ref(false)
 const editIdValue = ref('')
 
@@ -276,12 +273,6 @@ const allAvailableClasses = computed(() => {
 
 /** Chama após qualquer mutação para reativar os computeds. */
 function notifyChange() { mutationTick.value++ }
-
-// ── Badges de resumo no header ─────────────────────────────────────────────────
-
-const classBadge = computed(() => classList.value[0] || null)
-const idBadge    = computed(() => currentId.value || null)
-const otherCount = computed(() => genericAttrs.value.length)
 
 // ── CSS matching (igual ao comportamento anterior) ─────────────────────────────
 
@@ -379,20 +370,6 @@ function confirmEditClass(oldCls) {
 }
 
 // ── CRUD — ID ──────────────────────────────────────────────────────────────────
-
-function startAddId() {
-  addingId.value = true
-  newIdValue.value = ''
-}
-
-function confirmAddId() {
-  const id = newIdValue.value.trim().replace(/^#/, '')
-  if (id && editorStore.selectedNodeId) {
-    editorStore.manipulation.setAttribute(editorStore.selectedNodeId, 'id', id)
-    notifyChange()
-  }
-  addingId.value = false
-}
 
 function startEditId() {
   editIdValue.value = currentId.value

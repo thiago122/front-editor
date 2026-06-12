@@ -1,11 +1,7 @@
 <script setup>
 import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
-import { NodeDispatcher } from '@/editor/dispatchers/NodeDispatcher'
 import NodeToolbar from '@/components/NodeToolbar.vue'
-import TagAutocomplete from '@/components/TagAutocomplete.vue'
-import { tagToHtml } from '@/editor/html/htmlTags'
-import { TEXT_EDITABLE_TAGS } from '@/editor/html/htmlConstants'
 
 const props = defineProps({
   mode: {
@@ -153,15 +149,6 @@ const rect = computed(() => {
     height: Math.min(elRect.height, maxH),
   }
 })
-
-function startTextEdit() {
-  const el = EditorStore.selectedElement
-  if (!el) return
-  const trigger = EditorStore.triggerInlineEdit
-  if (typeof trigger === 'function') {
-    trigger(el)
-  }
-}
 
 const selNodeId = computed(() => props.mode === 'selection' ? EditorStore.selectedNodeId : null)
 

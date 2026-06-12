@@ -125,7 +125,7 @@ function onFocus(e) {
   e.target.select()
 }
 
-function onBlur(e) {
+function onBlur(_e) {
   setTimeout(() => {
     ac.close()
   }, 120)

@@ -1,5 +1,4 @@
 import { generate } from 'css-tree'
-import { generateId } from '../../../utils/ids.js'
 import { CSS_LOCATIONS } from '../shared/cssConstants.js'
 import { getSpecificityFromAst } from '../shared/cssUtils.js'
 

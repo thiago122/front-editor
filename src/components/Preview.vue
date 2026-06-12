@@ -18,7 +18,7 @@ import { useEditorStore } from '@/stores/EditorStore'
 const EditorStore = useEditorStore()
 
 // props
-const props = defineProps({
+defineProps({
   html: {
     type: String,
     required: true,
@@ -27,15 +27,10 @@ const props = defineProps({
 
 // emits
 
-const emit = defineEmits(['text-selection'])
+defineEmits(['text-selection'])
 
 // refs
 const iframeRef = ref(null)
-
-//  helpers
-function getDoc() {
-  return iframeRef.value?.contentDocument
-}
 
 const boxModel      = useBoxModel(iframeRef)
 const inlineEdit    = useInlineEdit(iframeRef)

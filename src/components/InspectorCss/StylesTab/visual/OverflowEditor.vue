@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { useVisualSection } from '@/composables/useVisualSection'
 import VisualToggleGroup from '@/components/ui/VisualToggleGroup.vue'
 

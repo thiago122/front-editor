@@ -178,7 +178,7 @@ async function confirmCreateComponent(name) {
   }
 }
 
-const props = defineProps({
+defineProps({
   ast: Object,
   selectedNodeId: String,
   openPath: {

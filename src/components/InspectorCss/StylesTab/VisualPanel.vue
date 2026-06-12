@@ -87,8 +87,6 @@ function onResize({ width, height }) {
 
 // ── Sub-section Visibility ───────────────────────────────────────────────────
 const showDisplay     = ref(true)
-const showFlex        = ref(true)
-const showGrid        = ref(true)
 const showSizing      = ref(true)
 const showSpacing     = ref(true)
 const showPositioning = ref(true)
@@ -97,8 +95,6 @@ const showAdvanced    = ref(true)
 const showAppearance  = ref(true)
 
 const hasValueDisplay     = ref(false)
-const hasValueFlex        = ref(false)
-const hasValueGrid        = ref(false)
 const hasValueSizing      = ref(false)
 const hasValueSpacing     = ref(false)
 const hasValuePositioning = ref(false)
