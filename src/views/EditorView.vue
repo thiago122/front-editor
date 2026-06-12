@@ -1,7 +1,7 @@
 <script setup>
 // EditorView.vue
 
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 
 import { Pipeline } from '@/editor/pipeline/pipeline'
@@ -58,6 +58,8 @@ import { CssLogicTreeService } from '@/editor/css/tree/CssLogicTreeService.js'
 import { HtmlExportService } from '@/editor/css/export/HtmlExportService.js'
 import SaveStatus from '@/components/SaveStatus.vue'
 import { useColumnResize } from '@/composables/useColumnResize.js'
+import { useEditorShortcuts } from '@/composables/useEditorShortcuts.js'
+import { usePreviewResize } from '@/composables/usePreviewResize.js'
 
 const { startResize, isResizing } = useColumnResize()
 const pixelPerfect = usePixelPerfect()
@@ -97,56 +99,8 @@ function downloadHtml() {
   HtmlExportService.downloadFile(doc, 'index.html')
 }
 
-// ── Ctrl+S ────────────────────────────────────────────────────────────────
-function handleGlobalKeydown(e) {
-  if (e.ctrlKey && e.key === 's') {
-    e.preventDefault()
-    // Prioridade: API backend > File System Access > download
-    if (EditorStore.currentDocument) {
-      EditorStore.saveDocument()
-    } else if (EditorStore.fileAccessSupported) {
-      EditorStore.saveFile()
-    } else {
-      downloadHtml()
-    }
-  } else if (e.altKey && e.key === 'e') {
-    e.preventDefault()
-    EditorStore.showCssExplorer = !EditorStore.showCssExplorer
-  } else if (e.altKey && e.key === 'l') {
-    e.preventDefault()
-    activeExplorer.value = activeExplorer.value === 'html' ? null : 'html'
-  } else if (e.altKey && e.key === 'c') {
-    e.preventDefault()
-    activeExplorer.value = activeExplorer.value === 'components' ? null : 'components'
-  } else if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'c') {
-    e.preventDefault()
-    EditorStore.inspectMode = !EditorStore.inspectMode
-  }
-}
-onMounted(() => window.addEventListener('keydown', handleGlobalKeydown))
-onUnmounted(() => window.removeEventListener('keydown', handleGlobalKeydown))
-
-// Escuta atalhos também no iframe (foco vai para o iframe ao interagir com o canvas)
-let _iframeWin = null
-function attachIframeKeydown(iframe) {
-  if (_iframeWin) _iframeWin.removeEventListener('keydown', handleGlobalKeydown)
-  _iframeWin = iframe?.contentWindow ?? null
-  _iframeWin?.addEventListener('keydown', handleGlobalKeydown)
-}
-
-watch(
-  () => EditorStore.iframe,
-  (iframe) => {
-    if (!iframe) return
-    attachIframeKeydown(iframe)
-    iframe.addEventListener('load', () => attachIframeKeydown(iframe))
-  },
-  { immediate: true },
-)
-
-onUnmounted(() => {
-  if (_iframeWin) _iframeWin.removeEventListener('keydown', handleGlobalKeydown)
-})
+// Atalhos globais (window + iframe): Ctrl+S, Alt+E/L/C, Ctrl+Shift+C
+useEditorShortcuts({ activeExplorer, downloadHtml })
 
 // Auto-open CSS Explorer when a rule navigation is requested from the Inspector
 watch(
@@ -217,21 +171,8 @@ onMounted(() => {
   EditorStore.previewContainer = previewContainerEl.value
 })
 
-const previewWidth = ref(1280)
-const previewUnit = ref('px')
-
-function startPreviewResizeRight(e) {
-  previewUnit.value = 'px'
-  startResize(e, previewWidth, { min: 320, max: 4000, direction: 1, multiplier: 2 })
-}
-function startPreviewResizeLeft(e) {
-  previewUnit.value = 'px'
-  startResize(e, previewWidth, { min: 320, max: 4000, direction: -1, multiplier: 2 })
-}
-
-watch([previewWidth, previewUnit], ([w, u]) => {
-  EditorStore.setPreviewBreakpoint(w, u)
-})
+const { previewWidth, previewUnit, startPreviewResizeRight, startPreviewResizeLeft } =
+  usePreviewResize(startResize)
 
 const pipeline = new Pipeline()
 pipeline.use(htmlPlugin())
