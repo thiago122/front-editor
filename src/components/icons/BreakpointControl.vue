@@ -1,57 +1,23 @@
 <template>
   <div class="flex items-center gap-0.5">
+    <!-- Breakpoints do projeto: detectados do CSS > override do usuário > seed.
+         Fonte: StyleStore.projectBreakpoints (docs/EDITING_ROADMAP.md). -->
     <button
-      class="flex items-center justify-center p-1.5 rounded-sm transition-colors"
-      @click="update(360, 'px')"
-      :class="previewUnit === 'px' && previewWidth === 360 ? 'bg-white ring-1 ring-gray-200/60 text-indigo-600' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-200/50'"
-      title="Mobile (360px)"
+      v-for="bp in breakpointButtons"
+      :key="bp.width"
+      class="relative flex items-center justify-center p-1.5 rounded-sm transition-colors"
+      :class="previewUnit === 'px' && previewWidth === bp.width
+        ? 'bg-white ring-1 ring-gray-200/60 text-indigo-600'
+        : 'text-gray-500 hover:text-gray-800 hover:bg-gray-200/50'"
+      :title="bp.title"
+      @click="update(bp.width, 'px')"
     >
-      <IconBreakpointXS />
-    </button>
-
-    <button
-      class="flex items-center justify-center p-1.5 rounded-sm transition-colors"
-      @click="update(640, 'px')"
-      :class="previewUnit === 'px' && previewWidth === 640 ? 'bg-white ring-1 ring-gray-200/60 text-indigo-600' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-200/50'"
-      title="Mobile Landscape (640px)"
-    >
-      <IconBreakpointSM />
-    </button>
-
-    <button
-      class="flex items-center justify-center p-1.5 rounded-sm transition-colors"
-      @click="update(768, 'px')"
-      :class="previewUnit === 'px' && previewWidth === 768 ? 'bg-white ring-1 ring-gray-200/60 text-indigo-600' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-200/50'"
-      title="Tablet (768px)"
-    >
-      <IconBreakpointMD />
-    </button>
-
-    <button
-      class="flex items-center justify-center p-1.5 rounded-sm transition-colors"
-      @click="update(1024, 'px')"
-      :class="previewUnit === 'px' && previewWidth === 1024 ? 'bg-white ring-1 ring-gray-200/60 text-indigo-600' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-200/50'"
-      title="Laptop (1024px)"
-    >
-      <IconBreakpointLG />
-    </button>
-
-    <button
-      class="flex items-center justify-center p-1.5 rounded-sm transition-colors"
-      @click="update(1280, 'px')"
-      :class="previewUnit === 'px' && previewWidth === 1280 ? 'bg-white ring-1 ring-gray-200/60 text-indigo-600' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-200/50'"
-      title="Desktop (1280px)"
-    >
-      <IconBreakpointXL />
-    </button>
-
-    <button
-      class="flex items-center justify-center p-1.5 rounded-sm transition-colors"
-      @click="update(1536, 'px')"
-      :class="previewUnit === 'px' && previewWidth === 1536 ? 'bg-white ring-1 ring-gray-200/60 text-indigo-600' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-200/50'"
-      title="Wide (1536px)"
-    >
-      <IconBreakpoint2XL />
+      <component :is="ICONS[bp.iconKey]" />
+      <!-- Marcador do breakpoint base da estratégia (edita sem @media) -->
+      <span
+        v-if="bp.isBase"
+        class="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-indigo-400 pointer-events-none"
+      ></span>
     </button>
 
     <button
@@ -76,12 +42,17 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+import { useStyleStore } from '@/stores/StyleStore'
+import { isBaseBreakpoint } from '@/editor/css/shared/breakpointStrategy'
 import IconBreakpointXS from '@/components/icons/IconBreakpointXS.vue'
 import IconBreakpointSM from '@/components/icons/IconBreakpointSM.vue'
 import IconBreakpointMD from '@/components/icons/IconBreakpointMD.vue'
 import IconBreakpointLG from '@/components/icons/IconBreakpointLG.vue'
 import IconBreakpointXL from '@/components/icons/IconBreakpointXL.vue'
 import IconBreakpoint2XL from '@/components/icons/IconBreakpoint2XL.vue'
+
+const styleStore = useStyleStore()
 
 defineProps({
   previewWidth: {
@@ -94,6 +65,49 @@ defineProps({
   },
 })
 const emit = defineEmits(['update'])
+
+/** Mapa fora da reatividade — componentes não devem virar objetos reativos. */
+const ICONS = {
+  xs: IconBreakpointXS,
+  sm: IconBreakpointSM,
+  md: IconBreakpointMD,
+  lg: IconBreakpointLG,
+  xl: IconBreakpointXL,
+  '2xl': IconBreakpoint2XL,
+}
+
+const LABELS = {
+  xs: 'Mobile',
+  sm: 'Mobile Landscape',
+  md: 'Tablet',
+  lg: 'Laptop',
+  xl: 'Desktop',
+  '2xl': 'Wide',
+}
+
+/** Ícone por faixa de largura — breakpoints detectados raramente batem o seed. */
+function iconKeyFor(width) {
+  if (width < 480)  return 'xs'
+  if (width < 700)  return 'sm'
+  if (width < 900)  return 'md'
+  if (width < 1200) return 'lg'
+  if (width < 1400) return 'xl'
+  return '2xl'
+}
+
+const breakpointButtons = computed(() => {
+  const bps = [...styleStore.projectBreakpoints].sort((a, b) => a - b)
+  return bps.map(width => {
+    const iconKey = iconKeyFor(width)
+    const isBase  = isBaseBreakpoint(width, styleStore.resolvedDirection, bps)
+    return {
+      width,
+      iconKey,
+      isBase,
+      title: `${LABELS[iconKey]} (${width}px)${isBase ? ' — base da estratégia' : ''}`,
+    }
+  })
+})
 
 function update(width, unit) {
   emit('update', { width: width, unit: unit })

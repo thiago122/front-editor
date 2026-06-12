@@ -209,8 +209,10 @@ como ação distinta de zerar o valor.
       @media/@container, inspector em modo elemento, breakpoint ≠ base.
       Renomes de prop, toggle e delete NÃO roteiam (editam a regra exibida).
       Decl placeholder recém-criada na base é removida da origem ao rotear.
-- [ ] Toolbar: ícones de breakpoint vindos de `projectBreakpoints` (hoje
-      `BreakpointControl.vue` é fixo) + UI p/ adicionar/editar
+- [x] Toolbar dinâmica ✔ 2026-06-12 — `BreakpointControl.vue` renderiza de
+      `projectBreakpoints` (ícone por faixa de largura, marcador no
+      breakpoint base da estratégia). UI p/ adicionar/editar breakpoints
+      fica junto com a UI de config (item abaixo).
 - [ ] UI de config (direção/inserção/breakpoints) + persistência no backend
 - [ ] Indicador azul/âmbar por propriedade + "remover override"
 
