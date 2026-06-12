@@ -39,7 +39,6 @@ export class Pipeline {
    * AST já existe → apenas renderiza
    */
   runFromAST(ast, metadata = {}) {
-    console.log(metadata)
     const ctx = {
       input: null,
       tokens: [],

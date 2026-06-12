@@ -38,14 +38,12 @@ export const NodeDispatcher = {
 
   /** Insere HTML como irmão logo após o elemento targetId */
   insertAfter(targetId, html) {
-    console.time('insert_action')
     const store = useEditorStore()
     const newNode = store.manipulation.insertAfter(targetId, html)
     if (newNode) {
       store.selectNode(newNode.nodeId)
       store.startBlink()
     }
-    console.timeEnd('insert_action')
   },
 
   moveNode(nodeId, direction) {
