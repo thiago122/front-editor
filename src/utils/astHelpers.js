@@ -3,6 +3,7 @@
  * Reusable utilities for manipulating CSS Abstract Syntax Trees
  */
 import { SHORTHAND_LEAVES } from '@/editor/css/shared/cssConstants.js'
+import { compareLayerRankImportant } from '@/editor/css/shared/cssUtils.js'
 
 /**
  * Safely appends (or inserts at a given index) data into various list types.
@@ -213,7 +214,7 @@ export function calculateOverrides(groups) {
   })
 
   rulesByContext.forEach((rules) => {
-    // Map<longhand-folha, { ruleUid, important }>
+    // Map<longhand-folha, { ruleUid, important, layerRank }>
     const winners = new Map()
 
     rules.forEach((rule) => {
@@ -224,13 +225,18 @@ export function calculateOverrides(groups) {
           const curr = winners.get(leaf)
           if (!curr) {
             // Primeira ocorrência sempre vence inicialmente
-            winners.set(leaf, { ruleUid: rule.uid, important: decl.important })
+            winners.set(leaf, { ruleUid: rule.uid, important: decl.important, layerRank: rule.layerRank })
           } else if (decl.important && !curr.important) {
             // !important bate qualquer não-important independente de especificidade
-            winners.set(leaf, { ruleUid: rule.uid, important: true })
+            winners.set(leaf, { ruleUid: rule.uid, important: true, layerRank: rule.layerRank })
+          } else if (decl.important && curr.important) {
+            // Dois !important: a ordem de layers INVERTE (Cascade L5) —
+            // layered vence unlayered, e o layer declarado ANTES vence.
+            if (compareLayerRankImportant(rule.layerRank, curr.layerRank) > 0) {
+              winners.set(leaf, { ruleUid: rule.uid, important: true, layerRank: rule.layerRank })
+            }
           }
-          // Dois !important: o primeiro (maior especificidade) já venceu.
-          // Dois não-important: o primeiro já venceu.
+          // Dois não-important: o primeiro já venceu (sort = layer+specificity).
         }
       })
     })

@@ -76,6 +76,38 @@ export function isColorValue(value) {
   )
 }
 
+// ─── Cascade Layers (CSS Cascading & Inheritance L5 §6.4) ───────────────────
+//
+// layerRank = array de índices de irmão por nível ([1,0] = 2º layer raiz,
+// 1º sublayer dele). null/undefined = regra fora de layer (unlayered).
+//
+// Declarações NORMAIS: unlayered vence qualquer layer; entre layers, o
+// declarado DEPOIS vence; estilos diretos do pai vencem os dos sublayers
+// (pai age como sublayer implícito final).
+// Declarações !IMPORTANT: ordem INVERTE — layered vence unlayered, o layer
+// declarado ANTES vence, e sublayer vence o pai.
+
+/** >0 se `a` vence `b` na cascata normal; 0 empate. */
+export function compareLayerRankNormal(a, b) {
+  if (!a && !b) return 0
+  if (!a) return 1  // unlayered vence
+  if (!b) return -1
+  const len = Math.min(a.length, b.length)
+  for (let i = 0; i < len; i++) {
+    if (a[i] !== b[i]) return a[i] > b[i] ? 1 : -1 // declarado depois vence
+  }
+  // Prefixo comum: caminho mais curto (pai) vence no normal
+  return b.length - a.length
+}
+
+/** >0 se `a` vence `b` entre declarações !important (ordem invertida). */
+export function compareLayerRankImportant(a, b) {
+  if (!a && !b) return 0
+  if (!a) return -1 // unlayered PERDE entre importants
+  if (!b) return 1
+  return -compareLayerRankNormal(a, b)
+}
+
 // ─── Specificity (Selectors Level 4 §17) ────────────────────────────────────
 //
 // Calculado sobre o AST do css-tree, NÃO por regex. Motivos:

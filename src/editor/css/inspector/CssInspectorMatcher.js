@@ -1,6 +1,6 @@
 import { InlineStyleParser } from './InlineStyleParser.js'
 import { PSEUDO_STATES, STATE_REGEXES, PSEUDO_STATE_TABS } from '../shared/cssConstants.js'
-import { cleanSelectorForMatching, isInheritedProperty, normalizePropertyName, getSpecificity } from '../shared/cssUtils.js'
+import { cleanSelectorForMatching, isInheritedProperty, normalizePropertyName, getSpecificity, compareLayerRankNormal } from '../shared/cssUtils.js'
 
 // Tags where DOM upward traversal stops — elements above these are non-styleable context
 const DOM_TRAVERSAL_STOP_TAGS = ['BODY', 'HTML']
@@ -55,6 +55,9 @@ export class CssInspectorMatcher {
    */
   find() {
     if (!this.targetEl || !this.logicTree) return []
+
+    // Ordem de declaração dos @layer no documento inteiro (uma vez por find)
+    this._layerRanks = this._buildLayerOrder()
 
     const groups = []
     let currentEl = this.targetEl
@@ -156,6 +159,82 @@ export class CssInspectorMatcher {
     })
   }
 
+  // ─── Cascade Layers: ordem de declaração ───────────────────────────────────
+
+  /**
+   * Varre a Logic Tree em ordem de documento e atribui a cada @layer um
+   * rank ([índice-irmão por nível]). `@layer a, b;` (statement) só define
+   * ordem; `@layer nome { }` registra e desce; anônimo ganha chave por id.
+   * @returns {Map<string, number[]>} path ('a.b') → rank
+   * @private
+   */
+  _buildLayerOrder() {
+    const counters = new Map() // prefixo → próximo índice de irmão
+    const ranks = new Map()    // path completo → rank array
+
+    const registerPath = (components) => {
+      let prefix = ''
+      for (const comp of components) {
+        const path = prefix ? `${prefix}.${comp}` : comp
+        if (!ranks.has(path)) {
+          const idx = counters.get(prefix) ?? 0
+          counters.set(prefix, idx + 1)
+          ranks.set(path, [...(ranks.get(prefix) ?? []), idx])
+        }
+        prefix = path
+      }
+    }
+
+    const walk = (nodes, prefixComponents) => {
+      for (const node of nodes || []) {
+        const label = (node.label || '').trim()
+        if (node.type === 'at-rule' && /^@layer($|\s|;)/i.test(label)) {
+          const prelude = label.replace(/^@layer\s*/i, '').replace(/;$/, '').trim()
+          if (!prelude) {
+            // Layer anônimo: identidade pelo id do nó (igual ao lookup do match)
+            const comps = [...prefixComponents, `(anon:${node.id})`]
+            registerPath(comps)
+            walk(node.children, comps)
+          } else if (prelude.includes(',')) {
+            // Statement de ordenação: @layer a, b;
+            prelude.split(',').forEach((part) => {
+              const comps = [...prefixComponents, ...part.trim().split('.').filter(Boolean)]
+              registerPath(comps)
+            })
+          } else {
+            const comps = [...prefixComponents, ...prelude.split('.').filter(Boolean)]
+            registerPath(comps)
+            walk(node.children, comps)
+          }
+        } else if (node.children) {
+          walk(node.children, prefixComponents)
+        }
+      }
+    }
+
+    walk(this.logicTree, [])
+    return ranks
+  }
+
+  /**
+   * Rank do layer que envolve a regra atual (via atRuleStack), ou null
+   * se a regra está fora de qualquer @layer.
+   * @private
+   */
+  _layerRankFromStack(atRuleStack) {
+    const components = []
+    for (const entry of atRuleStack) {
+      if (entry.name !== 'layer') continue
+      // Anônimo: o split de label sem espaço deixa prelude === '@layer'
+      const prelude = entry.prelude?.startsWith('@layer')
+        ? `(anon:${entry.logicNodeId})`
+        : (entry.prelude || '').trim()
+      components.push(...(prelude.startsWith('(anon:') ? [prelude] : prelude.split('.').filter(Boolean)))
+    }
+    if (components.length === 0) return null
+    return this._layerRanks?.get(components.join('.')) ?? null
+  }
+
   // ─── At-rule handling ──────────────────────────────────────────────────────
 
   /**
@@ -229,6 +308,7 @@ export class CssInspectorMatcher {
       declarations,
       specificity,
       pseudoSubSection,
+      layerRank:      this._layerRankFromStack(ctx.atRuleStack),
       context:        [...ctx.atRuleStack],
       active:         this._isAtRuleStackActive(ctx),
       origin:         node.metadata?.origin,
@@ -509,19 +589,26 @@ export class CssInspectorMatcher {
   // ─── Sorting ───────────────────────────────────────────────────────────────
 
   /**
-   * Sort rules by specificity, highest first.
-   * Specificity format: [inline, id, class, tag]
+   * Sort rules by cascade order, highest first:
+   * 1. Layer (Cascade L5): unlayered > layers; entre layers, o declarado
+   *    DEPOIS vence; estilos diretos do pai vencem sublayers.
+   *    (Inline style não tem layerRank → tier unlayered, e vence via
+   *    specificity [1,0,0,0].)
+   * 2. Specificity [inline, id, class, tag]
+   * 3. Source order (declarada mais tarde aparece acima — Chrome)
    * Returns a NEW array — does not mutate the original.
    * @private
    */
   _sortBySpecificity(rules) {
     return [...rules].sort((a, b) => {
+      const layerCmp = compareLayerRankNormal(a.layerRank, b.layerRank)
+      if (layerCmp !== 0) return -layerCmp // vencedor primeiro
+
       for (let i = 0; i < 4; i++) {
         if (a.specificity[i] !== b.specificity[i]) {
           return b.specificity[i] - a.specificity[i]
         }
       }
-      // Desempate: declarada mais tarde no CSS → aparece acima (comportamento do Chrome)
       return (b.sourceOrder ?? 0) - (a.sourceOrder ?? 0)
     })
   }

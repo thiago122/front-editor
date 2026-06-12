@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { getSpecificity, isInheritedProperty, normalizePropertyName, cleanSelectorForMatching } from '../cssUtils.js'
+import {
+  getSpecificity, isInheritedProperty, normalizePropertyName, cleanSelectorForMatching,
+  compareLayerRankNormal, compareLayerRankImportant,
+} from '../cssUtils.js'
 
 // Referência: Selectors Level 4 §17. Formato [inline, id, classe, tipo].
 describe('getSpecificity', () => {
@@ -78,6 +81,45 @@ describe('normalizePropertyName', () => {
   it('detecta prefixo --disabled-', () => {
     expect(normalizePropertyName('--disabled-color')).toEqual({ prop: 'color', disabled: true })
     expect(normalizePropertyName('color')).toEqual({ prop: 'color', disabled: false })
+  })
+})
+
+// Referência: CSS Cascading & Inheritance L5 §6.4 (Cascade Layers)
+describe('compareLayerRankNormal', () => {
+  it('unlayered vence qualquer layer', () => {
+    expect(compareLayerRankNormal(null, [0])).toBeGreaterThan(0)
+    expect(compareLayerRankNormal([5], null)).toBeLessThan(0)
+    expect(compareLayerRankNormal(null, null)).toBe(0)
+  })
+
+  it('entre layers, o declarado depois vence', () => {
+    expect(compareLayerRankNormal([1], [0])).toBeGreaterThan(0)
+    expect(compareLayerRankNormal([0], [1])).toBeLessThan(0)
+  })
+
+  it('estilos diretos do pai vencem os do sublayer', () => {
+    // pai = [0], sublayer = [0,2]
+    expect(compareLayerRankNormal([0], [0, 2])).toBeGreaterThan(0)
+  })
+
+  it('sublayers comparam componente a componente', () => {
+    expect(compareLayerRankNormal([0, 1], [0, 0])).toBeGreaterThan(0)
+    expect(compareLayerRankNormal([1, 0], [0, 5])).toBeGreaterThan(0)
+  })
+})
+
+describe('compareLayerRankImportant (ordem invertida)', () => {
+  it('layered vence unlayered entre importants', () => {
+    expect(compareLayerRankImportant([0], null)).toBeGreaterThan(0)
+    expect(compareLayerRankImportant(null, [0])).toBeLessThan(0)
+  })
+
+  it('o layer declarado ANTES vence entre importants', () => {
+    expect(compareLayerRankImportant([0], [1])).toBeGreaterThan(0)
+  })
+
+  it('sublayer vence o pai entre importants', () => {
+    expect(compareLayerRankImportant([0, 2], [0])).toBeGreaterThan(0)
   })
 })
 

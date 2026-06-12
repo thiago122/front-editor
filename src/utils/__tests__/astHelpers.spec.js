@@ -4,11 +4,12 @@ import { calculateOverrides } from '../astHelpers.js'
 // Helpers — formato mínimo de rule/decl consumido por calculateOverrides.
 // A ordem dos grupos/regras já chega ordenada por especificidade (maior primeiro).
 let uidSeq = 0
-function rule(declarations, { active = true, pseudoSubSection } = {}) {
+function rule(declarations, { active = true, pseudoSubSection, layerRank = null } = {}) {
   return {
     uid: `r${uidSeq++}`,
     active,
     pseudoSubSection,
+    layerRank,
     declarations: declarations.map((d) => ({ important: false, disabled: false, ...d })),
   }
 }
@@ -137,5 +138,36 @@ describe('calculateOverrides — shorthand vs longhand (Chrome DevTools)', () =>
     const r2 = rule([{ prop: 'display' }])
     calculateOverrides(groups(r1, r2))
     expect(r2.declarations[0].overridden).toBe(true)
+  })
+})
+
+describe('calculateOverrides — @layer com !important (ordem invertida)', () => {
+  // No fluxo normal a ordenação das regras (matcher) já encode os layers;
+  // calculateOverrides só precisa inverter a disputa entre !important.
+
+  it('important LAYERED vence important unlayered (mesmo chegando depois)', () => {
+    // Ordem normal: unlayered primeiro (venceria sem important)
+    const unlayered = rule([{ prop: 'color', important: true }])
+    const layered = rule([{ prop: 'color', important: true }], { layerRank: [0] })
+    calculateOverrides(groups(unlayered, layered))
+    expect(layered.declarations[0].overridden).toBe(false)
+    expect(unlayered.declarations[0].overridden).toBe(true)
+  })
+
+  it('entre importants layered, o layer declarado ANTES vence', () => {
+    const later = rule([{ prop: 'color', important: true }], { layerRank: [1] })
+    const earlier = rule([{ prop: 'color', important: true }], { layerRank: [0] })
+    calculateOverrides(groups(later, earlier))
+    expect(earlier.declarations[0].overridden).toBe(false)
+    expect(later.declarations[0].overridden).toBe(true)
+  })
+
+  it('sem important, a ordem das regras (já layer-aware) decide', () => {
+    // unlayered chega primeiro na lista (sort do matcher) e vence
+    const unlayered = rule([{ prop: 'color' }])
+    const layered = rule([{ prop: 'color' }], { layerRank: [0] })
+    calculateOverrides(groups(unlayered, layered))
+    expect(unlayered.declarations[0].overridden).toBe(false)
+    expect(layered.declarations[0].overridden).toBe(true)
   })
 })
