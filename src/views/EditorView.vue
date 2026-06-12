@@ -1,15 +1,11 @@
 <script setup>
 // EditorView.vue
 
-import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 
 import { Pipeline } from '@/editor/pipeline/pipeline'
 import { htmlPlugin } from '@/editor/pipeline/plugins/html-plugin'
-
-// helpers
-import { findPath, findNodeById, findParentNode } from '@/utils/ast.js'
-import { parseHTMLFragment } from '@/utils/parseHTMLFragment'
 
 // stores
 import { useEditorStore } from '@/stores/EditorStore'
@@ -32,7 +28,6 @@ const styleStore = useStyleStore()
 
 // UI
 import FloatingWindow from '@/components/ui/FloatingWindow.vue'
-import Separator from '@/components/Separator.vue'
 import AsidePanel from '@/components/AsidePanel.vue'
 
 // node commands
@@ -46,13 +41,9 @@ import IconSidebar from '@/components/IconSidebar.vue'
 import IconSidebarButton from '@/components/IconSidebarButton.vue'
 import IconLayer from '@/components/icons/iconLayer.vue'
 import IconComponent from '@/components/icons/iconComponent.vue'
-import IconFiles from '@/components/icons/IconFiles.vue'
 import IconHTML from '@/components/icons/IconHTML.vue'
 import IconCSS from '@/components/icons/IconCSS.vue'
-import IconConfig from '@/components/icons/IconConfig.vue'
-import IconStyles from '@/components/icons/IconStyles.vue'
 import IconInspect from '@/components/icons/iconInspect.vue'
-import IconSave from '@/components/icons/IconSave.vue'
 import IconOpen from '@/components/icons/IconOpen.vue'
 import BreakpointeControl from '@/components/icons/BreakpointeControl.vue'
 import CssOutputModal from '@/components/CssOutputModal.vue'
@@ -65,8 +56,6 @@ import ShortcutsDropdown from '@/components/ShortcutsDropdown.vue'
 
 import { CssLogicTreeService } from '@/editor/css/tree/CssLogicTreeService.js'
 import { HtmlExportService } from '@/editor/css/export/HtmlExportService.js'
-import { AutoSaveService, AUTOSAVE_INTERVAL_MS } from '@/editor/css/export/AutoSaveService.js'
-import AutoSaveRecoveryBanner from '@/components/AutoSaveRecoveryBanner.vue'
 import SaveStatus from '@/components/SaveStatus.vue'
 import { useColumnResize } from '@/composables/useColumnResize.js'
 
@@ -84,9 +73,6 @@ const inspectorWidth = ref(300) // col-panel-inspector
 function startLayerResize(e) {
   startResize(e, layerWidth, { min: 160, max: 520 })
 }
-function startCssResize(e) {
-  startResize(e, cssWidth, { min: 220, max: 680 })
-}
 function startCssRightResize(e) {
   startResize(e, cssWidth, { min: 220, max: 680, direction: -1 })
 }
@@ -98,16 +84,6 @@ const isSaveModalOpen = ref(false)
 const isImportModalOpen = ref(false)
 const isShortcutsModalOpen = ref(false)
 const activeExplorer = ref('html') // 'html' | 'css' | 'components' | null
-
-// ─── Auto-Save ──────────────────────────────────────────────────────────────
-
-// Auto-save e recuperação de sessão desabilitados temporariamente para corrigir race conditions
-// const pendingSave = ref(null)
-// let autoSaveTimer = null
-
-// function runAutoSave() { ... }
-// function handleRestoreSave(html) { ... }
-// function handleDiscardSave() { ... }
 
 /** Baixa todas as stylesheets CSS editáveis como arquivos .css */
 function downloadCss() {
@@ -185,9 +161,6 @@ const handleHtmlLoad = (newHtml) => {
 }
 
 onMounted(async () => {
-  // Verifica se existe backup da sessão anterior antes de carregar a página
-  // pendingSave.value = AutoSaveService.load()
-
   // Se houver um path na URL, carrega o documento correspondente
   const path = route.query.path
   if (path && EditorStore.currentDocument?.path !== path) {
@@ -197,9 +170,6 @@ onMounted(async () => {
       console.error('[EditorView] Erro ao carregar documento da URL:', e)
     }
   }
-
-  // Inicia o auto-save periódico após carregar a página
-  // autoSaveTimer = setInterval(runAutoSave, AUTOSAVE_INTERVAL_MS)
 })
 
 // Observa mudanças na URL (navegação entre documentos)
@@ -211,10 +181,6 @@ watch(
     }
   },
 )
-
-onUnmounted(() => {
-  // clearInterval(autoSaveTimer)
-})
 
 const inputHTML = `
 <!doctype html>
@@ -244,8 +210,6 @@ const inputHTML = `
 
 // refs
 const input = ref(inputHTML)
-
-const showExplorer = ref(false)
 
 const previewContainerEl = ref(null)
 
@@ -302,19 +266,6 @@ watch(
 
 <template>
   <div class="flex flex-col grow shrink-0 h-full max-h-full overflow-hidden">
-    <!-- Banner de recuperação de sessão desabilitado temporariamente -->
-    <!-- <AutoSaveRecoveryBanner
-      v-if="pendingSave"
-      :save="pendingSave"
-      @restore="handleRestoreSave"
-      @discard="handleDiscardSave"
-      class="z-[1000]"
-    /> -->
-    <!-- <div class="flex justify-center bg-gray-200">
-      <RouterLink to="/">Home</RouterLink>
-      <RouterLink to="/editor">Editor</RouterLink>
-    </div> -->
-
     <!-- Header principal -->
     <header
       class="flex items-center justify-between px-4 h-12 bg-white border-b border-gray-200 relative z-[99999] shrink-0"
@@ -601,23 +552,6 @@ watch(
         >
           <IconHTML />
         </IconSidebarButton>
-
-        <!-- 
-                <IconSidebarButton title="Components">
-          <IconComponent />
-        </IconSidebarButton>
-        <IconSidebarButton title="Files">
-          <IconFiles />
-        </IconSidebarButton>
-        <IconSidebarButton title="CSS">
-          <IconCSS />
-        </IconSidebarButton>
-        <IconSidebarButton title="Config">
-          <IconConfig />
-        </IconSidebarButton>
-        <IconSidebarButton title="Styles">
-          <IconStyles />
-        </IconSidebarButton> -->
 
         <IconSidebarButton
           title="Abrir arquivo do disco"
