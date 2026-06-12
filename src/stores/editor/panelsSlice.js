@@ -1,4 +1,5 @@
 import { ref, watch } from 'vue'
+import { debounce } from 'lodash-es'
 
 /**
  * Fatia do EditorStore: estado de UI dos painéis/janelas flutuantes.
@@ -49,8 +50,13 @@ export function createPanelsSlice({ styleStore }) {
     y:        savedVarsPos?.y ?? 100
   })
 
-  watch(() => [variablesPanel.value.x, variablesPanel.value.y], ([x, y]) => {
+  // Debounce: o watch dispara a cada pixel do drag — localStorage.setItem é
+  // síncrono e travaria o arrasto. Persiste só quando o movimento assenta.
+  const persistVarsPos = debounce((x, y) => {
     localStorage.setItem('vars_panel_pos', JSON.stringify({ x, y }))
+  }, 300)
+  watch(() => [variablesPanel.value.x, variablesPanel.value.y], ([x, y]) => {
+    persistVarsPos(x, y)
   })
 
   const visualEditor = ref({

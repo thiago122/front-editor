@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
 import { NodeDispatcher } from '@/editor/dispatchers/NodeDispatcher'
 
-import IconSelectParent from '@/components/icons/inconSelectParent.vue'
+import IconSelectParent from '@/components/icons/IconSelectParent.vue'
 import IconChevronUp from '@/components/icons/IconChevronUp.vue'
 import IconChevronDown from '@/components/icons/IconChevronDown.vue'
 

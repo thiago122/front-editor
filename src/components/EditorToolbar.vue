@@ -61,7 +61,7 @@
         </div>
 
         <!-- Breakpoints control -->
-        <BreakpointeControl
+        <BreakpointControl
           :previewWidth="previewWidth"
           :previewUnit="previewUnit"
           @update="
@@ -121,7 +121,7 @@ import ClipboardControls from '@/components/ClipboardControls.vue'
 import SelectionControls from '@/components/SelectionControls.vue'
 import Delete from '@/components/Delete.vue'
 import ShortcutsDropdown from '@/components/ShortcutsDropdown.vue'
-import BreakpointeControl from '@/components/icons/BreakpointeControl.vue'
+import BreakpointControl from '@/components/icons/BreakpointControl.vue'
 
 const EditorStore = useEditorStore()
 

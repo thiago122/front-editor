@@ -256,11 +256,11 @@ import { usePixelPerfect } from '@/composables/usePixelPerfect'
 
 import IconSidebar from '@/components/IconSidebar.vue'
 import IconSidebarButton from '@/components/IconSidebarButton.vue'
-import IconLayer from '@/components/icons/iconLayer.vue'
-import IconComponent from '@/components/icons/iconComponent.vue'
+import IconLayer from '@/components/icons/IconLayer.vue'
+import IconComponent from '@/components/icons/IconComponent.vue'
 import IconHTML from '@/components/icons/IconHTML.vue'
 import IconCSS from '@/components/icons/IconCSS.vue'
-import IconInspect from '@/components/icons/iconInspect.vue'
+import IconInspect from '@/components/icons/IconInspect.vue'
 import IconOpen from '@/components/icons/IconOpen.vue'
 
 defineEmits(['open-import', 'save', 'download-css', 'download-html'])
