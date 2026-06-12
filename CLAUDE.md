@@ -34,6 +34,12 @@ O estado vive em 3 stores Pinia (`src/stores/`):
   proxy Vue na árvore, perf). Muta via `ManipulationEngine` (primitivas com
   undo por operação inversa). Reatividade manual: `notifyAstMutation()` /
   `astMutationKey`. Dono do iframe, seleção, hover, save/export.
+  **Composto por fatias** (`stores/editor/*Slice.js`: panels, documents,
+  editorStyles, componentLock, feedback) espalhadas no return —
+  `useEditorStore()` é a ÚNICA API pública. Fatia recebe deps por
+  parâmetro, NUNCA importa o store. O shape do return é congelado por
+  `stores/__tests__/EditorStore.contract.spec.js` — membro novo exige
+  atualizar o contrato.
 - **StyleStore** — engine CSS. css-tree → Logic Tree → matching p/ o painel.
 - **ComponentStore** — componentes reutilizáveis.
 
