@@ -2,6 +2,7 @@ import { ref, computed, markRaw, toRaw } from 'vue'
 import { defineStore } from 'pinia'
 import { CssAstService } from '@/editor/css/ast/CssAstService'
 import { CssLogicTreeService } from '@/editor/css/tree/CssLogicTreeService'
+import { DEFAULT_BREAKPOINTS } from '@/editor/css/shared/breakpointStrategy'
 import { calculateOverrides, findCssNode } from '@/utils/astHelpers'
 import { useEditorStore } from './EditorStore'
 import { unifiedHistory } from '@/editor/history/UnifiedHistoryManager'
@@ -93,6 +94,45 @@ export const useStyleStore = defineStore('style', () => {
    * Clicking element → resets to 'element'. Clicking rule in Explorer → 'explorer'.
    */
   const inspectorSource = ref('element')
+
+  /**
+   * Perfil de responsividade detectado do CSS — computado UMA vez por
+   * rebuildLogicTree (nunca por edição). Shape: { direction, insertion,
+   * breakpoints, counts } — ver breakpointStrategy.detectResponsiveProfile.
+   */
+  const responsiveProfile = ref(null)
+
+  /**
+   * Config de responsividade do PROJETO (decisões — docs/EDITING_ROADMAP.md).
+   * 'auto' = seguir o perfil detectado. breakpoints null = detectados/seed.
+   * TODO(backend): persistir por projeto via API (decisão: vive no backend).
+   */
+  const responsiveConfig = ref({
+    direction: 'auto',     // 'auto' | 'mobile-first' | 'desktop-first'
+    insertion: 'auto',     // 'auto' | 'breakpoint-blocks' | 'rule-adjacent' | 'file-end'
+    breakpoints: null,     // null | number[] — override manual do usuário
+  })
+
+  // ── Computed: Responsividade ────────────────────────────────────────────────
+
+  /** Direção efetiva da @media gerada. Default do editor: mobile-first. */
+  const resolvedDirection = computed(() => {
+    if (responsiveConfig.value.direction !== 'auto') return responsiveConfig.value.direction
+    return responsiveProfile.value?.direction ?? 'mobile-first'
+  })
+
+  /** Estilo efetivo de inserção de regra nova. Default: adjacente à regra base. */
+  const resolvedInsertion = computed(() => {
+    if (responsiveConfig.value.insertion !== 'auto') return responsiveConfig.value.insertion
+    return responsiveProfile.value?.insertion ?? 'rule-adjacent'
+  })
+
+  /** Breakpoints do projeto: override manual > detectados do CSS > seed do editor. */
+  const projectBreakpoints = computed(() => {
+    if (responsiveConfig.value.breakpoints?.length) return responsiveConfig.value.breakpoints
+    if (responsiveProfile.value?.breakpoints?.length) return responsiveProfile.value.breakpoints
+    return DEFAULT_BREAKPOINTS
+  })
 
   // ── Computed: Variables (Tokens) ──────────────────────────────────────────
 
@@ -210,7 +250,11 @@ export const useStyleStore = defineStore('style', () => {
 
       const newTree = CssLogicTreeService.buildLogicTree(masterAst)
       cssLogicTree.value = markRaw(newTree)
-      
+
+      // Detecção computada UMA vez por rebuild (requisito de perf) —
+      // o write-target consome este metadado a cada edição sem re-detectar.
+      responsiveProfile.value = CssLogicTreeService.detectResponsiveProfile(newTree)
+
       unifiedHistory.clearCssHistory()
       notifyTreeMutation()
     } catch (err) {
@@ -360,10 +404,21 @@ export const useStyleStore = defineStore('style', () => {
     console.log(`[StyleStore] File ${fileId} updated via bulk CSS.`)
   }
 
+  /** Atualiza parcialmente a config de responsividade do projeto. */
+  function setResponsiveConfig(partial) {
+    responsiveConfig.value = { ...responsiveConfig.value, ...partial }
+  }
+
   // ── Exports ────────────────────────────────────────────────────────────────
 
   return {
     cssLogicTree,
+    responsiveProfile,
+    responsiveConfig,
+    resolvedDirection,
+    resolvedInsertion,
+    projectBreakpoints,
+    setResponsiveConfig,
     cssManifest,
     selectedRuleId,
     explorerHighlightId,

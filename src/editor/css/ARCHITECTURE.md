@@ -36,6 +36,7 @@ CssLogicTreeService.js   ← ponto de entrada (facade)
 │
 ├── CssExplorerTreeBuilder.js ← constrói a árvore do CSS Explorer
 ├── CssTreeSynchronizer.js    ← escreve a Logic Tree de volta no DOM
+├── CssWriteTargetService.js  ← decide ONDE escrever edições por breakpoint
 └── _logicTreeHelpers.js      ← utilitários internos (find, create nodes)
 ```
 
@@ -53,6 +54,13 @@ CssLogicTreeService.js   ← ponto de entrada (facade)
 | Mudar como o CSS é gravado de volta no DOM | `CssTreeSynchronizer.js` → `syncToDom()` |
 | Mudar como arquivos CSS externos são carregados | `CssLoader.js` / `CssInjector.js` |
 | Adicionar constante CSS global | `shared/cssConstants.js` |
+| Mudar a detecção de mobile/desktop-first ou de breakpoints | `shared/breakpointStrategy.js` |
+| Mudar onde uma edição por breakpoint é gravada/inserida | `CssWriteTargetService.js` → `resolve()` |
+| Mudar a config de responsividade do projeto | `StyleStore` → `responsiveConfig` / `setResponsiveConfig` |
+
+> O modelo "botão de breakpoint = write target" (decisões, status e o que
+> falta de UI) está documentado em `docs/EDITING_ROADMAP.md` →
+> "Decisões de responsividade".
 
 ## Vite aliases
 

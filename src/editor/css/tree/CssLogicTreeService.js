@@ -6,6 +6,8 @@ import { CssAtRuleService } from './CssAtRuleService.js'
 import { CssDeclarationService } from './CssDeclarationService.js'
 import { CssExportService } from '../export/CssExportService.js'
 import { CssVariablesService } from './CssVariablesService.js'
+import { CssWriteTargetService } from './CssWriteTargetService.js'
+import { detectResponsiveProfile } from '../shared/breakpointStrategy.js'
 
 /**
  * CssLogicTreeService  ← Facade / Coordinator
@@ -209,6 +211,26 @@ export class CssLogicTreeService {
    */
   static downloadAllStylesheets(logicTree, includeExternal = false) {
     return CssExportService.downloadAll(logicTree, includeExternal)
+  }
+
+  // ─── Responsividade / write-target ──────────────────────────────────────────
+
+  /**
+   * Detecta o perfil de responsividade do documento (direção, organização,
+   * breakpoints). Chamar UMA vez por rebuild da Logic Tree.
+   * @see breakpointStrategy.detectResponsiveProfile
+   */
+  static detectResponsiveProfile(logicTree) {
+    return detectResponsiveProfile(logicTree)
+  }
+
+  /**
+   * Resolve onde uma edição deve ser escrita para o breakpoint ativo.
+   * Não muta a tree — apenas decide (editar in place / criar onde).
+   * @see CssWriteTargetService.resolve
+   */
+  static resolveWriteTarget(logicTree, options) {
+    return CssWriteTargetService.resolve(logicTree, options)
   }
 
   // ─── Variáveis (Tokens)  →  CssVariablesService ─────────────────────────────

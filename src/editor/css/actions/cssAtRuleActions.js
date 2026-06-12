@@ -13,31 +13,39 @@ import { useEditorStore } from '@/stores/EditorStore'
 import { CssLogicTreeService } from '@/editor/css/tree/CssLogicTreeService'
 import { unifiedHistory } from '@/editor/history/UnifiedHistoryManager'
 import { findCssNode } from '@/utils/astHelpers'
+import { conditionForBreakpoint } from '../shared/breakpointStrategy.js'
 
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
 /**
  * Wrap an existing rule inside a new at-rule (@media, @container…).
+ *
+ * ⚠️ Wrap = operação de ESCOPO: a regra é MOVIDA para dentro da at-rule e
+ * deixa de valer nos outros tamanhos. Para criar um override (base intacta),
+ * use duplicateRuleToBreakpoint (cssBreakpointActions).
+ *
  * @param {Object} rule - The rule to wrap
  * @param {string} type - 'media' | 'supports' | 'container' | 'layer'
+ * @param {string|null} [customCondition] - Condição manual (ex.: input do
+ *        usuário com o breakpoint base ativo, ou condição não-width).
  * @returns {Object|null} The new at-rule Logic Tree node
  */
-export function createAtRule(rule, type) {
+export function createAtRule(rule, type, customCondition = null) {
   if (!rule.astNode) return null
   const styleStore  = useStyleStore()
   const editorStore = useEditorStore()
   const applyFn = () => styleStore.applyMutation(editorStore.getIframeDoc())
 
-  // Usa o breakpoint selecionado para gerar a condição default da @media.
-  // • px mode  → usa o valor exato do breakpoint (ex: 768px)
-  // • % (full) → usa a largura real do container via viewport.width (ResizeObserver)
-  let condition
-  if (type === 'media') {
+  // Condição default da @media: breakpoint ativo + estratégia do documento
+  // (mobile-first → min-width / desktop-first → max-width). Fallback no modo
+  // full (%): largura real do container via viewport.width (ResizeObserver).
+  let condition = customCondition ?? undefined
+  if (type === 'media' && !condition) {
     const bp = editorStore.previewBreakpoint
     const w = bp.unit === 'px'
       ? bp.width                      // valor exato do botão (768, 1024…)
       : editorStore.viewport?.width   // largura real do container em full mode
-    condition = w ? `(max-width: ${Math.round(w)}px)` : '(max-width: 768px)'
+    condition = conditionForBreakpoint(w || 768, styleStore.resolvedDirection)
   }
 
   unifiedHistory.snapshotCss(styleStore.cssLogicTree, applyFn)
