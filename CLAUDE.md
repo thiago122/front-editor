@@ -12,7 +12,8 @@ npm run build        # type-check (vue-tsc) + build
 npm run build-only   # build sem type-check — use p/ validar mudanças JS
 npm run build:bridge # build do bridge (vite.bridge.config.ts)
 npm run build:all    # build + build:bridge
-npm run test:unit    # vitest
+npm run test:unit    # vitest (specs em __tests__/ co-localizados)
+npm run lint         # eslint (flat config; unused-vars = warning)
 npm run format       # prettier em src/
 npm run gen:inherited # regenera INHERITED_PROPERTIES de mdn-data (NÃO editar à mão)
 ```
