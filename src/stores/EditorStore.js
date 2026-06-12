@@ -1135,7 +1135,6 @@ export const useEditorStore = defineStore('editor', () => {
     isBlinking,
     startBlink,
     saveState,
-    pixelPerfectEditor,
     visualEditor,
     toggleVisualPanel,
     bringPanelToTop,

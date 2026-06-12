@@ -3,6 +3,7 @@ import { computed, ref, watch, nextTick, onMounted, onUnmounted, toRaw, watchEff
 import { useEditorStore } from '@/stores/EditorStore'
 import { useStyleStore } from '@/stores/StyleStore'
 import { CssLogicTreeService } from '@/editor/css/tree/CssLogicTreeService'
+import { CssExportService } from '@/editor/css/export/CssExportService'
 import { findOrCreateRoot, findCssNode, findParent } from '@/editor/css/tree/_logicTreeHelpers.js'
 import { findAndRemoveFromLogicTree } from '@/utils/astHelpers.js'
 
@@ -708,7 +709,7 @@ function openContextMenu(node, event) {
         { label: 'Move Down',   icon: '↓',  action: () => moveFileInManifest(node, 'down') },
         { divider: true },
         { label: 'Rename',      icon: '✏️', action: () => renameFile(node), shortcut: 'F2' },
-        { label: 'Export .css', icon: '↓', action: () => downloadSheet(fileKey) },
+        { label: 'Export .css', icon: '↓', action: () => CssExportService.downloadOne(styleStore.cssLogicTree, fileKey) },
         { divider: true },
         { label: 'Remover arquivo', icon: '✕', action: () => deleteFile(node), danger: true, shortcut: 'Del' },
       ]

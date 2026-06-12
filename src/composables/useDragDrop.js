@@ -99,10 +99,7 @@ function buildIndicator(siblingEl, parentEl, position, iframeRect) {
   const parentNodeId = parentEl.dataset.nodeId
   if (!parentNodeId) return null
 
-  let index = 0
-  let lineY = 0
-  let lineX = 0
-  let lineW = 0
+  let index, lineY, lineX, lineW
 
   // getBoundingClientRect() é relativo ao viewport do iframe.
   // Somamos iframeRect para obter coords no viewport principal.

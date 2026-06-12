@@ -155,7 +155,7 @@ function buildVisualIndicator(siblingRow, parentRow, siblingId, position) {
   if (!parentId) return null
 
   const parentRect = parentRow.getBoundingClientRect()
-  let lineY = 0
+  let lineY
 
   if (position === 'inside') {
     lineY = parentRect.bottom
