@@ -11,22 +11,15 @@ import { useEditorStore } from '@/stores/EditorStore'
  *   Alt+C         → toggle Components
  *   Ctrl+Shift+C  → toggle inspect mode
  *
- * @param {{ activeExplorer: import('vue').Ref<string|null>, downloadHtml: Function }} deps
+ * @param {{ activeExplorer: import('vue').Ref<string|null>, saveNow: Function }} deps
  */
-export function useEditorShortcuts({ activeExplorer, downloadHtml }) {
+export function useEditorShortcuts({ activeExplorer, saveNow }) {
   const EditorStore = useEditorStore()
 
   function handleGlobalKeydown(e) {
     if (e.ctrlKey && e.key === 's') {
       e.preventDefault()
-      // Prioridade: API backend > File System Access > download
-      if (EditorStore.currentDocument) {
-        EditorStore.saveDocument()
-      } else if (EditorStore.fileAccessSupported) {
-        EditorStore.saveFile()
-      } else {
-        downloadHtml()
-      }
+      saveNow()
     } else if (e.altKey && e.key === 'e') {
       e.preventDefault()
       EditorStore.showCssExplorer = !EditorStore.showCssExplorer
