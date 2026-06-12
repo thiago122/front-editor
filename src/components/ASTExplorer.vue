@@ -9,7 +9,7 @@ import { useExplorerDragDrop } from '@/composables/useExplorerDragDrop'
 import { useEditorStore } from '@/stores/EditorStore'
 import { useComponentStore } from '@/stores/ComponentStore'
 import { NodeDispatcher } from '@/editor/dispatchers/NodeDispatcher'
-import { HtmlExportService } from '@/editor/css/export/HtmlExportService'
+import { HtmlExportService } from '@/editor/documents/HtmlExportService'
 
 const { explorerDragState } = useExplorerDragDrop()
 const s = explorerDragState

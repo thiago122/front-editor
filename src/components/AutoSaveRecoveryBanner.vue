@@ -15,7 +15,7 @@
  *   @discard  — usuário clicou em "Descartar"
  * ─────────────────────────────────────────────────────────────────────────────
  */
-import { AutoSaveService } from '@/editor/css/export/AutoSaveService.js'
+import { AutoSaveService } from '@/editor/documents/AutoSaveService.js'
 
 const props = defineProps({
   /** Objeto { html, savedAt } retornado por AutoSaveService.load() */

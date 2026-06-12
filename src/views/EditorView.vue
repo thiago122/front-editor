@@ -41,7 +41,7 @@ import PixelPerfectPanel from '@/components/PixelPerfectPanel.vue'
 import VariablesPanel from '@/components/VariablesPanel.vue'
 
 import { CssLogicTreeService } from '@/editor/css/tree/CssLogicTreeService.js'
-import { HtmlExportService } from '@/editor/css/export/HtmlExportService.js'
+import { HtmlExportService } from '@/editor/documents/HtmlExportService.js'
 import SaveStatus from '@/components/SaveStatus.vue'
 import { useColumnResize } from '@/composables/useColumnResize.js'
 import { useEditorShortcuts } from '@/composables/useEditorShortcuts.js'
