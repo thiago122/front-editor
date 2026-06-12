@@ -27,6 +27,20 @@ function getInlineStrategy(rule) {
 
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
+// Valores padrão que CssDeclarationService.create coloca numa nova declaração
+const DEFAULT_PROP = 'property'
+const DEFAULT_VALUE = 'value'
+
+/**
+ * Declaração ainda é o placeholder intocado de criação?
+ * Usado pelos campos do inspector para descartar no blur/escape.
+ */
+export function isPlaceholderDecl(decl) {
+  const p = (decl.prop ?? '').trim()
+  const v = (decl.value ?? '').trim()
+  return (!p || p === DEFAULT_PROP) && (!v || v === DEFAULT_VALUE)
+}
+
 /**
  * Toggle a declaration on/off (like the checkbox in DevTools).
  */
