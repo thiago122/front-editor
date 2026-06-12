@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch, nextTick, onMounted, onUnmounted, toRaw, watchEffect } from 'vue'
+import { computed, ref, watch, nextTick, onMounted, onUnmounted, toRaw } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
 import { useStyleStore } from '@/stores/StyleStore'
 import { CssLogicTreeService } from '@/editor/css/tree/CssLogicTreeService'
@@ -10,7 +10,13 @@ import { findAndRemoveFromLogicTree } from '@/utils/astHelpers.js'
 import { generateId } from '@/utils/ids.js'
 import CssTreeItem from './CssTreeItem.vue'
 import CssContextMenu from './CssContextMenu.vue'
+import CssExplorerHeader from './CssExplorerHeader.vue'
+import CssExplorerUndoToast from './CssExplorerUndoToast.vue'
+import { buildContextMenuItems } from './cssExplorerMenu.js'
 import { useCssDragDrop } from '@/composables/useCssDragDrop'
+import { useTreeExpansion } from '@/composables/useTreeExpansion'
+import { useExplorerSearch } from '@/composables/useExplorerSearch'
+import { evaluateMediaQuery } from '@/editor/css/shared/mediaQuery.js'
 import { ApiService } from '@/services/ApiService'
 
 const styleStore = useStyleStore()
@@ -18,72 +24,11 @@ const editorStore = useEditorStore()
 
 const { dragState, dropTarget, onDragStart, onDragOver, onDrop, onDragEnd } = useCssDragDrop()
 
-
-// ============================================
-// LOCAL UI STATE — Tree expansion
-// (Kept here because this is purely Explorer UI, not global state)
-// ============================================
-
-const toggledNodes = ref(new Set())
-
-function toggleNode(id) {
-  const next = new Set(toggledNodes.value)
-  if (next.has(id)) {
-    next.delete(id)
-  } else {
-    next.add(id)
-  }
-  toggledNodes.value = next
-}
-
-function isExpanded(node) {
-  if (!node) return false
-  if (node.type === 'root') return true
-  return toggledNodes.value.has(node.id)
-}
-
-function expandToNode(id) {
-  // Find ALL ancestors (root → file → @media → ...) and expand each one
-  // so the target node becomes visible regardless of nesting depth.
-  const ancestors = CssLogicTreeService.findAncestors(styleStore.cssLogicTree || [], id)
-  for (const ancestor of ancestors) {
-    if (!isExpanded(ancestor)) {
-      toggleNode(ancestor.id)
-    }
-  }
-}
-
-function expandAll() {
-  const ids = new Set(toggledNodes.value)
-  const walk = (nodes) => {
-    for (const node of nodes) {
-      if (node.type !== 'root') ids.add(node.id)
-      if (node.children?.length) walk(node.children)
-    }
-  }
-  walk(styleStore.cssLogicTree || [])
-  toggledNodes.value = ids
-}
-
-function collapseAll() {
-  toggledNodes.value = new Set()
-}
-
-/** True when all expandable non-root nodes are open */
-const isFullyExpanded = computed(() => {
-  const expanded = toggledNodes.value
-  let allExpanded = true
-  const walk = (nodes) => {
-    for (const node of nodes) {
-      if (node.type !== 'root' && node.children?.length > 0) {
-        if (!expanded.has(node.id)) { allExpanded = false; return }
-      }
-      if (node.children?.length) walk(node.children)
-    }
-  }
-  walk(styleStore.cssLogicTree || [])
-  return allExpanded
-})
+// Estado de expansão da árvore (UI local) e busca/filtro
+const expansion = useTreeExpansion(styleStore)
+const { toggledNodes, toggleNode, isExpanded, expandToNode } = expansion
+const search = useExplorerSearch(styleStore)
+const { searchQuery, searchActive, openSearch, clearSearch, matchedIds } = search
 
 // When the selected rule changes, expand all its ancestors so it becomes
 // visible in the tree — works at any nesting depth (root > file > @media > selector).
@@ -116,73 +61,6 @@ function scrollToHighlighted() {
 
 watch(() => styleStore.explorerScrollRequest, () => {
   scrollToHighlighted()
-})
-
-// ============================================
-// SEARCH / FILTER
-// ============================================
-
-const searchQuery   = ref('')
-const searchActive  = ref(false)
-const searchInputRef = ref(null)
-
-function openSearch() {
-  searchActive.value = true
-  nextTick(() => searchInputRef.value?.focus())
-}
-
-function clearSearch() {
-  searchQuery.value  = ''
-  searchActive.value = false
-}
-
-// Set of node IDs that match the current query (used in visibleNodes filter)
-const matchedIds = computed(() => {
-  const q = searchQuery.value.trim().toLowerCase()
-  if (!q) return null // null = no filter active
-  const roots = styleStore.cssLogicTree || []
-  const ids = new Set()
-
-  const checkNode = (node) => {
-    const label = (node.label || '').toLowerCase()
-    const value = (node.value || '').toLowerCase()
-    return label.includes(q) || value.includes(q)
-  }
-
-  // Walk tree; mark a node if it matches OR if any descendant matches
-  const walk = (nodes) => {
-    let anyMatch = false
-    for (const node of nodes) {
-      const childMatch = node.children?.length ? walk(node.children) : false
-      const selfMatch  = checkNode(node)
-      if (selfMatch || childMatch) {
-        ids.add(node.id)
-        anyMatch = true
-      }
-    }
-    return anyMatch
-  }
-
-  walk(roots)
-  return ids
-})
-
-// How many leaf-level nodes actually match the typed term
-const matchCount = computed(() => {
-  const q = searchQuery.value.trim().toLowerCase()
-  if (!q || !matchedIds.value) return 0
-  const roots = styleStore.cssLogicTree || []
-  let count = 0
-  const walk = (nodes) => {
-    for (const node of nodes) {
-      const label = (node.label || '').toLowerCase()
-      const value = (node.value || '').toLowerCase()
-      if (label.includes(q) || value.includes(q)) count++
-      if (node.children?.length) walk(node.children)
-    }
-  }
-  walk(roots)
-  return count
 })
 
 // ============================================
@@ -323,20 +201,6 @@ const selectedNode = computed(() => {
   return findCssNode(toRaw(styleStore.cssLogicTree), id) ?? null
 })
 
-/**
- * Tipo de contexto baseado no nó selecionado:
- *  'file'     → nenhum/root/file selecionado → adicionar rule/@media no arquivo ativo
- *  'at-rule'  → at-rule selecionada → adicionar rule/@at-rule dentro dela
- *  'selector' → selector selecionado → adicionar declaração
- */
-const contextType = computed(() => {
-  const n = selectedNode.value
-  if (!n || n.type === 'root' || n.type === 'file') return 'file'
-  if (n.type === 'at-rule')  return 'at-rule'
-  if (n.type === 'selector') return 'selector'
-  return 'file'
-})
-
 /** Resolve origem e sourceName do arquivo ativo (não-externo) */
 function resolveTarget() {
   const tree = styleStore.cssLogicTree
@@ -363,40 +227,6 @@ async function createAndEdit(newNode) {
   await nextTick()
   pendingEditId.value = newNode.id
   setTimeout(() => { pendingEditId.value = null }, 200)
-}
-
-// — Context: file —
-function addRule() {
-  if (!styleStore.cssLogicTree) return
-  const { origin, sourceName } = resolveTarget()
-  createAndEdit(CssLogicTreeService.createRule(
-    styleStore.cssLogicTree, '.nova-regra', origin, sourceName
-  ))
-}
-function addAtRule() {
-  if (!styleStore.cssLogicTree) return
-  const { origin, sourceName } = resolveTarget()
-  createAndEdit(CssLogicTreeService.createAtRule(
-    styleStore.cssLogicTree, null, 'media', '(min-width: 0px)', origin, sourceName
-  ))
-}
-
-// — Context: at-rule (adicionar como filho) —
-function addRuleInside() {
-  const atRule = selectedNode.value
-  if (!atRule || atRule.type !== 'at-rule') return
-  const { origin, sourceName } = { origin: atRule.metadata?.origin ?? 'on_page', sourceName: atRule.metadata?.sourceName ?? 'style' }
-  createAndEdit(CssLogicTreeService.createRule(
-    styleStore.cssLogicTree, '.nova-regra', origin, sourceName, atRule.id
-  ))
-}
-function addAtRuleInside() {
-  const atRule = selectedNode.value
-  if (!atRule || atRule.type !== 'at-rule') return
-  const { origin, sourceName } = { origin: atRule.metadata?.origin ?? 'on_page', sourceName: atRule.metadata?.sourceName ?? 'style' }
-  createAndEdit(CssLogicTreeService.createAtRule(
-    styleStore.cssLogicTree, null, 'media', '(min-width: 0px)', origin, sourceName, atRule.id
-  ))
 }
 
 // — Context: selector (adicionar declaração) —
@@ -542,33 +372,8 @@ async function deleteFile(fileNodeCopy) {
 }
 
 // — Criar novo stylesheet (on_page / internal / external) —
-// Injeta o elemento HTML no iframe e rebuilda a Logic Tree
-const newSheetMenu = ref(false)
-// Estado para input inline (evita window.prompt que é bloqueado por browsers)
-const newSheetInputType  = ref(null)    // null | 'internal' | 'external'
-const newSheetInputValue = ref('')       // valor digitado
-
-function requestNewSheet(type) {
-  if (type === 'on_page') {
-    newSheetMenu.value = false
-    createStylesheet('on_page', null)
-    return
-  }
-  newSheetInputType.value  = type
-  newSheetInputValue.value = type === 'internal' ? 'styles.css' : 'https://'
-}
-
-async function confirmCreateStylesheet() {
-  const type = newSheetInputType.value
-  const href = newSheetInputValue.value?.trim()
-  // Reset antes de qualquer await
-  newSheetInputType.value  = null
-  newSheetInputValue.value = ''
-  newSheetMenu.value       = false
-  if (!href) return
-  await createStylesheet(type, href)
-}
-
+// O dropdown/input vivem no CssExplorerHeader; aqui só a criação de fato:
+// injeta o elemento HTML no iframe e rebuilda a Logic Tree.
 async function createStylesheet(type, href = null) {
   const doc = editorStore.getIframeDoc()
   if (!doc) { console.warn('[createStylesheet] doc é null — abortando'); return }
@@ -684,80 +489,28 @@ async function undoTrash() {
 
 // ─── Menu de Contexto ───────────────────────────────────────────────────────
 
+// Callbacks que o builder do menu liga aos itens (cssExplorerMenu.js)
+const menuActions = {
+  addFile,
+  addRuleInContext,
+  addAtRuleInContext,
+  moveFileInManifest,
+  renameFile,
+  exportFile: (node) =>
+    CssExportService.downloadOne(styleStore.cssLogicTree, `${node.metadata?.origin}::${node.label}`),
+  deleteFile,
+  addDeclaration,
+  addRuleBeforeNode,
+  addRuleAfterNode,
+  wrapWithAtRule,
+  duplicateNode,
+  deleteNode,
+}
+
 function openContextMenu(node, event) {
   event.preventDefault()
-  const x = event.clientX
-  const y = event.clientY
-  let items = []
-
-  const isExternal = node?.metadata?.origin === 'external'
-
-  if (!node || node.type === 'root') {
-    items = [
-      { label: 'New File', icon: '📄', action: addFile },
-    ]
-  } else if (node.type === 'file') {
-    const fileKey = `${node.metadata?.origin}::${node.label}`
-    if (isExternal) {
-      items = [{ label: 'External — read only', icon: '🔒', disabled: true }]
-    } else {
-      items = [
-        { label: 'New CSS Rule', icon: '{}', action: () => addRuleInContext(node), shortcut: 'Ctrl+Enter' },
-        { label: 'New At-Rule',  icon: '@',  action: () => addAtRuleInContext(node) },
-        { divider: true },
-        { label: 'Move Up',     icon: '↑',  action: () => moveFileInManifest(node, 'up') },
-        { label: 'Move Down',   icon: '↓',  action: () => moveFileInManifest(node, 'down') },
-        { divider: true },
-        { label: 'Rename',      icon: '✏️', action: () => renameFile(node), shortcut: 'F2' },
-        { label: 'Export .css', icon: '↓', action: () => CssExportService.downloadOne(styleStore.cssLogicTree, fileKey) },
-        { divider: true },
-        { label: 'Remover arquivo', icon: '✕', action: () => deleteFile(node), danger: true, shortcut: 'Del' },
-      ]
-    }
-  } else if (node.type === 'at-rule') {
-    if (isExternal) {
-      items = [{ label: 'External — read only', icon: '🔒', disabled: true }]
-    } else {
-      items = [
-        { label: 'New CSS Rule inside', icon: '{}', action: () => addRuleInContext(node), shortcut: 'Ctrl+Enter' },
-        { label: 'New At-Rule inside',  icon: '@',  action: () => addAtRuleInContext(node) },
-        { divider: true },
-        { label: 'Add Rule Before',     icon: '↑{}', action: () => addRuleBeforeNode(node), shortcut: 'Alt+↑' },
-        { label: 'Add Rule After',      icon: '↓{}', action: () => addRuleAfterNode(node), shortcut: 'Alt+↓' },
-        { divider: true },
-        { label: 'Duplicate',           icon: '⧉',  action: () => duplicateNode(node), shortcut: 'Ctrl+D' },
-        { divider: true },
-        { label: 'Delete', icon: '✕', action: () => deleteNode(node), danger: true, shortcut: 'Del' },
-      ]
-    }
-  } else if (node.type === 'selector') {
-    if (isExternal) {
-      items = [{ label: 'External — read only', icon: '🔒', disabled: true }]
-    } else {
-      items = [
-        { label: 'New Declaration', icon: ':', action: () => addDeclaration(node), shortcut: 'Ctrl+Enter' },
-        { divider: true },
-        { label: 'Add Rule Before', icon: '↑{}', action: () => addRuleBeforeNode(node), shortcut: 'Alt+↑' },
-        { label: 'Add Rule After',  icon: '↓{}', action: () => addRuleAfterNode(node), shortcut: 'Alt+↓' },
-        { divider: true },
-        { label: `Wrap @media (${Math.round(editorStore.viewport?.width ?? 768)}px)`, icon: '@', action: () => wrapWithAtRule(node), shortcut: 'Ctrl+M' },
-        { divider: true },
-        { label: 'Duplicate Rule',  icon: '⧉', action: () => duplicateNode(node), shortcut: 'Ctrl+D' },
-        { divider: true },
-        { label: 'Delete', icon: '✕', action: () => deleteNode(node), danger: true, shortcut: 'Del' },
-      ]
-    }
-  } else if (node.type === 'declaration') {
-    if (isExternal) {
-      items = [{ label: 'External — read only', icon: '🔒', disabled: true }]
-    } else {
-      items = [
-        { label: 'Delete', icon: '✕', action: () => deleteNode(node), danger: true, shortcut: 'Del' },
-      ]
-    }
-  }
-
-  if (items.length) contextMenu.value = { x, y, items }
+  const items = buildContextMenuItems(node, menuActions, editorStore.viewport?.width)
+  if (items.length) contextMenu.value = { x: event.clientX, y: event.clientY, items }
 }
 
 
@@ -958,69 +711,6 @@ const totalHeight = computed(() => visibleNodes.value.length * ROW_HEIGHT)
 const startIndex = computed(() => Math.max(0, Math.floor(scrollTop.value / ROW_HEIGHT) - 5))
 const endIndex = computed(() => Math.min(visibleNodes.value.length, Math.ceil((scrollTop.value + containerHeight.value) / ROW_HEIGHT) + 5))
 
-// ============================================
-// MEDIA QUERY EVALUATION
-// ============================================
-
-/**
- * Evaluate whether an @media at-rule label is active for the given viewport.
- * Handles the most common cases: min/max-width, min/max-height, print, screen, all.
- * Returns { active: boolean, reason: string | null }
- */
-function evaluateMediaQuery(label, viewport) {
-  if (!label || !label.includes('@media')) return { active: true, reason: null }
-
-  // Extract the condition string after '@media'
-  const condition = label.replace(/^@media\s*/i, '').trim()
-
-  if (!condition || condition === 'all' || condition === 'screen') {
-    return { active: true, reason: null }
-  }
-  if (condition === 'print') {
-    return { active: false, reason: `@media print — inactive (screen)` }
-  }
-
-  const vw = viewport?.width  ?? window.innerWidth
-  const vh = viewport?.height ?? window.innerHeight
-
-  // Parse all conditions joined by 'and'
-  const parts = condition.split(/\s+and\s+/i)
-  for (const part of parts) {
-    const clean = part.replace(/[()]/g, '').trim()
-
-    let m
-    // min-width
-    m = clean.match(/^min-width\s*:\s*([\d.]+)(px|em|rem)?$/i)
-    if (m) {
-      const val = parseFloat(m[1]) * (m[2] === 'em' || m[2] === 'rem' ? 16 : 1)
-      if (vw < val) return { active: false, reason: `${label} — inactive (viewport ${vw}px < ${Math.round(val)}px)`}
-      continue
-    }
-    // max-width
-    m = clean.match(/^max-width\s*:\s*([\d.]+)(px|em|rem)?$/i)
-    if (m) {
-      const val = parseFloat(m[1]) * (m[2] === 'em' || m[2] === 'rem' ? 16 : 1)
-      if (vw > val) return { active: false, reason: `${label} — inactive (viewport ${vw}px > ${Math.round(val)}px)`}
-      continue
-    }
-    // min-height
-    m = clean.match(/^min-height\s*:\s*([\d.]+)(px|em|rem)?$/i)
-    if (m) {
-      const val = parseFloat(m[1]) * (m[2] === 'em' || m[2] === 'rem' ? 16 : 1)
-      if (vh < val) return { active: false, reason: `${label} — inactive (viewport height ${vh}px < ${Math.round(val)}px)`}
-      continue
-    }
-    // max-height
-    m = clean.match(/^max-height\s*:\s*([\d.]+)(px|em|rem)?$/i)
-    if (m) {
-      const val = parseFloat(m[1]) * (m[2] === 'em' || m[2] === 'rem' ? 16 : 1)
-      if (vh > val) return { active: false, reason: `${label} — inactive (viewport height ${vh}px > ${Math.round(val)}px)`}
-      continue
-    }
-  }
-  return { active: true, reason: null }
-}
-
 const displayedNodes = computed(() => {
   const q        = searchQuery.value.trim()
   const viewport = editorStore.viewport
@@ -1053,162 +743,15 @@ const itemsOffset = computed(() => startIndex.value * ROW_HEIGHT)
     <div
       ref="explorerRef"
       class="flex flex-col h-full bg-white border-r border-[#d1d1d1]"
-      @click="newSheetMenu = false"
     >
-        <!-- Header -->
-        <div class="px-2 py-1.5 bg-gradient-to-b from-gray-100 to-gray-50 border-b border-gray-200 flex items-center gap-1 shrink-0">
-
-          <!-- Título + contador -->
-          <div class="flex items-center gap-1.5 min-w-0 mr-auto">
-            <svg class="w-3 h-3 text-blue-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10M5 3h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/>
-            </svg>
-            <span class="text-[11px] font-semibold text-gray-600 tracking-wide truncate">CSS</span>
-            <span v-if="searchQuery.trim()" class="text-[10px] text-blue-500 font-medium shrink-0">
-              {{ matchCount }} match{{ matchCount !== 1 ? 'es' : '' }}
-            </span>
-            <span v-else class="text-[10px] text-gray-400 tabular-nums shrink-0">{{ visibleNodes.length }}</span>
-          </div>
-
-          <!-- Botões de ação -->
-          <div class="flex items-center gap-0.5">
-
-            <!-- Search toggle -->
-            <button
-              @click="searchActive ? clearSearch() : openSearch()"
-              class="w-6 h-6 flex items-center justify-center rounded transition-colors"
-              :class="searchActive ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-200'"
-              title="Buscar (Ctrl+F)"
-            >
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 111 11a6 6 0 0116 0z"/>
-              </svg>
-            </button>
-
-            <!-- Expand / Collapse All -->
-            <button
-              @click="isFullyExpanded ? collapseAll() : expandAll()"
-              class="w-6 h-6 flex items-center justify-center rounded transition-colors text-gray-400 hover:text-gray-700 hover:bg-gray-200"
-              :title="isFullyExpanded ? 'Recolher tudo' : 'Expandir tudo'"
-            >
-              <svg v-if="isFullyExpanded" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 14l7-7m0 0V3m0 4H7M20 10l-7 7m0 0v4m0-4h4"/>
-              </svg>
-              <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
-              </svg>
-            </button>
-
-            <!-- Refresh -->
-            <button
-              @click="refresh"
-              class="w-6 h-6 flex items-center justify-center rounded transition-colors text-gray-400 hover:text-gray-700 hover:bg-gray-200"
-              title="Recarregar árvore CSS"
-            >
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-              </svg>
-            </button>
-
-            <!-- Separador -->
-            <div class="w-px h-4 bg-gray-200 mx-0.5"></div>
-
-            <!-- New Stylesheet (+) dropdown -->
-            <div class="relative">
-              <button
-                @click.stop="newSheetMenu = !newSheetMenu"
-                class="w-6 h-6 flex items-center justify-center rounded transition-colors text-gray-400 hover:text-blue-600 hover:bg-blue-50"
-                title="Novo stylesheet"
-              >
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                </svg>
-              </button>
-              <div
-                v-if="newSheetMenu"
-                class="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded shadow-lg py-1 z-50 min-w-[180px] text-[11px]"
-                @click.stop
-              >
-                <div class="px-3 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Novo Stylesheet</div>
-
-                <!-- Input inline (substitui window.prompt) -->
-                <div v-if="newSheetInputType" class="px-2 pb-2">
-                  <div class="text-[10px] text-gray-500 mb-1 px-1">
-                    {{ newSheetInputType === 'internal' ? 'Nome do arquivo:' : 'URL externa:' }}
-                  </div>
-                  <input
-                    v-model="newSheetInputValue"
-                    :placeholder="newSheetInputType === 'internal' ? 'styles.css' : 'https://cdn.example.com/x.css'"
-                    class="w-full border border-gray-300 rounded px-2 py-1 text-[11px] outline-none focus:border-blue-400 mb-1"
-                    @keydown.enter.prevent="confirmCreateStylesheet"
-                    @keydown.escape.prevent="newSheetInputType = null"
-                    autofocus
-                  />
-                  <div class="flex gap-1">
-                    <button
-                      @click.stop="confirmCreateStylesheet"
-                      class="flex-1 bg-blue-500 text-white rounded px-2 py-1 text-[10px] font-medium hover:bg-blue-600"
-                    >Criar</button>
-                    <button
-                      @click.stop="newSheetInputType = null"
-                      class="flex-1 bg-gray-100 text-gray-600 rounded px-2 py-1 text-[10px] hover:bg-gray-200"
-                    >Cancelar</button>
-                  </div>
-                </div>
-
-                <!-- Botões de tipo -->
-                <template v-else>
-                  <button
-                    class="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 text-left text-gray-700"
-                    @click.stop="requestNewSheet('on_page')"
-                  >
-                    <span class="text-indigo-500 font-mono">&lt;style&gt;</span>
-                    On-page
-                  </button>
-                  <button
-                    class="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 text-left text-gray-700"
-                    @click.stop="requestNewSheet('internal')"
-                  >
-                    <span class="text-blue-500 font-mono">&lt;link&gt;</span>
-                    Internal
-                  </button>
-                  <button
-                    class="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 text-left text-gray-700"
-                    @click.stop="requestNewSheet('external')"
-                  >
-                    <span class="text-orange-500 font-mono">🔗</span>
-                    External
-                  </button>
-                </template>
-              </div>
-            </div>
-
-          </div>
-        </div>
-
-        <!-- Search bar -->
-        <transition name="search-bar">
-          <div v-if="searchActive" class="px-2 py-1.5 bg-[#f8f8f8] border-b border-[#d1d1d1] flex items-center gap-1.5 shrink-0">
-            <svg class="w-3 h-3 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 111 11a6 6 0 0116 0z"/>
-            </svg>
-            <input
-              ref="searchInputRef"
-              v-model="searchQuery"
-              type="text"
-              placeholder="Filter rules…"
-              class="flex-1 min-w-0 bg-transparent outline-none text-[11px] text-gray-700 placeholder-gray-400 font-mono"
-              @keydown.escape.stop="clearSearch"
-            />
-
-            <button
-              v-if="searchQuery"
-              @click="searchQuery = ''"
-              class="text-gray-400 hover:text-gray-700 text-[11px] leading-none font-bold shrink-0"
-              title="Clear"
-            >×</button>
-          </div>
-        </transition>
+        <!-- Header + busca + menu de novo stylesheet -->
+        <CssExplorerHeader
+          :search="search"
+          :expansion="expansion"
+          :nodeCount="visibleNodes.length"
+          @refresh="refresh"
+          @create-stylesheet="createStylesheet"
+        />
 
         <!-- Virtualized List Container -->
         <div 
@@ -1258,26 +801,7 @@ const itemsOffset = computed(() => startIndex.value * ROW_HEIGHT)
         <CssContextMenu :menu="contextMenu" @close="contextMenu = null" />
 
 
-        <!-- Toast de desfazer (lixeira) -->
-        <Transition name="toast">
-          <div
-            v-if="undoToast"
-            style="
-              position: absolute; bottom: 10px; left: 8px; right: 8px;
-              background: #1e293b; color: white; border-radius: 8px;
-              padding: 8px 10px; font-size: 11px; display: flex;
-              align-items: center; justify-content: space-between;
-              gap: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 100;
-            "
-          >
-            <span style="opacity:.85">🗑 {{ undoToast.message }}</span>
-            <button
-              @click="undoTrash"
-              style="background:#4f46e5; border:none; color:white; padding:3px 10px;
-                     border-radius:5px; cursor:pointer; font-size:11px; font-weight:600; flex-shrink:0"
-            >Desfazer</button>
-          </div>
-        </Transition>
+        <CssExplorerUndoToast :toast="undoToast" @undo="undoTrash" />
     </div>
 
 </template>
