@@ -198,7 +198,49 @@
     <!-- Rule Action Footer -->
     <div v-if="editable" class="rule__footer">
       <template v-if="rule.selector !== 'element.style'">
-        <button @click.stop="createAtRule(rule, 'media')" class="rule__footer-btn" title="wrap with @media">@media</button>
+        <!-- @media: menu com 2 ações (Duplicar = override / Restringir = wrap).
+             Com o breakpoint base ativo, vira input de condição manual. -->
+        <div class="rule__media-menu-anchor">
+          <button
+            @click.stop="toggleMediaMenu"
+            class="rule__footer-btn"
+            :class="{ 'rule__footer-btn--open': showMediaMenu }"
+            title="Ações de @media para o breakpoint ativo"
+          >@media</button>
+
+          <div v-if="showMediaMenu" class="rule__media-overlay" @click.stop="showMediaMenu = false"></div>
+          <div v-if="showMediaMenu" class="rule__media-menu" @click.stop>
+            <template v-if="!isBaseActive">
+              <div class="rule__media-menu-cond">{{ targetCondition }}</div>
+              <button class="rule__media-menu-item" @click="onDuplicateToBreakpoint">
+                Duplicar para este breakpoint
+                <span class="rule__media-menu-hint">cria override — a regra base fica intacta</span>
+              </button>
+              <button class="rule__media-menu-item rule__media-menu-item--warn" @click="onWrapMedia()">
+                Restringir a este breakpoint
+                <span class="rule__media-menu-hint">move a regra — deixa de valer nos outros tamanhos</span>
+              </button>
+            </template>
+            <template v-else>
+              <div class="rule__media-menu-cond">breakpoint base ativo — condição manual</div>
+              <input
+                v-model="manualCondition"
+                class="rule__media-menu-input"
+                placeholder="(min-width: 768px) · print · (orientation: landscape)"
+                @keydown.enter.prevent="onWrapMedia(manualCondition)"
+                @keydown.esc="showMediaMenu = false"
+              />
+              <button
+                class="rule__media-menu-item rule__media-menu-item--warn"
+                :disabled="!manualCondition.trim()"
+                @click="onWrapMedia(manualCondition)"
+              >
+                Restringir com esta condição
+                <span class="rule__media-menu-hint">move a regra para dentro da @media</span>
+              </button>
+            </template>
+          </div>
+        </div>
         <button @click.stop="createAtRule(rule, 'container')" class="rule__footer-btn" title="wrap with @container">@container</button>
       </template>
       <div class="rule__footer-spacer"></div>
@@ -217,6 +259,8 @@ import CssDeclaration from './CssDeclaration.vue'
 import { updateRule } from '@/editor/css/actions/cssRuleActions'
 import { createAtRule, updateAtRule } from '@/editor/css/actions/cssAtRuleActions'
 import { addDeclaration, deleteDeclaration, pasteDeclarations } from '@/editor/css/actions/cssDeclarationActions'
+import { duplicateRuleToBreakpoint } from '@/editor/css/actions/cssBreakpointActions'
+import { conditionForBreakpoint, isBaseBreakpoint } from '@/editor/css/shared/breakpointStrategy'
 import { useStyleStore } from '@/stores/StyleStore'
 import { useEditorStore } from '@/stores/EditorStore'
 
@@ -302,6 +346,46 @@ const originLabel = computed(() => {
   // external / internal → exibe o nome real do arquivo (ex: assets_teste-2__styles.css)
   return props.rule.sourceName || props.rule.origin || 'style'
 })
+
+// ── Menu @media (write-target — docs/EDITING_ROADMAP.md) ────────────────────
+
+const showMediaMenu    = ref(false)
+const manualCondition  = ref('')
+
+/** Largura do botão de breakpoint ativo (null = modo full/%). Reativo. */
+const activeBpWidth = computed(() =>
+  editorStore.previewBreakpoint?.unit === 'px' ? editorStore.previewBreakpoint.width : null
+)
+
+/** Breakpoint base ativo → não há condição óbvia; menu vira input manual. */
+const isBaseActive = computed(() =>
+  isBaseBreakpoint(activeBpWidth.value, styleStore.resolvedDirection, styleStore.projectBreakpoints)
+)
+
+/** Condição que as ações do menu vão gerar (botão ativo + estratégia). */
+const targetCondition = computed(() =>
+  activeBpWidth.value != null
+    ? conditionForBreakpoint(activeBpWidth.value, styleStore.resolvedDirection)
+    : null
+)
+
+function toggleMediaMenu() {
+  showMediaMenu.value = !showMediaMenu.value
+}
+
+/** Wrap (escopo): MOVE a regra p/ dentro da @media. */
+function onWrapMedia(condition = null) {
+  if (condition !== null && !condition.trim()) return
+  createAtRule(props.rule, 'media', condition?.trim() || null)
+  showMediaMenu.value = false
+}
+
+/** Override: garante regra-irmã no @media do breakpoint, base intacta. */
+function onDuplicateToBreakpoint() {
+  const target = duplicateRuleToBreakpoint(props.rule)
+  if (target) styleStore.selectRule(target.id ?? target.uid)
+  showMediaMenu.value = false
+}
 
 // ── Clipboard de estilo ───────────────────────────────────────────────────────
 
@@ -615,6 +699,70 @@ function onRemoveIfEmpty(decl) {
   width: 12px;
   height: 12px;
 }
+
+/* Menu @media (write-target) */
+.rule__media-menu-anchor { position: relative; }
+.rule__footer-btn--open { color: #2563eb; }
+.rule__media-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.rule__media-menu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  z-index: 50;
+  min-width: 230px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rule__media-menu-cond {
+  font-size: 10px;
+  font-family: monospace;
+  color: #7c3aed;
+  padding: 3px 6px;
+  border-bottom: 1px solid #f3f4f6;
+}
+.rule__media-menu-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 5px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #374151;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+}
+.rule__media-menu-item:hover { background: #eff6ff; color: #2563eb; }
+.rule__media-menu-item--warn:hover { background: #fffbeb; color: #b45309; }
+.rule__media-menu-item:disabled { opacity: 0.4; cursor: not-allowed; }
+.rule__media-menu-hint {
+  font-size: 9.5px;
+  font-weight: 400;
+  color: #9ca3af;
+}
+.rule__media-menu-input {
+  font-family: monospace;
+  font-size: 11px;
+  padding: 4px 6px;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  outline: none;
+  margin: 2px;
+}
+.rule__media-menu-input:focus { border-color: #818cf8; }
 
 /* Banner de confirmação de rename de .class / #id */
 .rule__rename-banner {

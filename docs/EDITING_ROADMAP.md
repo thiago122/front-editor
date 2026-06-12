@@ -201,8 +201,8 @@ como ação distinta de zerar o valor.
   pela estratégia (min/max conforme direção) e aceita condição manual.
 
 **Pendente (UI/integração):**
-- [ ] Menu de duas ações no botão @media do `CssRule.vue` (Restringir /
-      Duplicar) + input de condição manual com o base ativo (eixo 6)
+- [x] Menu de duas ações no botão @media do `CssRule.vue` (Restringir /
+      Duplicar) + input de condição manual com o base ativo (eixo 6) ✔ 2026-06-12
 - [ ] Write-target IMPLÍCITO: editar propriedade com breakpoint não-base
       ativo deve rotear pela resolução antes de gravar (hoje edita a regra
       exibida) — tocar o caminho de edição de declarações
