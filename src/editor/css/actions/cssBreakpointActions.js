@@ -13,6 +13,7 @@ import { toRaw } from 'vue'
 import { useStyleStore } from '@/stores/StyleStore'
 import { useEditorStore } from '@/stores/EditorStore'
 import { CssLogicTreeService } from '../tree/CssLogicTreeService.js'
+import { isBaseBreakpoint } from '../shared/breakpointStrategy.js'
 import { unifiedHistory } from '@/editor/history/UnifiedHistoryManager'
 
 /**
@@ -58,6 +59,61 @@ export function resolveWriteTarget(rule) {
 }
 
 /**
+ * Edições de declaração devem ser roteadas para o breakpoint ativo?
+ * (write-target IMPLÍCITO — eixo 1 das decisões)
+ *
+ * Roteia apenas quando:
+ * - a regra NÃO é inline (element.style);
+ * - a regra NÃO está dentro de @media/@container (editar regra de um bloco
+ *   condicional é intenção explícita naquele bloco — não redireciona);
+ * - o inspector está no modo elemento (no modo Explorer o usuário editou a
+ *   regra diretamente na árvore — intenção explícita);
+ * - o breakpoint ativo NÃO é a base da estratégia.
+ *
+ * @param {Object} rule - Rule do inspector
+ * @returns {boolean}
+ */
+export function shouldRouteDeclarationEdits(rule) {
+  if (!rule || rule.selector === 'element.style') return false
+  if (rule.context?.some(c => c.name === 'media' || c.name === 'container')) return false
+  const styleStore = useStyleStore()
+  if (styleStore.inspectorSource === 'explorer') return false
+  return !isBaseBreakpoint(
+    getActiveBreakpointWidth(),
+    styleStore.resolvedDirection,
+    styleStore.projectBreakpoints
+  )
+}
+
+/**
+ * Garante que exista uma regra com o mesmo seletor no @media do breakpoint
+ * ativo e a retorna (nó selector da Logic Tree). SEM histórico — o caller
+ * gerencia snapshot/commit, para compor com outras mutações na mesma entrada.
+ *
+ * @param {Object} rule - Rule do inspector ou nó selector da Logic Tree
+ * @returns {Object|null} Nó selector de destino, ou null se breakpoint = base
+ */
+export function ensureRuleAtBreakpoint(rule) {
+  const styleStore = useStyleStore()
+  const { selector, origin, sourceName } = normalizeRule(rule)
+
+  const target = resolveWriteTarget(rule)
+  if (target.kind === 'base') return null
+  if (target.kind === 'existing-rule') return target.rule
+
+  const tree   = toRaw(styleStore.cssLogicTree)
+  const atRule = target.kind === 'existing-atrule'
+    ? target.atRule
+    : CssLogicTreeService.createAtRule(
+        tree, null, 'media', target.condition, origin, sourceName, null, target.insertIndex
+      )
+
+  return atRule
+    ? CssLogicTreeService.createRule(tree, selector, origin, sourceName, atRule.id)
+    : null
+}
+
+/**
  * "Duplicar para este breakpoint" — garante que exista uma regra com o
  * mesmo seletor no @media do breakpoint ativo (base intacta) e a retorna.
  * É a versão explícita do write-target implícito: cria o destino sem
@@ -70,27 +126,16 @@ export function resolveWriteTarget(rule) {
 export function duplicateRuleToBreakpoint(rule) {
   const styleStore  = useStyleStore()
   const editorStore = useEditorStore()
-  const { selector, origin, sourceName } = normalizeRule(rule)
 
-  const target = resolveWriteTarget(rule)
+  // Sondagem sem mutação: evita snapshot de histórico quando nada muda.
+  const probe = resolveWriteTarget(rule)
+  if (probe.kind === 'base') return null
+  if (probe.kind === 'existing-rule') return probe.rule
 
-  // Base: a "duplicata" é a própria regra base — nada a criar.
-  if (target.kind === 'base') return null
-  if (target.kind === 'existing-rule') return target.rule
-
-  const tree    = toRaw(styleStore.cssLogicTree)
   const applyFn = () => styleStore.applyMutation(editorStore.getIframeDoc())
   unifiedHistory.snapshotCss(styleStore.cssLogicTree, applyFn)
 
-  let atRule = target.kind === 'existing-atrule' ? target.atRule : null
-  if (!atRule) {
-    atRule = CssLogicTreeService.createAtRule(
-      tree, null, 'media', target.condition, origin, sourceName, null, target.insertIndex
-    )
-  }
-  const newRule = atRule
-    ? CssLogicTreeService.createRule(tree, selector, origin, sourceName, atRule.id)
-    : null
+  const newRule = ensureRuleAtBreakpoint(rule)
 
   if (newRule) {
     applyFn()

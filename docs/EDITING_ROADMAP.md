@@ -203,9 +203,12 @@ como ação distinta de zerar o valor.
 **Pendente (UI/integração):**
 - [x] Menu de duas ações no botão @media do `CssRule.vue` (Restringir /
       Duplicar) + input de condição manual com o base ativo (eixo 6) ✔ 2026-06-12
-- [ ] Write-target IMPLÍCITO: editar propriedade com breakpoint não-base
-      ativo deve rotear pela resolução antes de gravar (hoje edita a regra
-      exibida) — tocar o caminho de edição de declarações
+- [x] Write-target IMPLÍCITO ✔ 2026-06-12 — `updateDeclaration` (valor) e
+      `addDeclaration` (prop+val dos editores visuais) roteiam via
+      `routeValueEditToBreakpoint` quando: regra não-inline, sem contexto
+      @media/@container, inspector em modo elemento, breakpoint ≠ base.
+      Renomes de prop, toggle e delete NÃO roteiam (editam a regra exibida).
+      Decl placeholder recém-criada na base é removida da origem ao rotear.
 - [ ] Toolbar: ícones de breakpoint vindos de `projectBreakpoints` (hoje
       `BreakpointControl.vue` é fixo) + UI p/ adicionar/editar
 - [ ] UI de config (direção/inserção/breakpoints) + persistência no backend
