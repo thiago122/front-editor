@@ -18,6 +18,8 @@ import { editorHooks } from '@/editor/HookManager'
 import { useComponentStore } from './ComponentStore'
 import { AutoSaveService } from '@/editor/css/export/AutoSaveService'
 import { createPanelsSlice } from './editor/panelsSlice'
+import { createComponentLockSlice } from './editor/componentLockSlice'
+import { createFeedbackSlice } from './editor/feedbackSlice'
 
 // ─── AST path helper (runs on raw objects, no Vue proxy overhead) ─────────────
 function _findPath(node, targetId, path) {
@@ -59,72 +61,10 @@ export const useEditorStore = defineStore('editor', () => {
   const clipboard         = ref({ type: null, data: null }) // Clipboard tipado
   const showCssExplorer   = ref(false)                      // CSS Explorer visível ao lado do inspector
 
-  /** IDs de instâncias de componentes que o usuário abriu para edição */
-  const unlockedComponentIds = ref(new Set())
-
-  function unlockComponent(nodeId) {
-    unlockedComponentIds.value.add(nodeId)
-  }
-
-  function lockComponent(nodeId) {
-    unlockedComponentIds.value.delete(nodeId)
-  }
-
-  function isNodeInsideLockedComponent(nodeId) {
-    if (!ctx.value?.ast) return false
-    
-    // 1. Encontra o nó na AST para ver se ele mesmo é um componente
-    const node = findNodeById(ctx.value.ast, nodeId)
-    if (!node) return false
-
-    // 2. Se ele for um componente-raiz e estiver travado
-    if (node.attrs?.['data-component'] && !unlockedComponentIds.value.has(nodeId)) {
-      return true
-    }
-
-    // 3. Verifica os ancestrais, parando se encontrar um slot antes do componente
-    let currentId = nodeId
-    while (true) {
-      const parent = getParent(currentId)
-      if (!parent) break
-
-      // Se o nó atual (ou algum ancestral direto) for um slot, ele está livre para edição
-      const current = findNodeById(ctx.value.ast, currentId)
-      if (current?.attrs?.['data-slot'] !== undefined) {
-        return false // Está dentro de um slot — libera edição
-      }
-
-      if (parent.attrs?.['data-component']) {
-        // Achou um pai componente antes de achar um slot
-        if (!unlockedComponentIds.value.has(parent.nodeId)) {
-          return true // Travado
-        }
-        break // Componente desbloqueado — para de subir
-      }
-      currentId = parent.nodeId
-    }
-
-    return false 
-  }
-
-  /**
-   * Controla o efeito de blink visual no overlay de seleção.
-   * Ativado após inserção de novo elemento para ajudar o usuário a
-   * identificar onde o elemento foi inserido.
-   */
-  const isBlinking = ref(false)
-  let   _blinkTimer = null
-
-  /**
-   * Estado do processo de salvamento para feedback na UI.
-   * Ativado por Ctrl+S.
-   */
-  const saveState = ref({
-    active:  false,
-    status:  'idle',   // 'saving' | 'success' | 'error'
-    message: '',
-    details: [],      // lista de arquivos salvos ou erros
-  })
+  // Trava de componentes e feedback visual — fatias (stores/editor/)
+  const componentLock = createComponentLockSlice({ getCtx: getContext, getParent })
+  const feedback = createFeedbackSlice()
+  const { saveState } = feedback // saveDocument escreve nele diretamente
 
   // ── Hooks nativos do editor ─────────────────────────────────────────────────
   // Prioridade 1 garante que todos estes hooks rodam ANTES de qualquer hook externo (padrão: 10).
@@ -359,17 +299,6 @@ export const useEditorStore = defineStore('editor', () => {
 
     // Reseta a fonte do Inspector de volta para o elemento caso estivesse forçada pelo CssExplorer
     styleStore.setInspectorSource('element')
-  }
-
-  /** Inicia o blink do overlay de seleção por 5 segundos. */
-  function startBlink() {
-    // Cancela timer anterior se houver (reinicia o blink)
-    if (_blinkTimer) clearTimeout(_blinkTimer)
-    isBlinking.value = true
-    _blinkTimer = setTimeout(() => {
-      isBlinking.value = false
-      _blinkTimer = null
-    }, 3000)
   }
 
   function activate() {
@@ -969,13 +898,9 @@ export const useEditorStore = defineStore('editor', () => {
     clearSelection,
     undo,
     redo,
-    isBlinking,
-    startBlink,
-    saveState,
-    unlockedComponentIds,
-    unlockComponent,
-    lockComponent,
-    isNodeInsideLockedComponent,
+    // Trava de componentes + feedback visual — ver stores/editor/
+    ...componentLock,
+    ...feedback,
   }
 })
 
