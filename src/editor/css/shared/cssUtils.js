@@ -115,6 +115,8 @@ function findArgSelectorList(pseudoNode) {
   if (!pseudoNode.children) return null
   for (const child of pseudoNode.children) {
     if (child.type === 'SelectorList') return child
+    // :nth-child(2n of S) — css-tree embrulha o "of S" num nó Nth.selector
+    if (child.type === 'Nth' && child.selector?.type === 'SelectorList') return child.selector
   }
   return null
 }

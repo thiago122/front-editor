@@ -239,6 +239,7 @@ export class ManipulationEngine {
   // Helper for move DOM sync
   _syncMoveDom(nodeId, parentAstNode, toIndex) {
     const doc = this.getDoc()
+    if (!doc) return
     const currentEl = doc.querySelector(`[data-node-id="${nodeId}"]`)
     if (!currentEl) return
 
