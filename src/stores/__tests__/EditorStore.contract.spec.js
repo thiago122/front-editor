@@ -23,7 +23,7 @@ const PUBLIC_API = [
   'handleHover',
   // Inspect / overlays
   'inspectMode', 'showBoxModel', 'outlineMode', 'showEmptyPlaceholder',
-  'activate', 'deactivate', 'showCssExplorer',
+  'applyEditorStyles', 'activate', 'deactivate', 'showCssExplorer',
   // Arquivos / documentos
   'fileHandle', 'fileName', 'currentDocument', 'openFile', 'saveFile',
   'saveFileAs', 'openDocument', 'openDocumentByPath', 'saveDocument',
