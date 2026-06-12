@@ -675,20 +675,42 @@ export const useEditorStore = defineStore('editor', () => {
     if (newIframe) applyEditorStyles(newIframe.contentDocument)
   })
 
-  watch(iframe, (newIframe) => {
-    if (newIframe) {
-      initEngine(newIframe.contentDocument)
+  // Handler de load guardado fora do watch: sem isso, cada reatribuição do
+  // iframe empilharia um listener novo (N rebuilds por load + leak do antigo).
+  let _onIframeLoad = null
 
-      // Initialize CSS AST for the new iframe
-      newIframe.addEventListener('load', async () => {
-        // Refresh CSS AST (loads CSS internally)
-        await styleStore.rebuildLogicTree(getIframeDoc(), ['internal', 'external'])
-        
-        // Garante que os estilos do editor (outline, etc) sejam reaplicados no novo doc
-        applyEditorStyles()
-      })
+  watch(iframe, (newIframe, oldIframe) => {
+    if (oldIframe && _onIframeLoad) oldIframe.removeEventListener('load', _onIframeLoad)
+    if (!newIframe) return
+
+    initEngine(newIframe.contentDocument)
+
+    // Initialize CSS AST for the new iframe
+    _onIframeLoad = async () => {
+      // Refresh CSS AST (loads CSS internally)
+      await styleStore.rebuildLogicTree(getIframeDoc(), ['internal', 'external'])
+
+      // Garante que os estilos do editor (outline, etc) sejam reaplicados no novo doc
+      applyEditorStyles()
+
+      // O reload mata o documento antigo — selectedElement apontaria para um
+      // elemento órfão (getComputedStyle vazio, overlay some). Re-resolve pelo id.
+      restoreSelection()
     }
+    newIframe.addEventListener('load', _onIframeLoad)
   })
+
+  /** Re-resolve a seleção no documento atual ou limpa se o nó não existe mais. */
+  function restoreSelection() {
+    if (!selectedNodeId.value) return
+    const el = getIframeDoc()?.querySelector(`[data-node-id="${selectedNodeId.value}"]`)
+    if (el) {
+      selectedElement.value = markRaw(el)
+    } else {
+      selectedNodeId.value = null
+      selectedElement.value = null
+    }
+  }
 
 
   // viewport sync
