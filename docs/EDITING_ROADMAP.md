@@ -218,7 +218,13 @@ como ação distinta de zerar o valor.
       auto+override mostrando o detectado, breakpoints com chips
       add/remove e "usar detectados". Persistência no backend SEGUE
       PENDENTE (TODO no componente e no StyleStore — config vale por sessão).
-- [ ] Indicador azul/âmbar por propriedade + "remover override"
+- [x] Indicadores azul/âmbar + "voltar a herdar" ✔ 2026-06-12 — badge por
+      REGRA no painel (azul = definida no @media do breakpoint ativo;
+      âmbar = "→ (condição)", edição de valor roteia p/ lá). Limpar valor
+      nos editores visuais com breakpoint não-base usa
+      `clearPropertyAtBreakpoint` (remove do override; base intacta) —
+      resolve o edge case do `set(null)`. Indicador POR PROPRIEDADE nos
+      editores visuais (estilo Webflow) fica como refinamento futuro.
 
 ## Ordem sugerida de ataque
 

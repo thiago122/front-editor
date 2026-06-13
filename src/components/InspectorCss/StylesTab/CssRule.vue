@@ -38,6 +38,19 @@
             class="rule__inactive-badge"
             title="Este @media/@container não aplica no viewport atual — editável para ajustar outros breakpoints"
           >inativo</span>
+          <!-- Origem por breakpoint (write-target):
+               azul  = regra definida no @media do breakpoint ativo;
+               âmbar = edição de valor será gravada no breakpoint ativo (base intacta) -->
+          <span
+            v-if="matchesActiveBreakpoint"
+            class="rule__bp-badge rule__bp-badge--blue"
+            title="Regra definida no @media do breakpoint ativo — edições gravam aqui"
+          >neste breakpoint</span>
+          <span
+            v-else-if="routesToBreakpoint"
+            class="rule__bp-badge rule__bp-badge--amber"
+            :title="`Breakpoint ativo ≠ base: editar um valor aqui cria/atualiza o override em @media ${targetCondition} — esta regra fica intacta`"
+          >→ {{ targetCondition }}</span>
         </div>
 
         <!-- Botões de clipboard -->
@@ -259,8 +272,8 @@ import CssDeclaration from './CssDeclaration.vue'
 import { updateRule } from '@/editor/css/actions/cssRuleActions'
 import { createAtRule, updateAtRule } from '@/editor/css/actions/cssAtRuleActions'
 import { addDeclaration, deleteDeclaration, pasteDeclarations } from '@/editor/css/actions/cssDeclarationActions'
-import { duplicateRuleToBreakpoint } from '@/editor/css/actions/cssBreakpointActions'
-import { conditionForBreakpoint, isBaseBreakpoint } from '@/editor/css/shared/breakpointStrategy'
+import { duplicateRuleToBreakpoint, shouldRouteDeclarationEdits } from '@/editor/css/actions/cssBreakpointActions'
+import { conditionForBreakpoint, isBaseBreakpoint, parseWidthCondition, matchesBreakpoint } from '@/editor/css/shared/breakpointStrategy'
 import { useStyleStore } from '@/stores/StyleStore'
 import { useEditorStore } from '@/stores/EditorStore'
 
@@ -368,6 +381,25 @@ const targetCondition = computed(() =>
     ? conditionForBreakpoint(activeBpWidth.value, styleStore.resolvedDirection)
     : null
 )
+
+/**
+ * Âmbar: edições de valor nesta regra serão ROTEADAS para o @media do
+ * breakpoint ativo (write-target implícito) — a base fica intacta.
+ */
+const routesToBreakpoint = computed(() =>
+  props.editable && shouldRouteDeclarationEdits(props.rule)
+)
+
+/** Azul: a regra está dentro de @media que casa o breakpoint ativo. */
+const matchesActiveBreakpoint = computed(() => {
+  const w = activeBpWidth.value
+  if (w == null) return false
+  return (props.rule.context ?? []).some(ctx => {
+    if (ctx.name !== 'media') return false
+    const parsed = parseWidthCondition(`@media ${ctx.prelude}`)
+    return parsed && matchesBreakpoint(parsed, w, styleStore.resolvedDirection)
+  })
+})
 
 function toggleMediaMenu() {
   showMediaMenu.value = !showMediaMenu.value
@@ -698,6 +730,30 @@ function onRemoveIfEmpty(decl) {
 .rule__footer-icon {
   width: 12px;
   height: 12px;
+}
+
+/* Badges de origem por breakpoint (write-target) */
+.rule__bp-badge {
+  margin-left: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border-radius: 3px;
+  padding: 0 4px;
+  line-height: 1.5;
+  cursor: help;
+  font-family: monospace;
+  white-space: nowrap;
+}
+.rule__bp-badge--blue {
+  color: #1d4ed8;
+  background: #dbeafe;
+  border: 1px solid #93c5fd;
+}
+.rule__bp-badge--amber {
+  color: #b45309;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
 }
 
 /* Menu @media (write-target) */
