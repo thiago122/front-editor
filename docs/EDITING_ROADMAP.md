@@ -213,7 +213,11 @@ como ação distinta de zerar o valor.
       `projectBreakpoints` (ícone por faixa de largura, marcador no
       breakpoint base da estratégia). UI p/ adicionar/editar breakpoints
       fica junto com a UI de config (item abaixo).
-- [ ] UI de config (direção/inserção/breakpoints) + persistência no backend
+- [x] UI de config ✔ 2026-06-12 — `ResponsiveConfigPanel.vue` (popover na
+      engrenagem do `BreakpointControl`): direção/inserção com radio
+      auto+override mostrando o detectado, breakpoints com chips
+      add/remove e "usar detectados". Persistência no backend SEGUE
+      PENDENTE (TODO no componente e no StyleStore — config vale por sessão).
 - [ ] Indicador azul/âmbar por propriedade + "remover override"
 
 ## Ordem sugerida de ataque

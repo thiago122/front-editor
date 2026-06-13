@@ -38,13 +38,34 @@
       />
       <span class="text-[10px] font-semibold text-gray-400 ml-1">px</span>
     </div>
+
+    <!-- Config de responsividade (direção / inserção / breakpoints) -->
+    <div class="relative">
+      <button
+        class="flex items-center justify-center p-1.5 rounded-sm transition-colors"
+        :class="showConfig ? 'bg-white ring-1 ring-gray-200/60 text-indigo-600' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-200/50'"
+        title="Configuração de responsividade do projeto"
+        @click="showConfig = !showConfig"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      </button>
+      <div v-if="showConfig" class="fixed inset-0 z-40" @click="showConfig = false"></div>
+      <div v-if="showConfig" class="absolute top-full right-0 mt-1 z-50" @click.stop>
+        <ResponsiveConfigPanel />
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useStyleStore } from '@/stores/StyleStore'
 import { isBaseBreakpoint } from '@/editor/css/shared/breakpointStrategy'
+import ResponsiveConfigPanel from '@/components/ResponsiveConfigPanel.vue'
 import IconBreakpointXS from '@/components/icons/IconBreakpointXS.vue'
 import IconBreakpointSM from '@/components/icons/IconBreakpointSM.vue'
 import IconBreakpointMD from '@/components/icons/IconBreakpointMD.vue'
@@ -53,6 +74,7 @@ import IconBreakpointXL from '@/components/icons/IconBreakpointXL.vue'
 import IconBreakpoint2XL from '@/components/icons/IconBreakpoint2XL.vue'
 
 const styleStore = useStyleStore()
+const showConfig = ref(false)
 
 defineProps({
   previewWidth: {
