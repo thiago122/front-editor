@@ -7,7 +7,7 @@
       :key="bp.width"
       class="relative flex items-center justify-center p-1.5 rounded-sm transition-colors"
       :class="previewUnit === 'px' && previewWidth === bp.width
-        ? 'bg-white ring-1 ring-gray-200/60 text-indigo-600'
+        ? 'bg-indigo-600 text-white shadow-sm'
         : 'text-gray-500 hover:text-gray-800 hover:bg-gray-200/50'"
       :title="bp.title"
       @click="update(bp.width, 'px')"
@@ -16,14 +16,15 @@
       <!-- Marcador do breakpoint base da estratégia (edita sem @media) -->
       <span
         v-if="bp.isBase"
-        class="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-indigo-400 pointer-events-none"
+        class="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full pointer-events-none"
+        :class="previewUnit === 'px' && previewWidth === bp.width ? 'bg-white' : 'bg-indigo-400'"
       ></span>
     </button>
 
     <button
       class="flex items-center justify-center p-1.5 rounded-sm transition-colors"
       @click="update(100, '%')"
-      :class="previewUnit === '%' && previewWidth === 100 ? 'bg-white ring-1 ring-gray-200/60 text-indigo-600' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-200/50'"
+      :class="previewUnit === '%' && previewWidth === 100 ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-200/50'"
       title="Full Width (100%)"
     >
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>

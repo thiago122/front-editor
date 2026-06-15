@@ -41,7 +41,7 @@ export const useEditorStore = defineStore('editor', () => {
   const iframe = ref(null)
   const previewContainer = ref(null) // wrapper do <Preview> — base para position:absolute do overlay
   const viewport         = ref({ width: window.innerWidth, height: window.innerHeight })
-  const previewBreakpoint = ref({ width: 1280, unit: 'px' }) // breakpoint selecionado pelo usuário
+  const previewBreakpoint = ref({ width: 100, unit: '%' }) // breakpoint selecionado pelo usuário (default: full width)
   
   const pipeline = new Pipeline()
   pipeline.use(htmlPlugin())

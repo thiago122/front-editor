@@ -11,8 +11,8 @@ import { useEditorStore } from '@/stores/EditorStore'
 export function usePreviewResize(startResize) {
   const EditorStore = useEditorStore()
 
-  const previewWidth = ref(1280)
-  const previewUnit = ref('px')
+  const previewWidth = ref(100)
+  const previewUnit = ref('%')
 
   function startPreviewResizeRight(e) {
     previewUnit.value = 'px'
