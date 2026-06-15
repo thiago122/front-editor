@@ -1,5 +1,5 @@
 <template>
-  <div ref="ruleEl" class="rule" :class="{ 'rule--inactive': isInactive }">
+  <div ref="ruleEl" class="rule" :class="{ 'rule--inactive': isInactive, 'rule--active-bp': matchesActiveBreakpoint }">
     <!-- Source file / origin — acima do seletor -->
     <div class="rule__meta">
       <!-- ícone: revelar esta regra no CSS Explorer -->
@@ -486,6 +486,14 @@ function onRemoveIfEmpty(decl) {
 .rule {
   position: relative;
   background: #fff;
+}
+
+/* Regra ativa segundo o breakpoint atual: dentro de @media que casa o
+   viewport selecionado — destacada com borda da cor do acento. */
+.rule--active-bp {
+  border: 1px solid #4f39f6;
+  border-radius: 4px;
+  background: #f5f4ff;
 }
 
 /* At-Rules hierárquicas */
