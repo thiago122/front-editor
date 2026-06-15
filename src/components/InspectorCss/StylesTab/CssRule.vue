@@ -1,164 +1,112 @@
 <template>
   <div ref="ruleEl" class="rule" :class="{ 'rule--inactive': isInactive }">
-      <!-- Source file / origin — acima do seletor -->
-      <div class="rule__meta">
-        <!-- ícone: revelar esta regra no CSS Explorer -->
-        <button
-          v-if="rule.selector !== 'element.style'"
-          class="rule__meta-btn"
-          title="Revelar no CSS Explorer"
-          @click.stop="styleStore.navigateToRule(rule.uid)"
-        >
-          <!-- document-search icon -->
-          <svg class="rule__meta-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586
+    <!-- Source file / origin — acima do seletor -->
+    <div class="rule__meta">
+      <!-- ícone: revelar esta regra no CSS Explorer -->
+      <button v-if="rule.selector !== 'element.style'" class="rule__meta-btn" title="Revelar no CSS Explorer"
+        @click.stop="styleStore.navigateToRule(rule.uid)">
+        <!-- document-search icon -->
+        <svg class="rule__meta-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586
                  a1 1 0 01.707.293l5.414 5.414A1 1 0 0119 9.414V19a2 2 0
                  01-2 2z" />
-          </svg>
-        </button>
+        </svg>
+      </button>
 
-        <!-- NOVO: Editar via Código -->
-        <button
-          v-if="rule.selector !== 'element.style'"
-          class="rule__meta-btn rule__meta-btn--code"
-          title="Editar via Código"
-          data-quick-editor-trigger="true"
-          @click.stop="(e) => editorStore.openCodeEditor('css', rule.uid, { x: e.clientX, y: e.clientY })"
-        >
-          <svg class="rule__meta-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <polyline points="16 18 22 12 16 6"></polyline>
-            <polyline points="8 6 2 12 8 18"></polyline>
-          </svg>
-        </button>
-        <div class="rule__origin">
-          <span class="rule__origin-label">{{ originLabel }}</span>
-          <span
-            v-if="isInactive"
-            class="rule__inactive-badge"
-            title="Este @media/@container não aplica no viewport atual — editável para ajustar outros breakpoints"
-          >inativo</span>
-          <!-- Origem por breakpoint (write-target):
+      <!-- NOVO: Editar via Código -->
+      <button v-if="rule.selector !== 'element.style'" class="rule__meta-btn rule__meta-btn--code"
+        title="Editar via Código" data-quick-editor-trigger="true"
+        @click.stop="(e) => editorStore.openCodeEditor('css', rule.uid, { x: e.clientX, y: e.clientY })">
+        <svg class="rule__meta-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <polyline points="16 18 22 12 16 6"></polyline>
+          <polyline points="8 6 2 12 8 18"></polyline>
+        </svg>
+      </button>
+      <div class="rule__origin">
+        <span class="rule__origin-label">{{ originLabel }}</span>
+        <span v-if="isInactive" class="rule__inactive-badge"
+          title="Este @media/@container não aplica no viewport atual — editável para ajustar outros breakpoints">inativo</span>
+        <!-- Origem por breakpoint (write-target):
                azul  = regra definida no @media do breakpoint ativo;
                âmbar = edição de valor será gravada no breakpoint ativo (base intacta) -->
-          <span
-            v-if="matchesActiveBreakpoint"
-            class="rule__bp-badge rule__bp-badge--blue"
-            title="Regra definida no @media do breakpoint ativo — edições gravam aqui"
-          >neste breakpoint</span>
-          <span
-            v-else-if="routesToBreakpoint"
-            class="rule__bp-badge rule__bp-badge--amber"
-            :title="`Breakpoint ativo ≠ base: editar um valor aqui cria/atualiza o override em @media ${targetCondition} — esta regra fica intacta`"
-          >→ {{ targetCondition }}</span>
-        </div>
-
-        <!-- Botões de clipboard -->
-        <div class="rule__clipboard-btns">
-          <!-- Colar estilo (só aparece quando há estilo copiado) -->
-          <button
-            v-if="styleStore.copiedStyle && styleStore.copiedStyle.declarations.length"
-            class="rule__meta-btn rule__meta-btn--paste"
-            :title="`Colar ${styleStore.copiedStyle.declarations.length} propriedade(s) nesta regra`"
-            @click.stop="onPasteStyle"
-          >
-            <!-- paste icon -->
-            <svg class="rule__meta-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
-          </button>
-          <!-- Copiar estilo -->
-          <button
-            v-if="rule.declarations.length"
-            class="rule__meta-btn"
-            :class="{ 'rule__meta-btn--active': isCopied }"
-            :title="isCopied ? 'Estilo copiado!' : 'Copiar declarações desta regra'"
-            @click.stop="onCopyStyle"
-          >
-            <!-- copy icon -->
-            <svg class="rule__meta-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            </svg>
-          </button>
-        </div>
+        <span v-if="matchesActiveBreakpoint" class="rule__bp-badge rule__bp-badge--blue"
+          title="Regra definida no @media do breakpoint ativo — edições gravam aqui">neste breakpoint</span>
+        <span v-else-if="routesToBreakpoint" class="rule__bp-badge rule__bp-badge--amber"
+          :title="`Breakpoint ativo ≠ base: editar um valor aqui cria/atualiza o override em @media ${targetCondition} — esta regra fica intacta`">→
+          {{ targetCondition }}</span>
       </div>
+
+      <!-- Botões de clipboard -->
+      <div class="rule__clipboard-btns">
+        <!-- Colar estilo (só aparece quando há estilo copiado) -->
+        <button v-if="styleStore.copiedStyle && styleStore.copiedStyle.declarations.length"
+          class="rule__meta-btn rule__meta-btn--paste"
+          :title="`Colar ${styleStore.copiedStyle.declarations.length} propriedade(s) nesta regra`"
+          @click.stop="onPasteStyle">
+          <!-- paste icon -->
+          <svg class="rule__meta-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+        </button>
+        <!-- Copiar estilo -->
+        <button v-if="rule.declarations.length" class="rule__meta-btn" :class="{ 'rule__meta-btn--active': isCopied }"
+          :title="isCopied ? 'Estilo copiado!' : 'Copiar declarações desta regra'" @click.stop="onCopyStyle">
+          <!-- copy icon -->
+          <svg class="rule__meta-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+        </button>
+      </div>
+    </div>
     <!-- At-Rules hierárquicas: cada nível indenta o próximo -->
     <template v-if="rule.context && rule.context.length">
-      <div
-        v-for="(ctx, idx) in rule.context"
-        :key="idx"
-      >
+      <div v-for="(ctx, idx) in rule.context" :key="idx">
 
 
 
 
         <!-- @layer: exibe como badge de categoria -->
         <template v-if="ctx.name === 'layer'">
-          <div 
-            class="rule__layer-badge-container" 
-            :style="{ paddingLeft: (idx + 1) * INDENT_SIZE + 'px' }"
-          >
+          <div class="rule__layer-badge-container" :style="{ paddingLeft: (idx + 1) * INDENT_SIZE + 'px' }">
             <span class="rule__layer-badge">@layer</span>
             <span class="rule__layer-name">{{ ctx.prelude }}</span>
           </div>
         </template>
         <!-- @media, @container, @supports, etc. -->
         <template v-else>
-          <div 
-            :class="['rule__at-rule-row', ctx.name === 'layer' ? 'rule__at-rule-row--layer' : '']" 
-            :style="{ paddingLeft: (idx + 1) * INDENT_SIZE + 'px' }"
-          >
+          <div :class="['rule__at-rule-row', ctx.name === 'layer' ? 'rule__at-rule-row--layer' : '']"
+            :style="{ paddingLeft: (idx + 1) * INDENT_SIZE + 'px' }">
             <span class="rule__at-rule-name">@{{ ctx.name }}</span>
-              <span
-              class="rule__at-rule-prelude"
-              :contenteditable="editable ? 'true' : 'false'"
-              @blur="(e) => updateAtRule(ctx, e.target.innerText)"
-              @keydown.enter.prevent="(e) => e.target.blur()"
-            >{{ ctx.prelude }}</span>
+            <span class="rule__at-rule-prelude" :contenteditable="editable ? 'true' : 'false'"
+              @blur="(e) => updateAtRule(ctx, e.target.innerText)" @keydown.enter.prevent="(e) => e.target.blur()">{{
+                ctx.prelude }}</span>
           </div>
-          
+
         </template>
       </div>
     </template>
 
     <!-- Bloco do selector: indentado pela quantidade de at-rules -->
-    <div
-      class="rule__body"
-      :style="{ paddingLeft: indentPx }"
-    >
+    <div class="rule__body" :style="{ paddingLeft: indentPx }">
 
       <!-- Rule Header -->
       <div class="rule__header">
-        <div
-          class="rule__header-left"
-          :style="{ cursor: editable ? 'text' : 'default' }"
-          @click="editable && onAddDeclaration()"
-        >
-          <span
-            :class="['rule__selector', !editable ? 'rule__selector--readonly' : '']"
-            :contenteditable="rule.selector !== 'element.style' && editable"
-            @click.stop
-            @blur="onSelectorBlur"
-            @keydown.enter.prevent="onSelectorConfirm"
-            @keydown.tab.prevent="onSelectorConfirm"
-          >{{ rule.selector }}</span>
+        <div class="rule__header-left" :style="{ cursor: editable ? 'text' : 'default' }"
+          @click="editable && onAddDeclaration()">
+          <span :class="['rule__selector', !editable ? 'rule__selector--readonly' : '']"
+            :contenteditable="rule.selector !== 'element.style' && editable" @click.stop @blur="onSelectorBlur"
+            @keydown.enter.prevent="onSelectorConfirm" @keydown.tab.prevent="onSelectorConfirm">{{ rule.selector
+            }}</span>
           <span class="rule__brace">{</span>
         </div>
       </div>
 
       <!-- Property List -->
       <div class="rule__declarations">
-        <CssDeclaration
-          v-for="decl in rule.declarations"
-          :key="decl.id || decl.prop"
-          :rule="rule"
-          :decl="decl"
-          :editable="editable"
-          @request-new-decl="onAddDeclaration"
-          @remove-if-empty="onRemoveIfEmpty(decl)"
-        />
+        <CssDeclaration v-for="decl in rule.declarations" :key="decl.id || decl.prop" :rule="rule" :decl="decl"
+          :editable="editable" @request-new-decl="onAddDeclaration" @remove-if-empty="onRemoveIfEmpty(decl)" />
       </div>
 
       <div class="rule__brace-row">
@@ -166,23 +114,15 @@
 
         <!-- Visual Editing Buttons (L, T, A, D) -->
         <div class="rule__visual-btns">
-          <button
-            v-for="group in visualGroups"
-            :key="group.id"
-            class="rule__visual-btn relative"
-            :class="[
-              `rule__visual-btn--${group.color}`,
-              { 'is-active': editorStore.visualEditor.activeRuleUid === rule.uid && editorStore.visualEditor.panels[group.id].show }
-            ]"
-            :title="group.title"
-            @click.stop="(e) => editorStore.toggleVisualPanel(rule.uid, group.id, { x: e.clientX, y: e.clientY })"
-          >
+          <button v-for="group in visualGroups" :key="group.id" class="rule__visual-btn relative" :class="[
+            `rule__visual-btn--${group.color}`,
+            { 'is-active': editorStore.visualEditor.activeRuleUid === rule.uid && editorStore.visualEditor.panels[group.id].show }
+          ]" :title="group.title"
+            @click.stop="(e) => editorStore.toggleVisualPanel(rule.uid, group.id, { x: e.clientX, y: e.clientY })">
             {{ group.label }}
             <!-- Blue dot: this rule has properties from this category -->
-            <span 
-              v-if="hasCategoryProps[group.id]"
-              class="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-blue-500 border border-white pointer-events-none"
-            ></span>
+            <span v-if="hasCategoryProps[group.id]"
+              class="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-blue-500 border border-white pointer-events-none"></span>
           </button>
         </div>
       </div>
@@ -190,20 +130,21 @@
 
     <!-- Banner de confirmação: sincronizar atributo do elemento -->
     <Transition name="rename-banner">
-      <div
-        v-if="editorStore.selectorRenameConfirm.show && editorStore.selectorRenameConfirm.ruleUid === rule.uid"
-        class="rule__rename-banner"
-      >
+      <div v-if="editorStore.selectorRenameConfirm.show && editorStore.selectorRenameConfirm.ruleUid === rule.uid"
+        class="rule__rename-banner">
         <span class="rule__rename-text">
           Renomear
-          <code>{{ editorStore.selectorRenameConfirm.type === 'class' ? '.' : '#' }}{{ editorStore.selectorRenameConfirm.oldName }}</code>
+          <code>{{ editorStore.selectorRenameConfirm.type === 'class' ? '.' : '#' }}{{
+            editorStore.selectorRenameConfirm.oldName }}</code>
           para
-          <code>{{ editorStore.selectorRenameConfirm.type === 'class' ? '.' : '#' }}{{ editorStore.selectorRenameConfirm.newName }}</code>
+          <code>{{ editorStore.selectorRenameConfirm.type === 'class' ? '.' : '#' }}{{
+            editorStore.selectorRenameConfirm.newName }}</code>
           no elemento?
         </span>
         <div class="rule__rename-actions">
           <button class="rule__rename-btn rule__rename-btn--yes" @click.stop="applyAttrRename">Sim</button>
-          <button class="rule__rename-btn rule__rename-btn--no" @click.stop="editorStore.selectorRenameConfirm.show = false">Não</button>
+          <button class="rule__rename-btn rule__rename-btn--no"
+            @click.stop="editorStore.selectorRenameConfirm.show = false">Não</button>
         </div>
       </div>
     </Transition>
@@ -214,51 +155,49 @@
         <!-- @media: menu com 2 ações (Duplicar = override / Restringir = wrap).
              Com o breakpoint base ativo, vira input de condição manual. -->
         <div class="rule__media-menu-anchor">
-          <button
-            @click.stop="toggleMediaMenu"
-            class="rule__footer-btn"
+          <button @click.stop="toggleMediaMenu" class="rule__footer-btn"
             :class="{ 'rule__footer-btn--open': showMediaMenu }"
-            title="Ações de @media para o breakpoint ativo"
-          >@media</button>
+            title="Ações de @media para o breakpoint ativo">@media</button>
 
           <div v-if="showMediaMenu" class="rule__media-overlay" @click.stop="showMediaMenu = false"></div>
           <div v-if="showMediaMenu" class="rule__media-menu" @click.stop>
             <template v-if="!isBaseActive">
               <div class="rule__media-menu-cond">{{ targetCondition }}</div>
               <button class="rule__media-menu-item" @click="onDuplicateToBreakpoint">
-                Duplicar para este breakpoint
-                <span class="rule__media-menu-hint">cria override — a regra base fica intacta</span>
+                Duplicar no breakpoint selecionado
+                <!-- <span class="rule__media-menu-hint">cria override — a regra base fica intacta</span> -->
               </button>
               <button class="rule__media-menu-item rule__media-menu-item--warn" @click="onWrapMedia()">
-                Restringir a este breakpoint
-                <span class="rule__media-menu-hint">move a regra — deixa de valer nos outros tamanhos</span>
+                colocar a regra css dentro dentro do breakpoint selecionado
+                <!-- <span class="rule__media-menu-hint">move a regra — deixa de valer nos outros tamanhos</span> -->
               </button>
             </template>
             <template v-else>
-              <div class="rule__media-menu-cond">breakpoint base ativo — condição manual</div>
-              <input
-                v-model="manualCondition"
-                class="rule__media-menu-input"
+              Nenhum breakpoint selecionado <br>
+              <div class="rule__media-menu-cond">
+
+                Adicione a condição manualmente
+
+              </div>
+              <input v-model="manualCondition" class="rule__media-menu-input"
                 placeholder="(min-width: 768px) · print · (orientation: landscape)"
-                @keydown.enter.prevent="onWrapMedia(manualCondition)"
-                @keydown.esc="showMediaMenu = false"
-              />
-              <button
-                class="rule__media-menu-item rule__media-menu-item--warn"
-                :disabled="!manualCondition.trim()"
-                @click="onWrapMedia(manualCondition)"
-              >
-                Restringir com esta condição
-                <span class="rule__media-menu-hint">move a regra para dentro da @media</span>
+                @keydown.enter.prevent="onWrapMedia(manualCondition)" @keydown.esc="showMediaMenu = false" />
+              <button class="rule__media-menu-item rule__media-menu-item--warn" :disabled="!manualCondition.trim()"
+                @click="onWrapMedia(manualCondition)">
+                colocar esta regra no breakpoint selecionado
+                <!-- <span class="rule__media-menu-hint">colocar a regra css dentro da @media selecionada</span> -->
               </button>
             </template>
           </div>
         </div>
-        <button @click.stop="createAtRule(rule, 'container')" class="rule__footer-btn" title="wrap with @container">@container</button>
+        <button @click.stop="createAtRule(rule, 'container')" class="rule__footer-btn"
+          title="wrap with @container">@container</button>
       </template>
       <div class="rule__footer-spacer"></div>
       <button @click.stop="onAddDeclaration" class="rule__footer-btn rule__footer-btn--add">
-        <svg class="rule__footer-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+        <svg class="rule__footer-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+        </svg>
         Prop
       </button>
     </div>
@@ -277,7 +216,7 @@ import { conditionForBreakpoint, isBaseBreakpoint, parseWidthCondition, matchesB
 import { useStyleStore } from '@/stores/StyleStore'
 import { useEditorStore } from '@/stores/EditorStore'
 
-const styleStore  = useStyleStore()
+const styleStore = useStyleStore()
 const editorStore = useEditorStore()
 
 const props = defineProps({
@@ -286,10 +225,10 @@ const props = defineProps({
 })
 
 const visualGroups = [
-  { id: 'layout',     label: 'L', title: 'Layout & Structure (L)', color: 'blue' },
-  { id: 'typography', label: 'T', title: 'Typography (T)',         color: 'amber' },
+  { id: 'layout', label: 'L', title: 'Layout & Structure (L)', color: 'blue' },
+  { id: 'typography', label: 'T', title: 'Typography (T)', color: 'amber' },
   { id: 'appearance', label: 'A', title: 'Appearance & Skin (A)', color: 'pink' },
-  { id: 'dynamics',   label: 'D', title: 'Motion & Feedback (D)',  color: 'indigo' },
+  { id: 'dynamics', label: 'D', title: 'Motion & Feedback (D)', color: 'indigo' },
 ]
 
 /** Map of CSS properties per visual category */
@@ -355,15 +294,15 @@ const ruleEl = ref(null)
 const originLabel = computed(() => {
   if (props.rule.selector === 'element.style') return 'inline'
   if (props.rule.origin === 'on_page') return 'on-page'
-  if (props.rule.origin === 'inline')  return 'inline'
+  if (props.rule.origin === 'inline') return 'inline'
   // external / internal → exibe o nome real do arquivo (ex: assets_teste-2__styles.css)
   return props.rule.sourceName || props.rule.origin || 'style'
 })
 
 // ── Menu @media (write-target — docs/EDITING_ROADMAP.md) ────────────────────
 
-const showMediaMenu    = ref(false)
-const manualCondition  = ref('')
+const showMediaMenu = ref(false)
+const manualCondition = ref('')
 
 /** Largura do botão de breakpoint ativo (null = modo full/%). Reativo. */
 const activeBpWidth = computed(() =>
@@ -456,7 +395,7 @@ function onAddDeclaration() {
 function parseSingleToken(selector) {
   const s = (selector ?? '').trim()
   if (/^\.([a-zA-Z_-][\w-]*)$/.test(s)) return { type: 'class', name: s.slice(1) }
-  if (/^#([a-zA-Z_-][\w-]*)$/.test(s))  return { type: 'id',    name: s.slice(1) }
+  if (/^#([a-zA-Z_-][\w-]*)$/.test(s)) return { type: 'id', name: s.slice(1) }
   return null
 }
 
@@ -486,22 +425,22 @@ function onSelectorBlur(e) {
   if (!elHasToken) return
 
   // Grava no store — não é destruido quando CssRule remonta
-  editorStore.selectorRenameConfirm.show    = true
-  editorStore.selectorRenameConfirm.type    = oldToken.type
+  editorStore.selectorRenameConfirm.show = true
+  editorStore.selectorRenameConfirm.type = oldToken.type
   editorStore.selectorRenameConfirm.oldName = oldToken.name
   editorStore.selectorRenameConfirm.newName = newToken.name
   editorStore.selectorRenameConfirm.ruleUid = props.rule.uid
 }
 
 function applyAttrRename() {
-  const rc    = editorStore.selectorRenameConfirm
-  rc.show     = false
+  const rc = editorStore.selectorRenameConfirm
+  rc.show = false
   const { type, oldName, newName } = rc
   const nodeId = editorStore.selectedNodeId
   if (!nodeId || !editorStore.manipulation) return
 
   if (type === 'class') {
-    const el     = editorStore.selectedElement
+    const el = editorStore.selectedElement
     const merged = (el?.className ?? '')
       .split(/\s+/)
       .filter(Boolean)
@@ -535,7 +474,7 @@ function onSelectorConfirm(e) {
 
 function onRemoveIfEmpty(decl) {
   // Remove apenas se ainda estiver com os valores padrão do placeholder
-  const p = (decl.prop  ?? '').trim()
+  const p = (decl.prop ?? '').trim()
   const v = (decl.value ?? '').trim()
   const isDefault = (!p || p === 'property') && (!v || v === 'value')
   if (!isDefault) return
@@ -559,18 +498,24 @@ function onRemoveIfEmpty(decl) {
   line-height: 1.4;
   color: #6b7280;
 }
+
 .rule__at-rule-name {
-  color: #7c3aed;   /* roxo — mesmo tom do Chrome DevTools */
+  color: #7c3aed;
+  /* roxo — mesmo tom do Chrome DevTools */
   flex-shrink: 0;
 }
+
 .rule__at-rule-prelude {
   color: #374151;
   cursor: text;
 }
-.rule__at-rule-prelude:hover { text-decoration: underline; }
+
+.rule__at-rule-prelude:hover {
+  text-decoration: underline;
+}
 
 /* @layer — badge de categoria (estilo diferente dos at-rules condicionais) */
-.rule__layer-badge-container{
+.rule__layer-badge-container {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -586,6 +531,7 @@ function onRemoveIfEmpty(decl) {
   flex-shrink: 0;
   letter-spacing: 0.02em;
 }
+
 .rule__layer-name {
   font-size: 10px;
   color: #1e40af;
@@ -597,23 +543,33 @@ function onRemoveIfEmpty(decl) {
   display: flex;
   align-items: center;
 }
+
 .rule__header-left {
   display: flex;
   align-items: center;
   flex: 1;
 }
+
 .rule__selector {
   font-size: 13px;
   cursor: text;
   word-break: break-all;
 }
-.rule__selector:hover { text-decoration: underline; }
+
+.rule__selector:hover {
+  text-decoration: underline;
+}
+
 .rule__selector--readonly {
   opacity: 0.4;
   cursor: not-allowed;
   text-decoration: none;
 }
-.rule__brace { margin-left: 4px; line-height: 1; }
+
+.rule__brace {
+  margin-left: 4px;
+  line-height: 1;
+}
 
 .rule__origin {
   display: inline-flex;
@@ -624,7 +580,10 @@ function onRemoveIfEmpty(decl) {
   letter-spacing: 0.01em;
   flex: 1;
 }
-.rule__origin-label { font-weight: 600; }
+
+.rule__origin-label {
+  font-weight: 600;
+}
 
 /* Badge de regra inativa (@media/@container fora do viewport atual) */
 .rule__inactive-badge {
@@ -644,13 +603,16 @@ function onRemoveIfEmpty(decl) {
 
 /* Fade só no corpo da regra inativa — meta/origin/badge ficam legíveis.
    Mantém editável (opacity não bloqueia ponteiro). */
-.rule--inactive .rule__body { opacity: 0.55; }
+.rule--inactive .rule__body {
+  opacity: 0.55;
+}
 
 /* Meta row (origin + clipboard buttons) */
 .rule__meta {
   display: flex;
   align-items: center;
 }
+
 .rule__clipboard-btns {
   display: none;
   align-items: center;
@@ -658,6 +620,7 @@ function onRemoveIfEmpty(decl) {
   margin-left: auto;
   padding-right: 4px;
 }
+
 .rule:hover .rule__clipboard-btns {
   display: flex;
 }
@@ -678,18 +641,22 @@ function onRemoveIfEmpty(decl) {
   transition: color 0.15s, background 0.15s;
   flex-shrink: 0;
 }
+
 .rule__meta-btn:hover {
   color: #2563eb;
   background: #eff6ff;
 }
+
 .rule__meta-btn--active {
   color: #16a34a;
   background: #dcfce7;
 }
+
 .rule__meta-btn--paste:hover {
   color: #7c3aed;
   background: #ede9fe;
 }
+
 .rule__meta-icon {
   width: 11px;
   height: 11px;
@@ -700,6 +667,7 @@ function onRemoveIfEmpty(decl) {
   line-height: 1;
   position: relative;
 }
+
 .rule__brace-close {
   line-height: 1;
 }
@@ -710,7 +678,11 @@ function onRemoveIfEmpty(decl) {
   align-items: center;
   gap: 6px;
 }
-.rule__footer-spacer { flex: 1; }
+
+.rule__footer-spacer {
+  flex: 1;
+}
+
 .rule__footer-btn {
   font-size: 11px;
   padding: 4px 8px;
@@ -719,14 +691,22 @@ function onRemoveIfEmpty(decl) {
   border: none;
   cursor: pointer;
 }
-.rule__footer-btn:hover { color: #2563eb; }
+
+.rule__footer-btn:hover {
+  color: #2563eb;
+}
+
 .rule__footer-btn--add {
   display: flex;
   align-items: center;
   gap: 4px;
   padding: 4px 12px;
 }
-.rule__footer-btn--add:hover { color: #15803d; }
+
+.rule__footer-btn--add:hover {
+  color: #15803d;
+}
+
 .rule__footer-icon {
   width: 12px;
   height: 12px;
@@ -745,11 +725,13 @@ function onRemoveIfEmpty(decl) {
   font-family: monospace;
   white-space: nowrap;
 }
+
 .rule__bp-badge--blue {
   color: #1d4ed8;
   background: #dbeafe;
   border: 1px solid #93c5fd;
 }
+
 .rule__bp-badge--amber {
   color: #b45309;
   background: #fef3c7;
@@ -757,13 +739,20 @@ function onRemoveIfEmpty(decl) {
 }
 
 /* Menu @media (write-target) */
-.rule__media-menu-anchor { position: relative; }
-.rule__footer-btn--open { color: #2563eb; }
+.rule__media-menu-anchor {
+  position: relative;
+}
+
+.rule__footer-btn--open {
+  color: #2563eb;
+}
+
 .rule__media-overlay {
   position: fixed;
   inset: 0;
   z-index: 40;
 }
+
 .rule__media-menu {
   position: absolute;
   bottom: calc(100% + 4px);
@@ -779,6 +768,7 @@ function onRemoveIfEmpty(decl) {
   flex-direction: column;
   gap: 2px;
 }
+
 .rule__media-menu-cond {
   font-size: 10px;
   font-family: monospace;
@@ -786,6 +776,7 @@ function onRemoveIfEmpty(decl) {
   padding: 3px 6px;
   border-bottom: 1px solid #f3f4f6;
 }
+
 .rule__media-menu-item {
   display: flex;
   flex-direction: column;
@@ -801,14 +792,28 @@ function onRemoveIfEmpty(decl) {
   cursor: pointer;
   text-align: left;
 }
-.rule__media-menu-item:hover { background: #eff6ff; color: #2563eb; }
-.rule__media-menu-item--warn:hover { background: #fffbeb; color: #b45309; }
-.rule__media-menu-item:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.rule__media-menu-item:hover {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.rule__media-menu-item--warn:hover {
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.rule__media-menu-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .rule__media-menu-hint {
   font-size: 9.5px;
   font-weight: 400;
   color: #9ca3af;
 }
+
 .rule__media-menu-input {
   font-family: monospace;
   font-size: 11px;
@@ -818,7 +823,10 @@ function onRemoveIfEmpty(decl) {
   outline: none;
   margin: 2px;
 }
-.rule__media-menu-input:focus { border-color: #818cf8; }
+
+.rule__media-menu-input:focus {
+  border-color: #818cf8;
+}
 
 /* Banner de confirmação de rename de .class / #id */
 .rule__rename-banner {
@@ -834,14 +842,24 @@ function onRemoveIfEmpty(decl) {
   font-size: 11px;
   color: #92400e;
 }
-.rule__rename-text { flex: 1; }
+
+.rule__rename-text {
+  flex: 1;
+}
+
 .rule__rename-text code {
   font-family: monospace;
   background: #fef3c7;
   padding: 0 3px;
   border-radius: 3px;
 }
-.rule__rename-actions { display: flex; gap: 4px; flex-shrink: 0; }
+
+.rule__rename-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
 .rule__rename-btn {
   padding: 2px 10px;
   border-radius: 4px;
@@ -850,10 +868,25 @@ function onRemoveIfEmpty(decl) {
   font-size: 11px;
   font-weight: 600;
 }
-.rule__rename-btn--yes { background: #d97706; color: white; }
-.rule__rename-btn--yes:hover { background: #b45309; }
-.rule__rename-btn--no  { background: #f3f4f6; color: #374151; }
-.rule__rename-btn--no:hover  { background: #e5e7eb; }
+
+.rule__rename-btn--yes {
+  background: #d97706;
+  color: white;
+}
+
+.rule__rename-btn--yes:hover {
+  background: #b45309;
+}
+
+.rule__rename-btn--no {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.rule__rename-btn--no:hover {
+  background: #e5e7eb;
+}
+
 /* Transition */
 /* Visual Editing Buttons & Close Brace Row */
 .rule__brace-row {
@@ -861,15 +894,18 @@ function onRemoveIfEmpty(decl) {
   align-items: center;
   gap: 8px;
 }
+
 .rule__visual-btns {
   display: flex;
   gap: 3px;
   opacity: 0.15;
   transition: opacity 0.2s;
 }
+
 .rule:hover .rule__visual-btns {
   opacity: 1;
 }
+
 .rule__visual-btn {
   width: 17px;
   height: 17px;
@@ -883,28 +919,39 @@ function onRemoveIfEmpty(decl) {
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   color: white;
-  text-shadow: 0 1px 1px rgba(0,0,0,0.1);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
 }
 
 /* Vibrancy states */
 .rule__visual-btn:hover {
   transform: scale(1.1) translateY(-1px);
   filter: brightness(1.1);
-  box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
 }
 
 .rule__visual-btn.is-active {
   transform: scale(0.95);
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
   outline: 2px solid white;
   outline-offset: -2px;
 }
 
 /* Master Colors */
-.rule__visual-btn--blue     { background: #3b82f6; }
-.rule__visual-btn--amber    { background: #f59e0b; }
-.rule__visual-btn--pink     { background: #ec4899; }
-.rule__visual-btn--indigo   { background: #6366f1; }
+.rule__visual-btn--blue {
+  background: #3b82f6;
+}
+
+.rule__visual-btn--amber {
+  background: #f59e0b;
+}
+
+.rule__visual-btn--pink {
+  background: #ec4899;
+}
+
+.rule__visual-btn--indigo {
+  background: #6366f1;
+}
 
 /* Subtle opacity when not hover rule (optional balance) */
 .rule__visual-btns {
@@ -913,12 +960,19 @@ function onRemoveIfEmpty(decl) {
   opacity: 0.75;
   transition: opacity 0.2s;
 }
+
 .rule:hover .rule__visual-btns {
   opacity: 1;
 }
 
 .rename-banner-enter-active,
-.rename-banner-leave-active { transition: opacity .2s, transform .2s; }
+.rename-banner-leave-active {
+  transition: opacity .2s, transform .2s;
+}
+
 .rename-banner-enter-from,
-.rename-banner-leave-to { opacity: 0; transform: translateY(-4px); }
+.rename-banner-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
 </style>
