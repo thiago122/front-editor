@@ -168,7 +168,7 @@
                 <!-- <span class="rule__media-menu-hint">cria override — a regra base fica intacta</span> -->
               </button>
               <button class="rule__media-menu-item rule__media-menu-item--warn" @click="onWrapMedia()">
-                colocar a regra css dentro dentro do breakpoint selecionado
+                colocar esta regra css dentro dentro do breakpoint selecionado
                 <!-- <span class="rule__media-menu-hint">move a regra — deixa de valer nos outros tamanhos</span> -->
               </button>
             </template>
