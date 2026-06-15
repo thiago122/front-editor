@@ -78,6 +78,8 @@ export function shouldRouteDeclarationEdits(rule) {
   if (!rule || rule.selector === 'element.style') return false
   if (rule.context?.some(c => c.name === 'media' || c.name === 'container')) return false
   const styleStore = useStyleStore()
+  // Toggle do header do inspetor: OFF = edita a regra visível no lugar.
+  if (!styleStore.routeEditsToBreakpoint) return false
   if (styleStore.inspectorSource === 'explorer') return false
   return !isBaseBreakpoint(
     getActiveBreakpointWidth(),
