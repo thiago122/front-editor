@@ -1,5 +1,5 @@
 <template>
-  <div ref="ruleEl" class="rule" :class="{ 'rule--inactive': isInactive, 'rule--active-bp': matchesActiveBreakpoint }">
+  <div ref="ruleEl" class="rule">
     <!-- Source file / origin — acima do seletor -->
     <div class="rule__meta">
       <!-- ícone: revelar esta regra no CSS Explorer -->
@@ -24,13 +24,11 @@
       </button>
       <div class="rule__origin">
         <span class="rule__origin-label">{{ originLabel }}</span>
-        <span v-if="isInactive" class="rule__inactive-badge"
-          title="Este @media/@container não aplica no viewport atual — editável para ajustar outros breakpoints">inativo</span>
         <!-- Origem por breakpoint (write-target):
                azul  = regra definida no @media do breakpoint ativo;
                âmbar = edição de valor será gravada no breakpoint ativo (base intacta) -->
         <span v-if="matchesActiveBreakpoint" class="rule__bp-badge rule__bp-badge--blue"
-          title="Regra definida no @media do breakpoint ativo — edições gravam aqui">neste breakpoint</span>
+          title="Regra do breakpoint atual (mora no @media que casa o viewport). Suas edições gravam aqui. Não quer dizer que ela &quot;vence&quot; sozinha — a regra base continua valendo nas propriedades que esta não sobrescreve.">neste breakpoint</span>
         <span v-else-if="routesToBreakpoint" class="rule__bp-badge rule__bp-badge--amber"
           :title="`Breakpoint ativo ≠ base: editar um valor aqui cria/atualiza o override em @media ${targetCondition} — esta regra fica intacta`">→
           {{ targetCondition }}</span>
@@ -168,7 +166,7 @@
                 <!-- <span class="rule__media-menu-hint">cria override — a regra base fica intacta</span> -->
               </button>
               <button class="rule__media-menu-item rule__media-menu-item--warn" @click="onWrapMedia()">
-                colocar esta regra css dentro dentro do breakpoint selecionado
+                colocar esta regra css dentro do breakpoint selecionado
                 <!-- <span class="rule__media-menu-hint">move a regra — deixa de valer nos outros tamanhos</span> -->
               </button>
             </template>
@@ -286,9 +284,6 @@ const hasCategoryProps = computed(() => {
 const INDENT_SIZE = 7
 const indentPx = computed(() => ((props.rule.context?.length ?? 0) + 1) * INDENT_SIZE + 'px')
 
-// Regra inativa: @media/@container que não casa o viewport atual.
-// Mostrada (e editável) para permitir ajustar outros breakpoints — não recebe strike.
-const isInactive = computed(() => props.rule.active === false)
 const ruleEl = ref(null)
 
 const originLabel = computed(() => {
@@ -488,14 +483,6 @@ function onRemoveIfEmpty(decl) {
   background: #fff;
 }
 
-/* Regra ativa segundo o breakpoint atual: dentro de @media que casa o
-   viewport selecionado — destacada com borda da cor do acento. */
-.rule--active-bp {
-  border: 1px solid #4f39f6;
-  border-radius: 4px;
-  background: #f5f4ff;
-}
-
 /* At-Rules hierárquicas */
 .rule__at-rule-row {
   display: flex;
@@ -593,27 +580,6 @@ function onRemoveIfEmpty(decl) {
   font-weight: 600;
 }
 
-/* Badge de regra inativa (@media/@container fora do viewport atual) */
-.rule__inactive-badge {
-  margin-left: 6px;
-  font-size: 9px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #b45309;
-  background: #fef3c7;
-  border: 1px solid #fcd34d;
-  border-radius: 3px;
-  padding: 0 4px;
-  line-height: 1.4;
-  cursor: help;
-}
-
-/* Fade só no corpo da regra inativa — meta/origin/badge ficam legíveis.
-   Mantém editável (opacity não bloqueia ponteiro). */
-.rule--inactive .rule__body {
-  opacity: 0.55;
-}
 
 /* Meta row (origin + clipboard buttons) */
 .rule__meta {
