@@ -138,11 +138,19 @@ export const useStyleStore = defineStore('style', () => {
     return responsiveProfile.value?.insertion ?? 'rule-adjacent'
   })
 
-  /** Breakpoints do projeto: override manual > detectados do CSS > seed do editor. */
+  /**
+   * Breakpoints disponíveis na UI/write-target.
+   * - Override manual (responsiveConfig.breakpoints): lista EXATA do usuário
+   *   (precisa ser exata p/ o "remover breakpoint" do ResponsiveConfigPanel).
+   * - Caso contrário: UNIÃO dos defaults do editor com os detectados no CSS.
+   *   Os detectados nunca SUBSTITUEM os defaults — apenas acrescentam customizados
+   *   (ex: um @media(900) do projeto vira mais um botão). Assim usar 2 breakpoints
+   *   não derruba o acesso aos demais.
+   */
   const projectBreakpoints = computed(() => {
     if (responsiveConfig.value.breakpoints?.length) return responsiveConfig.value.breakpoints
-    if (responsiveProfile.value?.breakpoints?.length) return responsiveProfile.value.breakpoints
-    return DEFAULT_BREAKPOINTS
+    const detected = responsiveProfile.value?.breakpoints ?? []
+    return [...new Set([...DEFAULT_BREAKPOINTS, ...detected])].sort((a, b) => a - b)
   })
 
   // ── Computed: Variables (Tokens) ──────────────────────────────────────────
