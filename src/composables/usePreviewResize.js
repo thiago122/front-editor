@@ -14,12 +14,22 @@ export function usePreviewResize(startResize) {
   const previewWidth = ref(100)
   const previewUnit = ref('%')
 
-  function startPreviewResizeRight(e) {
+  // Em modo '%' o previewWidth vale 100 (não px). Antes de arrastar, troca para
+  // a largura REAL do canvas em px (EditorStore.viewport.width) — senão o resize
+  // partiria de 100 e o min:320 faria a tela pular para 320 no primeiro movimento.
+  function seedPxWidthFromViewport() {
+    if (previewUnit.value === '%') {
+      previewWidth.value = Math.round(EditorStore.viewport.width) || 320
+    }
     previewUnit.value = 'px'
+  }
+
+  function startPreviewResizeRight(e) {
+    seedPxWidthFromViewport()
     startResize(e, previewWidth, { min: 320, max: 4000, direction: 1, multiplier: 2 })
   }
   function startPreviewResizeLeft(e) {
-    previewUnit.value = 'px'
+    seedPxWidthFromViewport()
     startResize(e, previewWidth, { min: 320, max: 4000, direction: -1, multiplier: 2 })
   }
 
