@@ -4,7 +4,6 @@ import {
   updateDeclaration,
   deleteDeclaration
 } from '@/editor/css/actions/cssDeclarationActions'
-import { clearPropertyAtBreakpoint } from '@/editor/css/actions/cssBreakpointActions'
 
 /**
  * Helper to manage a single CSS property within a specific Inspector Rule.
@@ -71,9 +70,6 @@ export function useCssProperty(ruleOrGetter, propName) {
     
     // 1. Remove if null
     if (fullValue === null) {
-      // Com breakpoint não-base ativo, limpar = "voltar a herdar": remove a
-      // prop do override do breakpoint, NUNCA da regra base exibida.
-      if (clearPropertyAtBreakpoint(rule, propName)) return
       if (declaration.value) {
         deleteDeclaration(rule, declaration.value)
       }

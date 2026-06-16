@@ -24,14 +24,9 @@
       </button>
       <div class="rule__origin">
         <span class="rule__origin-label">{{ originLabel }}</span>
-        <!-- Origem por breakpoint (write-target):
-               azul  = regra definida no @media do breakpoint ativo;
-               âmbar = edição de valor será gravada no breakpoint ativo (base intacta) -->
+        <!-- Origem por breakpoint: azul = regra mora no @media que casa o viewport ativo. -->
         <span v-if="matchesActiveBreakpoint" class="rule__bp-badge rule__bp-badge--blue"
           title="Regra do breakpoint atual (mora no @media que casa o viewport). Suas edições gravam aqui. Não quer dizer que ela &quot;vence&quot; sozinha — a regra base continua valendo nas propriedades que esta não sobrescreve.">neste breakpoint</span>
-        <span v-else-if="routesToBreakpoint" class="rule__bp-badge rule__bp-badge--amber"
-          :title="`Breakpoint ativo ≠ base: editar um valor aqui cria/atualiza o override em @media ${targetCondition} — esta regra fica intacta`">→
-          {{ targetCondition }}</span>
       </div>
 
       <!-- Botões de clipboard -->
@@ -209,7 +204,7 @@ import CssDeclaration from './CssDeclaration.vue'
 import { updateRule } from '@/editor/css/actions/cssRuleActions'
 import { createAtRule, updateAtRule } from '@/editor/css/actions/cssAtRuleActions'
 import { addDeclaration, deleteDeclaration, pasteDeclarations } from '@/editor/css/actions/cssDeclarationActions'
-import { duplicateRuleToBreakpoint, shouldRouteDeclarationEdits } from '@/editor/css/actions/cssBreakpointActions'
+import { duplicateRuleToBreakpoint } from '@/editor/css/actions/cssBreakpointActions'
 import { conditionForBreakpoint, isBaseBreakpoint, parseWidthCondition, matchesBreakpoint } from '@/editor/css/shared/breakpointStrategy'
 import { useStyleStore } from '@/stores/StyleStore'
 import { useEditorStore } from '@/stores/EditorStore'
@@ -314,14 +309,6 @@ const targetCondition = computed(() =>
   activeBpWidth.value != null
     ? conditionForBreakpoint(activeBpWidth.value, styleStore.resolvedDirection)
     : null
-)
-
-/**
- * Âmbar: edições de valor nesta regra serão ROTEADAS para o @media do
- * breakpoint ativo (write-target implícito) — a base fica intacta.
- */
-const routesToBreakpoint = computed(() =>
-  props.editable && shouldRouteDeclarationEdits(props.rule)
 )
 
 /** Azul: a regra está dentro de @media que casa o breakpoint ativo. */
@@ -704,12 +691,6 @@ function onRemoveIfEmpty(decl) {
   color: #1d4ed8;
   background: #dbeafe;
   border: 1px solid #93c5fd;
-}
-
-.rule__bp-badge--amber {
-  color: #b45309;
-  background: #fef3c7;
-  border: 1px solid #fcd34d;
 }
 
 /* Menu @media (write-target) */

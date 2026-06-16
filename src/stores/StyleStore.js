@@ -113,17 +113,6 @@ export const useStyleStore = defineStore('style', () => {
     breakpoints: null,     // null | number[] — override manual do usuário
   })
 
-  /**
-   * Write-target implícito por breakpoint (toggle do header do inspetor).
-   * ON (default) = editar um valor com bp ativo ≠ base cria/atualiza override
-   * no @media do bp ativo (fluxo responsivo). OFF = edita a regra visível no
-   * lugar, sem forçar o breakpoint. Gate de shouldRouteDeclarationEdits().
-   */
-  const routeEditsToBreakpoint = ref(true)
-  function setRouteEditsToBreakpoint(on) {
-    routeEditsToBreakpoint.value = !!on
-  }
-
   // ── Computed: Responsividade ────────────────────────────────────────────────
 
   /** Direção efetiva da @media gerada. Default do editor: mobile-first. */
@@ -438,8 +427,6 @@ export const useStyleStore = defineStore('style', () => {
     resolvedInsertion,
     projectBreakpoints,
     setResponsiveConfig,
-    routeEditsToBreakpoint,
-    setRouteEditsToBreakpoint,
     cssManifest,
     selectedRuleId,
     explorerHighlightId,
