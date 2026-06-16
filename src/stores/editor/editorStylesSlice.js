@@ -11,8 +11,8 @@ import { ref, watch } from 'vue'
  * @param {{ getIframeDoc: () => Document|null, iframe: import('vue').Ref }} deps
  */
 export function createEditorStylesSlice({ getIframeDoc, iframe }) {
-  const outlineMode          = ref(true)   // outline mode ligado por padrão
-  const showEmptyPlaceholder = ref(true)   // placeholder em vazios ligado por padrão
+  const outlineMode = ref(true) // outline mode ligado por padrão
+  const showEmptyPlaceholder = ref(true) // placeholder em vazios ligado por padrão
 
   const OUTLINE_STYLE_ID = 'editor-outline-mode'
   const EMPTY_PLACEHOLDER_STYLE_ID = 'editor-empty-placeholder'
