@@ -71,11 +71,23 @@ const closedManually = ref(false) // Override explícito: fecha mesmo se o nó e
  */
 const isSelected = computed(() => props.node.nodeId === props.selectedNodeId)
 
-// Quick access to important attributes for display
-const idAttr = computed(() => props.node.attrs?.id)
-const classAttr = computed(() => props.node.attrs?.class)
+// Quick access to important attributes for display.
+// `void EditorStore.astMutationKey`: o AST é markRaw (sem proxy reativo), então
+// mutações in-place (insert/remove/move/duplicate/attr) não invalidam computeds
+// que leem props.node.*. Ler astMutationKey os reatrela ao sinal de mutação —
+// mesmo padrão de selectedNode/openPath/CssTreeItem.
+const idAttr = computed(() => { void EditorStore.astMutationKey; return props.node.attrs?.id })
+const classAttr = computed(() => { void EditorStore.astMutationKey; return props.node.attrs?.class })
 
+// PERF: visibleChildren depende de astMutationKey e retorna um array novo a cada
+// recompute, então TODO ASTNode re-renderiza a cada mutação (O(N) por mutação).
+// É aceitável porque mutações são eventos discretos do usuário (não por-frame) e
+// o diff keyed do Vue mantém o custo de DOM baixo. Se aparecer jank em documentos
+// muito grandes, otimizar com invalidação por subárvore (ex: chave de versão por
+// nodeId) em vez de uma chave global — NÃO remover a dependência, senão a árvore
+// volta a não atualizar nas operações de DOM.
 const visibleChildren = computed(() => {
+  void EditorStore.astMutationKey
   if (!props.node.children) return []
   return props.node.children.filter(child => {
     const type = child.type?.toLowerCase()
