@@ -84,9 +84,5 @@ herança), mas **specs são a fonte de verdade**, não o Chrome — ver
 
 ## Armadilhas
 
-- **`--tag-name`:** o Outline Mode injeta essa custom property inline no
-  hover (label de tooltip). É estado de UI, NÃO conteúdo. Limpa em
-  `document:beforeSave`; nunca pode vazar pro HTML salvo —
-  ver `memory/tag-name-label-leak.md`.
 - **`@media`/`@container` inativos** aparecem no inspector de propósito
   (editar breakpoints), ≠ Chrome que esconde. Não marcar como overridden.

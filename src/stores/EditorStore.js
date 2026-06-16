@@ -203,7 +203,7 @@ export const useEditorStore = defineStore('editor', () => {
   // Getters para a UI
   const canPaste = computed(() => clipboard.value.type === 'html-node')
 
-  // Outline Mode, placeholder de vazios e label --tag-name — fatia própria.
+  // Outline Mode e placeholder de vazios — fatia própria.
   // applyEditorStyles é usado pelo watcher de load abaixo.
   const editorStyles = createEditorStylesSlice({ getIframeDoc, iframe })
   const { applyEditorStyles } = editorStyles
@@ -380,7 +380,7 @@ export const useEditorStore = defineStore('editor', () => {
     hoveredNodeId,
     inspectMode,
     showBoxModel,
-    // Outline/placeholder/--tag-name — ver stores/editor/editorStylesSlice.js
+    // Outline/placeholder — ver stores/editor/editorStylesSlice.js
     ...editorStyles,
     // Documentos/arquivos (open/save/hooks) — ver stores/editor/documentsSlice.js
     ...documents,

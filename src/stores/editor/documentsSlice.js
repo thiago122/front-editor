@@ -68,12 +68,6 @@ export function createDocumentsSlice({ loadHTML, getIframeDoc, getCtx, styleStor
       el.style.removeProperty('outline')
     })
 
-    // Remove a variável --tag-name injetada pelo Outline Mode (label de hover).
-    // É escrita inline nos elementos sob hover; nunca deve vazar para o HTML salvo.
-    doc.querySelectorAll('[style*="--tag-name"]').forEach((el) => {
-      el.style.removeProperty('--tag-name')
-    })
-
     // Remove atributos style que ficaram vazios após as remoções acima
     doc.querySelectorAll('[style]').forEach((el) => {
       if (!el.getAttribute('style').trim()) el.removeAttribute('style')

@@ -2,11 +2,11 @@ import { ref, watch } from 'vue'
 
 /**
  * Fatia do EditorStore: estilos utilitários injetados no iframe
- * (Outline Mode + placeholder de elementos vazios + label --tag-name).
+ * (Outline Mode + placeholder de elementos vazios).
  *
  * Os <style> injetados usam IDs fixos e data-location="ignore"; o hook
- * document:beforeSave remove ambos e limpa --tag-name antes de salvar
- * (NUNCA podem vazar para o HTML salvo).
+ * document:beforeSave os remove antes de salvar. São apenas auxílio visual —
+ * nunca escrevem estado inline nos elementos do documento.
  *
  * @param {{ getIframeDoc: () => Document|null, iframe: import('vue').Ref }} deps
  */
@@ -16,32 +16,6 @@ export function createEditorStylesSlice({ getIframeDoc, iframe }) {
 
   const OUTLINE_STYLE_ID = 'editor-outline-mode'
   const EMPTY_PLACEHOLDER_STYLE_ID = 'editor-empty-placeholder'
-
-  // ── Label de tag do Outline Mode (lazy) ──────────────────────────────────────
-  // O tooltip de hover usa `content: var(--tag-name)`. Em vez de injetar a variável
-  // inline em TODOS os elementos a cada applyEditorStyles (O(N) writes = invalida
-  // layout), populamos apenas o elemento sob o cursor, via um único listener
-  // delegado de mouseover (O(1) por hover).
-  let _tagNameDoc = null
-  function _onTagNameHover(e) {
-    const el = e.target
-    if (el?.nodeType === 1 && el.tagName && !el.style.getPropertyValue('--tag-name')) {
-      el.style.setProperty('--tag-name', `'${el.tagName.toLowerCase()}'`)
-    }
-  }
-  function detachTagNameLabel() {
-    if (_tagNameDoc) {
-      _tagNameDoc.removeEventListener('mouseover', _onTagNameHover)
-      _tagNameDoc = null
-    }
-  }
-  function attachTagNameLabel(doc) {
-    if (_tagNameDoc === doc) return  // já anexado neste doc
-    detachTagNameLabel()
-    if (!doc) return
-    doc.addEventListener('mouseover', _onTagNameHover)
-    _tagNameDoc = doc
-  }
 
   /**
    * Aplica ou remove estilos utilitários (outline, placeholders) no documento do iframe.
@@ -66,41 +40,14 @@ export function createEditorStylesSlice({ getIframeDoc, iframe }) {
         a, button, input, select, textarea { outline-color: rgba(16, 185, 129, 0.5) !important; }
         img, video, svg, canvas { outline-color: rgba(236, 72, 153, 0.5) !important; }
 
-        /* Label no Hover */
+        /* Realce de hover (o label da tag é exibido pelo HighlightOverlay.vue) */
         *:not(html):not(body):hover {
           outline: 2px solid #6366f1 !important;
           outline-offset: -2px;
           z-index: 9999;
         }
-
-        /* Tooltip baseada no nome da tag */
-        *:not(html):not(body):hover::after {
-          content: "<" var(--tag-name, "element") ">" !important;
-          position: absolute;
-          top: -18px;
-          left: -2px;
-          background: #6366f1;
-          color: white;
-          font-size: 10px;
-          font-weight: 600;
-          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-          padding: 2px 6px;
-          border-radius: 4px 4px 0 0;
-          pointer-events: none;
-          z-index: 10000;
-          line-height: 1.2;
-          display: block !important;
-          text-transform: lowercase;
-          white-space: nowrap;
-          box-shadow: 0 -2px 4px rgba(0,0,0,0.1);
-        }
       `
       doc.head.appendChild(style)
-
-      // Label lazy: popula --tag-name só no elemento sob hover (ver attachTagNameLabel).
-      attachTagNameLabel(doc)
-    } else {
-      detachTagNameLabel()
     }
 
     // 2. Empty Placeholders
