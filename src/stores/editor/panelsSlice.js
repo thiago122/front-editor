@@ -59,29 +59,26 @@ export function createPanelsSlice({ styleStore }) {
     persistVarsPos(x, y)
   })
 
+  // Painel único de edição visual (não mais dividido por categorias).
+  // Todos os editores (Layout, Sizing, Spacing, Positioning, Advanced,
+  // Typography, Appearance) vivem numa só janela flutuante.
   const visualEditor = ref({
     activeRuleUid: null,
     nextZIndex: 10000,
-    panels: {
-      layout:     { show: false, x: 0, y: 0, width: 350, height: 400, zIndex: 10000 },
-      typography: { show: false, x: 0, y: 0, width: 350, height: 400, zIndex: 10000 },
-      appearance: { show: false, x: 0, y: 0, width: 350, height: 400, zIndex: 10000 },
-      dynamics:   { show: false, x: 0, y: 0, width: 350, height: 400, zIndex: 10000 },
-    }
+    panel: { show: false, x: 0, y: 0, width: 350, height: 520, zIndex: 10000 },
   })
 
-  function bringPanelToTop(categoryId) {
-    const panel = visualEditor.value.panels[categoryId]
-    if (!panel) return
+  function bringPanelToTop() {
+    const panel = visualEditor.value.panel
     visualEditor.value.nextZIndex++
     panel.zIndex = visualEditor.value.nextZIndex
   }
 
   /**
-   * Alterna a visibilidade de um painel de edição visual.
-   * Se a regra informada for nova, sincroniza todas as janelas abertas para ela.
+   * Alterna a visibilidade do painel de edição visual.
+   * Se a regra informada for nova, o painel segue para ela (e abre).
    */
-  function toggleVisualPanel(ruleUid, categoryId, initialPos = null) {
+  function toggleVisualPanel(ruleUid, initialPos = null) {
     const isNewRule = visualEditor.value.activeRuleUid !== ruleUid
 
     // 1. Atualiza o contexto global se for uma regra diferente
@@ -89,14 +86,12 @@ export function createPanelsSlice({ styleStore }) {
       visualEditor.value.activeRuleUid = ruleUid
     }
 
-    const panel = visualEditor.value.panels[categoryId]
-    if (!panel) return
+    const panel = visualEditor.value.panel
 
-    // 2. Se a regra mudou, garantimos que o painel clicado abra
+    // 2. Regra nova → garante aberto; mesma regra → alterna (toggle)
     if (isNewRule) {
       panel.show = true
     } else {
-      // Se for a mesma regra, alterna (toggle)
       panel.show = !panel.show
     }
 
@@ -108,7 +103,7 @@ export function createPanelsSlice({ styleStore }) {
 
     // 4. Sempre traz para frente ao abrir ou clicar
     if (panel.show) {
-      bringPanelToTop(categoryId)
+      bringPanelToTop()
     }
   }
 
@@ -169,9 +164,7 @@ export function createPanelsSlice({ styleStore }) {
    * para que os painéis sigam a seleção do usuário automaticamente.
    */
   watch(() => styleStore.selectedRuleId, (newRuleId) => {
-    const anyPanelOpen = Object.values(visualEditor.value.panels).some(p => p.show)
-
-    if (anyPanelOpen) {
+    if (visualEditor.value.panel.show) {
       visualEditor.value.activeRuleUid = newRuleId
     }
   })

@@ -26,7 +26,8 @@
         <span class="rule__origin-label">{{ originLabel }}</span>
         <!-- Origem por breakpoint: azul = regra mora no @media que casa o viewport ativo. -->
         <span v-if="matchesActiveBreakpoint" class="rule__bp-badge rule__bp-badge--blue"
-          title="Regra do breakpoint atual (mora no @media que casa o viewport). Suas edições gravam aqui. Não quer dizer que ela &quot;vence&quot; sozinha — a regra base continua valendo nas propriedades que esta não sobrescreve.">neste breakpoint</span>
+          title="Regra do breakpoint atual (mora no @media que casa o viewport). Suas edições gravam aqui. Não quer dizer que ela &quot;vence&quot; sozinha — a regra base continua valendo nas propriedades que esta não sobrescreve.">neste
+          breakpoint</span>
       </div>
 
       <!-- Botões de clipboard -->
@@ -105,16 +106,15 @@
       <div class="rule__brace-row">
         <div class="rule__brace-close">}</div>
 
-        <!-- Visual Editing Buttons (L, T, A, D) -->
+        <!-- Visual Editing Button (janela única) -->
         <div class="rule__visual-btns">
-          <button v-for="group in visualGroups" :key="group.id" class="rule__visual-btn relative" :class="[
-            `rule__visual-btn--${group.color}`,
-            { 'is-active': editorStore.visualEditor.activeRuleUid === rule.uid && editorStore.visualEditor.panels[group.id].show }
-          ]" :title="group.title"
-            @click.stop="(e) => editorStore.toggleVisualPanel(rule.uid, group.id, { x: e.clientX, y: e.clientY })">
-            {{ group.label }}
-            <!-- Blue dot: this rule has properties from this category -->
-            <span v-if="hasCategoryProps[group.id]"
+          <button class="rule__visual-btn rule__visual-btn--blue relative" :class="[
+            { 'is-active': editorStore.visualEditor.activeRuleUid === rule.uid && editorStore.visualEditor.panel.show }
+          ]" title="Edição visual"
+            @click.stop="(e) => editorStore.toggleVisualPanel(rule.uid, { x: e.clientX, y: e.clientY })">
+            <IconStyles class="w-3 h-3" />
+            <!-- Blue dot: this rule has visually-editable properties -->
+            <span v-if="hasVisualProps"
               class="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-blue-500 border border-white pointer-events-none"></span>
           </button>
         </div>
@@ -208,6 +208,7 @@ import { duplicateRuleToBreakpoint } from '@/editor/css/actions/cssBreakpointAct
 import { conditionForBreakpoint, isBaseBreakpoint, parseWidthCondition, matchesBreakpoint } from '@/editor/css/shared/breakpointStrategy'
 import { useStyleStore } from '@/stores/StyleStore'
 import { useEditorStore } from '@/stores/EditorStore'
+import IconStyles from '@/components/icons/IconStyles.vue'
 
 const styleStore = useStyleStore()
 const editorStore = useEditorStore()
@@ -217,15 +218,8 @@ const props = defineProps({
   editable: { type: Boolean, default: false },
 })
 
-const visualGroups = [
-  { id: 'layout', label: 'L', title: 'Layout & Structure (L)', color: 'blue' },
-  { id: 'typography', label: 'T', title: 'Typography (T)', color: 'amber' },
-  { id: 'appearance', label: 'A', title: 'Appearance & Skin (A)', color: 'pink' },
-  { id: 'dynamics', label: 'D', title: 'Motion & Feedback (D)', color: 'indigo' },
-]
-
-/** Map of CSS properties per visual category */
-const CATEGORY_PROPS = {
+/** Propriedades CSS que o painel visual sabe editar (todas as seções) */
+const VISUAL_PROPS = {
   layout: [
     'display', 'position', 'top', 'right', 'bottom', 'left',
     'width', 'min-width', 'max-width', 'height', 'min-height', 'max-height',
@@ -256,24 +250,12 @@ const CATEGORY_PROPS = {
     'box-shadow', 'outline', 'opacity', 'filter', 'backdrop-filter',
     'cursor', 'pointer-events', 'visibility', 'list-style',
   ],
-  dynamics: [
-    'transition', 'transition-property', 'transition-duration',
-    'transition-timing-function', 'transition-delay',
-    'animation', 'animation-name', 'animation-duration', 'animation-fill-mode',
-    'animation-timing-function', 'animation-iteration-count', 'animation-delay',
-    'transform', 'transform-origin', 'scale', 'rotate', 'translate',
-    'will-change',
-  ],
 }
 
-/** Returns true if the rule has at least one property from the given category */
-const hasCategoryProps = computed(() => {
+/** Returns true if the rule has at least one property the visual panel can edit */
+const hasVisualProps = computed(() => {
   const propNames = new Set((props.rule.declarations ?? []).filter(d => !d.disabled).map(d => d.prop))
-  const result = {}
-  for (const [cat, list] of Object.entries(CATEGORY_PROPS)) {
-    result[cat] = list.some(p => propNames.has(p))
-  }
-  return result
+  return Object.values(VISUAL_PROPS).some(list => list.some(p => propNames.has(p)))
 })
 
 const INDENT_SIZE = 7
@@ -877,6 +859,11 @@ function onRemoveIfEmpty(decl) {
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
 }
 
+.rule__visual-btn :deep(svg) {
+  width: 12px;
+  height: 12px;
+}
+
 /* Vibrancy states */
 .rule__visual-btn:hover {
   transform: scale(1.1) translateY(-1px);
@@ -894,18 +881,6 @@ function onRemoveIfEmpty(decl) {
 /* Master Colors */
 .rule__visual-btn--blue {
   background: #3b82f6;
-}
-
-.rule__visual-btn--amber {
-  background: #f59e0b;
-}
-
-.rule__visual-btn--pink {
-  background: #ec4899;
-}
-
-.rule__visual-btn--indigo {
-  background: #6366f1;
 }
 
 /* Subtle opacity when not hover rule (optional balance) */

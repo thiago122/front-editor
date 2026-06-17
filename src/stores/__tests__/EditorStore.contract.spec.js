@@ -76,7 +76,7 @@ describe('EditorStore — contrato da API pública', () => {
     expect(store.outlineMode).toBe(true)
     expect(store.canPaste).toBe(false)
     expect(store.htmlEditor.show).toBe(false)
-    expect(store.visualEditor.panels.layout.show).toBe(false)
+    expect(store.visualEditor.panel.show).toBe(false)
   })
 
   it('openCodeEditor roteia html/css/quick', () => {
@@ -96,18 +96,18 @@ describe('EditorStore — contrato da API pública', () => {
 
   it('toggleVisualPanel abre, alterna e traz pra frente', () => {
     const store = useEditorStore()
-    store.toggleVisualPanel('rule-1', 'layout', { x: 5, y: 6 })
-    const panel = store.visualEditor.panels.layout
+    store.toggleVisualPanel('rule-1', { x: 5, y: 6 })
+    const panel = store.visualEditor.panel
     expect(panel.show).toBe(true)
     expect(panel.x).toBe(5)
     expect(store.visualEditor.activeRuleUid).toBe('rule-1')
 
     // Mesma regra → toggle fecha
-    store.toggleVisualPanel('rule-1', 'layout')
+    store.toggleVisualPanel('rule-1')
     expect(panel.show).toBe(false)
 
     // Regra nova → reabre
-    store.toggleVisualPanel('rule-2', 'layout')
+    store.toggleVisualPanel('rule-2')
     expect(panel.show).toBe(true)
     expect(store.visualEditor.activeRuleUid).toBe('rule-2')
   })
