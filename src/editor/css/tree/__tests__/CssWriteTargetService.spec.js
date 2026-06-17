@@ -63,13 +63,29 @@ describe('resolve → reuso de @media existente', () => {
     expect(resolve(t, { breakpointWidth: 768 }).kind).toBe('existing-rule')
   })
 
-  it('@media equivalente existe mas sem o seletor → existing-atrule', () => {
+  it('rule-adjacent: @media do breakpoint com OUTRA família NÃO é reusado → create-atrule', () => {
     const mq = media('(min-width: 768px)', [sel('.menu')], 'mq768')
+    const t = tree([sel('.card'), mq])
+    const r = resolve(t, { breakpointWidth: 768 })
+    // .card não deve cair no @media do .menu; ganha bloco próprio adjacente à base.
+    expect(r.kind).toBe('create-atrule')
+    expect(r.condition).toBe('(min-width: 768px)')
+  })
+
+  it('rule-adjacent: @media do breakpoint da MESMA família é reusado → existing-atrule', () => {
+    const mq = media('(min-width: 768px)', [sel('.card__title')], 'mq768')
     const t = tree([sel('.card'), mq])
     const r = resolve(t, { breakpointWidth: 768 })
     expect(r.kind).toBe('existing-atrule')
     expect(r.atRule.id).toBe('mq768')
-    expect(r.condition).toBe('(min-width: 768px)')
+  })
+
+  it('breakpoint-blocks: reusa @media do breakpoint mesmo de outra família', () => {
+    const mq = media('(min-width: 768px)', [sel('.menu')], 'mq768')
+    const t = tree([sel('.card'), mq])
+    const r = resolve(t, { breakpointWidth: 768, insertion: 'breakpoint-blocks' })
+    expect(r.kind).toBe('existing-atrule')
+    expect(r.atRule.id).toBe('mq768')
   })
 
   it('direção trocada NÃO é reusada (max-width num projeto mobile-first)', () => {

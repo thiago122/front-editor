@@ -64,8 +64,14 @@ export class CssWriteTargetService {
     }
 
     // 1) @media equivalente já existente no nível do arquivo?
-    //    Preferência: uma que já contenha o seletor (edit in place).
+    //    - Se já contém o seletor exato → edit in place (sempre, qualquer modo).
+    //    - Senão, reusa o bloco existente conforme o estilo de inserção:
+    //      'rule-adjacent' só reusa um @media da MESMA família do seletor base
+    //      (mantém o override perto da base; outra família ganha bloco próprio);
+    //      'breakpoint-blocks'/'file-end' reusam qualquer @media do breakpoint
+    //      (consolidam num bloco só).
     const wanted = selector.trim()
+    const family = selectorFamily(selector)
     let matchedAtRule = null
     for (const child of fileNode.children) {
       if (child.type !== 'at-rule') continue
@@ -76,7 +82,10 @@ export class CssWriteTargetService {
         c => c.type === 'selector' && c.label.trim() === wanted
       )
       if (rule) return { kind: 'existing-rule', rule, atRule: child }
-      if (!matchedAtRule) matchedAtRule = child
+
+      if (matchedAtRule) continue
+      if (insertion === 'rule-adjacent' && family && !this._belongsToFamily(child, family)) continue
+      matchedAtRule = child
     }
     if (matchedAtRule) return { kind: 'existing-atrule', atRule: matchedAtRule, condition }
 
