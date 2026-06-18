@@ -2,36 +2,50 @@
   <div ref="ruleEl" class="rule">
     <!-- Source file / origin — acima do seletor -->
     <div class="rule__meta">
-      <!-- ícone: revelar esta regra no CSS Explorer -->
-      <button v-if="rule.selector !== 'element.style'" class="rule__meta-btn" title="Revelar no CSS Explorer"
-        @click.stop="styleStore.navigateToRule(rule.uid)">
-        <!-- document-search icon -->
-        <svg class="rule__meta-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586
-                 a1 1 0 01.707.293l5.414 5.414A1 1 0 0119 9.414V19a2 2 0
-                 01-2 2z" />
-        </svg>
-      </button>
 
-      <!-- NOVO: Editar via Código -->
-      <button v-if="rule.selector !== 'element.style'" class="rule__meta-btn rule__meta-btn--code"
-        title="Editar via Código" data-quick-editor-trigger="true"
-        @click.stop="(e) => editorStore.openCodeEditor('css', rule.uid, { x: e.clientX, y: e.clientY })">
-        <svg class="rule__meta-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <polyline points="16 18 22 12 16 6"></polyline>
-          <polyline points="8 6 2 12 8 18"></polyline>
-        </svg>
-      </button>
-      <div class="rule__origin">
-        <span class="rule__origin-label">{{ originLabel }}</span>
-        <!-- Origem por breakpoint: azul = regra mora no @media que casa o viewport ativo. -->
-        <span v-if="matchesActiveBreakpoint" class="rule__bp-badge rule__bp-badge--blue"
-          title="Regra do breakpoint atual (mora no @media que casa o viewport). Suas edições gravam aqui. Não quer dizer que ela &quot;vence&quot; sozinha — a regra base continua valendo nas propriedades que esta não sobrescreve.">neste
-          breakpoint</span>
+      <!-- Visual Editing Button (janela única) -->
+      <div class="rule__visual-btns">
+
+
       </div>
 
+
+      <div class="rule__origin">
+        <span class="rule__origin-label" v-if="rule.selector !== 'element.style'"
+          @click.stop="styleStore.navigateToRule(rule.uid)">{{ originLabel }}</span>
+        <span class="rule__origin-label" v-else>{{ originLabel }}</span>
+      </div>
+
+      <!-- Origem por breakpoint: azul = regra mora no @media que casa o viewport ativo. -->
+      <span v-if="matchesActiveBreakpoint" class="rule__bp-badge rule__bp-badge--blue"
+        title="Regra do breakpoint atual (mora no @media que casa o viewport). Suas edições gravam aqui. Não quer dizer que ela &quot;vence&quot; sozinha — a regra base continua valendo nas propriedades que esta não sobrescreve.">
+        Breakpoint atual
+      </span>
+
+
       <!-- Botões de clipboard -->
-      <div class="rule__clipboard-btns">
+      <div class="rule__hidden-btns">
+
+        <button class="design-btn relative" :class="[
+          { 'is-active': editorStore.visualEditor.activeRuleUid === rule.uid && editorStore.visualEditor.panel.show }
+        ]" title="Edição visual"
+          @click.stop="(e) => editorStore.toggleVisualPanel(rule.uid, { x: e.clientX, y: e.clientY })">
+          <IconStyles class="scale-80 cursor-pointer mr-1" />
+          <!-- Blue dot: this rule has visually-editable properties -->
+          <span v-if="hasVisualProps"
+            class="absolute -top-0.5 -left-0.5 w-1.5 h-1.5 rounded-full bg-blue-500 border border-white pointer-events-none"></span>
+        </button>
+
+
+        <!-- NOVO: Editar via Código -->
+        <button v-if="rule.selector !== 'element.style'" class="rule__meta-text" title="Editar via Código"
+          data-quick-editor-trigger="true"
+          @click.stop="(e) => editorStore.openCodeEditor('css', rule.uid, { x: e.clientX, y: e.clientY })">
+
+          {css}
+
+        </button>
+
         <!-- Colar estilo (só aparece quando há estilo copiado) -->
         <button v-if="styleStore.copiedStyle && styleStore.copiedStyle.declarations.length"
           class="rule__meta-btn rule__meta-btn--paste"
@@ -43,6 +57,7 @@
               d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
           </svg>
         </button>
+
         <!-- Copiar estilo -->
         <button v-if="rule.declarations.length" class="rule__meta-btn" :class="{ 'rule__meta-btn--active': isCopied }"
           :title="isCopied ? 'Estilo copiado!' : 'Copiar declarações desta regra'" @click.stop="onCopyStyle">
@@ -52,14 +67,12 @@
               d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
           </svg>
         </button>
+
       </div>
     </div>
     <!-- At-Rules hierárquicas: cada nível indenta o próximo -->
     <template v-if="rule.context && rule.context.length">
       <div v-for="(ctx, idx) in rule.context" :key="idx">
-
-
-
 
         <!-- @layer: exibe como badge de categoria -->
         <template v-if="ctx.name === 'layer'">
@@ -106,18 +119,7 @@
       <div class="rule__brace-row">
         <div class="rule__brace-close">}</div>
 
-        <!-- Visual Editing Button (janela única) -->
-        <div class="rule__visual-btns">
-          <button class="rule__visual-btn rule__visual-btn--blue relative" :class="[
-            { 'is-active': editorStore.visualEditor.activeRuleUid === rule.uid && editorStore.visualEditor.panel.show }
-          ]" title="Edição visual"
-            @click.stop="(e) => editorStore.toggleVisualPanel(rule.uid, { x: e.clientX, y: e.clientY })">
-            <IconStyles class="w-3 h-3" />
-            <!-- Blue dot: this rule has visually-editable properties -->
-            <span v-if="hasVisualProps"
-              class="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-blue-500 border border-white pointer-events-none"></span>
-          </button>
-        </div>
+
       </div>
     </div>
 
@@ -187,12 +189,12 @@
           title="wrap with @container">@container</button>
       </template>
       <div class="rule__footer-spacer"></div>
-      <button @click.stop="onAddDeclaration" class="rule__footer-btn rule__footer-btn--add">
+      <!-- <button @click.stop="onAddDeclaration" class="rule__footer-btn rule__footer-btn--add">
         <svg class="rule__footer-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
         </svg>
         Prop
-      </button>
+      </button> -->
     </div>
 
   </div>
@@ -547,6 +549,7 @@ function onRemoveIfEmpty(decl) {
 
 .rule__origin-label {
   font-weight: 600;
+  cursor: pointer;
 }
 
 
@@ -556,7 +559,7 @@ function onRemoveIfEmpty(decl) {
   align-items: center;
 }
 
-.rule__clipboard-btns {
+.rule__hidden-btns {
   display: none;
   align-items: center;
   gap: 1px;
@@ -564,11 +567,12 @@ function onRemoveIfEmpty(decl) {
   padding-right: 4px;
 }
 
-.rule:hover .rule__clipboard-btns {
+.rule:hover .rule__hidden-btns {
   display: flex;
 }
 
 /* Shared meta button (reveal + copy + paste) */
+.rule__meta-text,
 .rule__meta-btn {
   display: inline-flex;
   align-items: center;
@@ -579,10 +583,10 @@ function onRemoveIfEmpty(decl) {
   background: none;
   border: none;
   cursor: pointer;
-  color: #9ca3af;
   border-radius: 3px;
   transition: color 0.15s, background 0.15s;
   flex-shrink: 0;
+  color: darkmagenta
 }
 
 .rule__meta-btn:hover {
@@ -603,6 +607,10 @@ function onRemoveIfEmpty(decl) {
 .rule__meta-icon {
   width: 11px;
   height: 11px;
+}
+
+.rule__meta-text {
+  width: auto;
 }
 
 /* Declarations */
@@ -879,8 +887,8 @@ function onRemoveIfEmpty(decl) {
 }
 
 /* Master Colors */
-.rule__visual-btn--blue {
-  background: #3b82f6;
+.design-btn {
+  color: #15803d;
 }
 
 /* Subtle opacity when not hover rule (optional balance) */
