@@ -30,6 +30,28 @@
         <div class="w-px h-4 bg-gray-200 mx-1"></div>
         <ClipboardControls :nodeId="EditorStore.selectedNodeId" />
       </div>
+
+      <div class="w-px h-4 bg-gray-200"></div>
+
+      <!-- Toggle Dev / Designer -->
+      <div class="flex items-center bg-gray-100 rounded-md p-0.5 text-[11px] font-semibold">
+        <button
+          @click="EditorStore.setEditorMode('dev')"
+          :class="!EditorStore.isDesignerMode
+            ? 'bg-white text-indigo-600 shadow-sm'
+            : 'text-gray-500 hover:text-gray-700'"
+          class="px-2.5 py-1 rounded transition-colors"
+          title="Modo Dev — inspetor CSS completo"
+        >Dev</button>
+        <button
+          @click="EditorStore.setEditorMode('designer')"
+          :class="EditorStore.isDesignerMode
+            ? 'bg-white text-indigo-600 shadow-sm'
+            : 'text-gray-500 hover:text-gray-700'"
+          class="px-2.5 py-1 rounded transition-colors"
+          title="Modo Designer — edição visual element-first"
+        >Designer</button>
+      </div>
     </div>
 
     <!-- Seção Central: Título e Responsividade -->

@@ -15,6 +15,7 @@ import { CssLogicTreeService } from '@/editor/css/tree/CssLogicTreeService'
 import { createInlineStyleStrategy } from '@/strategies/inlineStyleStrategy'
 import { findAndRemoveFromLogicTree } from '@/utils/astHelpers'
 import { unifiedHistory } from '@/editor/history/UnifiedHistoryManager'
+import { shouldRouteDeclarationEdits, ensureRuleAtBreakpoint } from './cssBreakpointActions.js'
 
 const INLINE = 'element.style'
 
@@ -39,6 +40,68 @@ export function isPlaceholderDecl(decl) {
   const p = (decl.prop ?? '').trim()
   const v = (decl.value ?? '').trim()
   return (!p || p === DEFAULT_PROP) && (!v || v === DEFAULT_VALUE)
+}
+
+/**
+ * Write-target IMPLÍCITO (Designer mode): com breakpoint não-base ativo, a
+ * edição de VALOR numa regra base é gravada na regra equivalente do @media do
+ * breakpoint (criada/duplicada sem props se necessário). Base intacta.
+ *
+ * @param {Object} rule     - Rule de ORIGEM (a exibida no painel)
+ * @param {Object} decl     - { prop, value, important, id? } — origem ou sintética
+ * @param {string} newValue - Valor novo a gravar no breakpoint
+ * @returns {boolean} true se a edição foi roteada (caller não grava na origem)
+ * @private
+ */
+function routeValueEditToBreakpoint(rule, decl, newValue) {
+  const prop = (decl.prop ?? '').trim()
+  if (!prop || prop === DEFAULT_PROP) return false // nome ainda não digitado
+
+  const styleStore  = useStyleStore()
+  const editorStore = useEditorStore()
+  const applyFn = () => styleStore.applyMutation(editorStore.getIframeDoc())
+  unifiedHistory.snapshotCss(styleStore.cssLogicTree, applyFn)
+
+  const targetLogic = ensureRuleAtBreakpoint(rule)
+  if (!targetLogic) {
+    // Sem alvo resolvível → cai no fluxo normal (grava na origem).
+    unifiedHistory.discardCssSnapshot()
+    return false
+  }
+
+  // Origem !important precisa de !important no override para vencer a cascata.
+  const value = decl.important && !/!important\s*$/i.test(newValue)
+    ? `${newValue} !important`
+    : newValue
+
+  // Upsert da propriedade na regra do breakpoint.
+  const existing = targetLogic.children.find(
+    c => c.type === 'declaration' && c.label === prop
+  )
+  if (existing) {
+    CssLogicTreeService.updateDeclaration(
+      { astNode: existing.metadata.astNode, logicNode: existing }, 'value', value
+    )
+  } else {
+    CssLogicTreeService.createDeclaration(
+      { astNode: targetLogic.metadata.astNode, logicNode: targetLogic }, prop, value
+    )
+  }
+
+  // Decl recém-criada na origem (valor ainda placeholder): remove da origem —
+  // ela nunca teve valor real; o destino sempre foi o breakpoint.
+  if ((decl.value ?? '').trim() === DEFAULT_VALUE && decl.id) {
+    findAndRemoveFromLogicTree(toRaw(styleStore.cssLogicTree), decl.id)
+  }
+
+  applyFn()
+  unifiedHistory.commitCss(styleStore.cssLogicTree)
+  styleStore.updateInspectorRules(
+    editorStore.selectedElement,
+    editorStore.viewport,
+    styleStore.selectedRuleId
+  )
+  return true
 }
 
 /**
@@ -70,6 +133,13 @@ export function toggleDeclaration(rule, decl) {
  * Update a declaration's property name ('prop') or value ('value').
  */
 export function updateDeclaration(rule, decl, field, newValue) {
+  // Write-target implícito (Designer mode): edição de valor com breakpoint
+  // não-base ativo roteia p/ a regra do breakpoint sem tocar a origem.
+  // Renomes de propriedade ('prop') sempre editam a origem.
+  if (field === 'value' && shouldRouteDeclarationEdits(rule)) {
+    if (routeValueEditToBreakpoint(rule, decl, newValue)) return
+  }
+
   const oldValue = decl[field]
   decl[field] = newValue
   const inline = getInlineStrategy(rule)
@@ -139,6 +209,13 @@ export function addDeclaration(rule, ruleEl = null, prop = null, val = null) {
       : null
     strategy?.addProperty(rule)
   } else {
+    // Write-target implícito (Designer mode): criação direta de propriedade
+    // (editores visuais passam prop+val) roteia p/ a regra do breakpoint ativo.
+    // Placeholder (sem prop) fica na origem — roteia no commit do valor.
+    if (prop && val && shouldRouteDeclarationEdits(rule)) {
+      if (routeValueEditToBreakpoint(rule, { prop, value: '' }, val)) return
+    }
+
     const styleStore = useStyleStore()
     const applyFn = () => styleStore.applyMutation(useEditorStore().getIframeDoc())
     unifiedHistory.snapshotCss(styleStore.cssLogicTree, applyFn)

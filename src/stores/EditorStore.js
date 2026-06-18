@@ -15,6 +15,8 @@ import { createDocumentsSlice } from './editor/documentsSlice'
 import { createComponentLockSlice } from './editor/componentLockSlice'
 import { createFeedbackSlice } from './editor/feedbackSlice'
 import { createEditorStylesSlice } from './editor/editorStylesSlice'
+import { createModeSlice } from './editor/modeSlice'
+import { resolveTargetForSelection } from '@/editor/css/actions/cssDesignerActions'
 
 // ─── AST path helper (runs on raw objects, no Vue proxy overhead) ─────────────
 function _findPath(node, targetId, path) {
@@ -70,6 +72,9 @@ export const useEditorStore = defineStore('editor', () => {
   // Painéis/janelas flutuantes (htmlEditor, visualEditor, variablesPanel…)
   // vivem em stores/editor/panelsSlice.js — espalhados no return.
   const panels = createPanelsSlice({ styleStore })
+
+  // Modo de edição (dev / designer) — ver stores/editor/modeSlice.js.
+  const mode = createModeSlice({ styleStore })
 
   // --- GETTERS ---
 
@@ -363,9 +368,23 @@ export const useEditorStore = defineStore('editor', () => {
   editorHooks.on('node:afterMove',     notifyAstMutation)
   editorHooks.on('node:afterAttribute', notifyAstMutation)
 
+  // ── Designer mode: alvo padrão da edição visual ao selecionar elemento ─────
+  // Mira a última classe do elemento (ou cria uma `el-*` se ele não tem classe).
+  // O usuário troca o alvo pelos chips do chooser. Só roda no Designer; o Dev
+  // mantém a escolha explícita de regra de hoje.
+  watch(
+    [selectedNodeId, () => mode.isDesignerMode.value],
+    () => {
+      if (!mode.isDesignerMode.value || !selectedNodeId.value) return
+      resolveTargetForSelection()
+    }
+  )
+
   return {
     // Painéis/janelas flutuantes — ver stores/editor/panelsSlice.js
     ...panels,
+    // Modo de edição (dev/designer) — ver stores/editor/modeSlice.js
+    ...mode,
     showCssExplorer,
     ctx,
     ast,

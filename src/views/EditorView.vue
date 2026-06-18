@@ -350,7 +350,8 @@ watch(
       </div>
 
       <!-- col-css-right: CSS Explorer à direita do canvas (redimensionável, independente do inspector) -->
-      <template v-if="EditorStore.showCssExplorer">
+      <!-- Oculto no Designer mode (UX element-first, sem inspetor CSS). -->
+      <template v-if="EditorStore.showCssExplorer && !EditorStore.isDesignerMode">
         <!-- Handle de resize: col-css-right (handle à esquerda — arrastar esquerda aumenta) -->
         <div
           class="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-blue-400/40 transition-colors z-50 border-l border-gray-300"

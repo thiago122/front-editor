@@ -1,8 +1,8 @@
 <template>
   <div class="h-full flex flex-col bg-white text-[12px] text-gray-900 select-none font-mono">
 
-    <!-- Header with Tab Navigation -->
-    <div class="flex items-center border-b border-gray-200 bg-gray-50 min-w-0 pr-1">
+    <!-- Header with Tab Navigation (oculto no Designer mode) -->
+    <div v-if="!editorStore.isDesignerMode" class="flex items-center border-b border-gray-200 bg-gray-50 min-w-0 pr-1">
       <!-- Botão toggle CSS Explorer: primeiro item agora -->
       <button class="shrink-0 w-8 h-8 flex items-center justify-center transition-colors border-r border-gray-200"
         :class="editorStore.showCssExplorer ? 'bg-blue-50 text-blue-600' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'"
@@ -39,8 +39,13 @@
       </div>
     </Transition>
 
+    <!-- DESIGNER MODE: editor visual docado ocupa todo o inspector -->
+    <template v-if="editorStore.isDesignerMode">
+      <VisualPanel docked class="flex-1 min-h-0" />
+    </template>
+
     <!-- HEAD TAB (sempre acessível, independente de elemento selecionado) -->
-    <template v-if="activeTab === 'Head'">
+    <template v-else-if="activeTab === 'Head'">
       <HeadManager class="flex-1 overflow-hidden" />
     </template>
 
@@ -107,8 +112,8 @@
       </div>
     </div>
 
-    <!-- ── VISUAL EDITING PANEL (janela única) ───────────────────────── -->
-    <VisualPanel />
+    <!-- ── VISUAL EDITING PANEL (janela flutuante — só no Dev mode) ──────── -->
+    <VisualPanel v-if="!editorStore.isDesignerMode" />
   </div>
 </template>
 

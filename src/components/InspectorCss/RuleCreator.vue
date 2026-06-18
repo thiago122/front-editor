@@ -81,6 +81,7 @@ import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
 import { useStyleStore } from '@/stores/StyleStore'
 import { createRule as createCssRule } from '@/editor/css/actions/cssRuleActions'
+import { applySelectorToElement } from '@/editor/css/actions/cssDesignerActions'
 
 const editorStore = useEditorStore()
 const styleStore = useStyleStore()
@@ -219,34 +220,6 @@ onUnmounted(() => {
   window.removeEventListener('scroll', updatePosition, true)
 })
 
-/**
- * Apply simple selectors (.class, #id) to the selected element automatically.
- * Ignores complex selectors (descendant, pseudo-classes, etc.)
- */
-function applyRuleToElement(selector) {
-  if (!selectedElement.value || !editorStore.selectedNodeId || !editorStore.manipulation) return
-
-  const clean = selector
-    .replace(/:hover|:active|:focus|:visited|:focus-within|:focus-visible|:target/g, '')
-    .replace(/::?[a-z-]+/g, '')
-    .trim()
-
-  if (/[\s>+~]/.test(clean)) return
-
-  const classes = (clean.match(/\.[a-zA-Z_-][a-zA-Z0-9_-]*/g) || []).map(c => c.slice(1))
-  const idMatch = clean.match(/#[a-zA-Z_-][a-zA-Z0-9_-]*/)
-  const id = idMatch ? idMatch[0].slice(1) : null
-
-  if (classes.length > 0) {
-    const current = selectedElement.value.className.split(' ').filter(c => c.trim())
-    const merged = [...new Set([...current, ...classes])].join(' ')
-    editorStore.manipulation.setAttribute(editorStore.selectedNodeId, 'class', merged)
-  }
-  if (id) {
-    editorStore.manipulation.setAttribute(editorStore.selectedNodeId, 'id', id)
-  }
-}
-
 function createRule() {
   if (!selectedElement.value || !styleStore.cssLogicTree) return
 
@@ -266,7 +239,7 @@ function createRule() {
   const newNode = createCssRule(selector, origin, sourceName)
 
   if (newNode) {
-    applyRuleToElement(selector)
+    applySelectorToElement(selector)
     emit('rule-added', newNode)
     close()
   }

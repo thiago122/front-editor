@@ -1,21 +1,21 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useEditorStore } from '@/stores/EditorStore'
 import { useStyleStore } from '@/stores/StyleStore'
 import FloatingWindow from '@/components/ui/FloatingWindow.vue'
-import TypographyEditor from './visual/TypographyEditor.vue'
-import LayoutEditor from './visual/LayoutEditor.vue'
-import AdvancedLayoutEditor from './visual/AdvancedLayoutEditor.vue'
-import AppearanceEditor from './visual/AppearanceEditor.vue'
-import SizingEditor from './visual/SizingEditor.vue'
-import SpacingEditor from './visual/SpacingEditor.vue'
-import PositioningEditor from './visual/PositioningEditor.vue'
-import VisualSection from '@/components/ui/VisualSection.vue'
+import VisualPanelSections from './VisualPanelSections.vue'
+import DesignerSelectorBar from './DesignerSelectorBar.vue'
 
-defineProps({
+const props = defineProps({
   minimalist: {
     type: Boolean,
     default: true
+  },
+  // Docado (Designer mode): preenche a coluna do inspector, sempre visível,
+  // sem chrome de janela flutuante. Default false = janela flutuante (Dev).
+  docked: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -53,44 +53,65 @@ const rule = computed(() => {
   }
   return null
 })
+const ruleGetter = () => rule.value
 
 const selectorName = computed(() => rule.value?.selector || 'No Rule')
 
-// ── Handlers ──────────────────────────────────────────────────────────────────
+// ── Active breakpoint label (transparência do Designer) ───────────────────────
+const breakpointLabel = computed(() => {
+  const bp = editorStore.previewBreakpoint
+  if (!bp || bp.unit !== 'px') return 'Base'
+  return `${bp.width}px`
+})
+
+// ── Handlers (janela flutuante) ───────────────────────────────────────────────
 function onClose() {
   panelState.value.show = false
 }
-
 function onMove({ x, y }) {
   panelState.value.x = x
   panelState.value.y = y
 }
-
 function onResize({ width, height }) {
   panelState.value.width  = width
   panelState.value.height = height
 }
-
-// ── Sub-section Visibility ───────────────────────────────────────────────────
-const showDisplay     = ref(true)
-const showSizing      = ref(true)
-const showSpacing     = ref(true)
-const showPositioning = ref(true)
-const showAdvanced    = ref(true)
-const showTypography  = ref(true)
-const showAppearance  = ref(true)
-
-const hasValueDisplay     = ref(false)
-const hasValueSizing      = ref(false)
-const hasValueSpacing     = ref(false)
-const hasValuePositioning = ref(false)
-const hasValueAdvanced    = ref(false)
-const hasValueTypography  = ref(false)
-const hasValueAppearance  = ref(false)
 </script>
 
 <template>
+  <!-- ── Designer mode: docado na coluna do inspector ──────────────────────── -->
+  <div v-if="docked" class="h-full flex flex-col bg-white">
+    <!-- Header docado: chooser de seletores (chips) + breakpoint ativo -->
+    <div class="flex items-start gap-2 px-3 py-2 border-b border-gray-200 bg-gray-50 shrink-0">
+      <DesignerSelectorBar :active-selector="selectorName" class="flex-1 min-w-0" />
+      <span
+        class="text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 mt-0.5"
+        :class="breakpointLabel === 'Base'
+          ? 'bg-gray-200 text-gray-600'
+          : 'bg-blue-100 text-blue-700'"
+        :title="breakpointLabel === 'Base'
+          ? 'Editando o estilo base (todos os tamanhos)'
+          : `Editando só neste breakpoint (${breakpointLabel})`"
+      >{{ breakpointLabel }}</span>
+    </div>
+
+    <div class="flex-1 overflow-y-auto bg-gray-50/30 p-1">
+      <div v-if="!activeRuleUid || !rule" class="flex flex-col items-center justify-center h-full text-gray-400 px-4 text-center">
+        <p class="text-[11px]">Selecione um elemento no canvas para começar a editar.</p>
+      </div>
+      <VisualPanelSections
+        v-else
+        :rule-getter="ruleGetter"
+        :active-rule-uid="activeRuleUid"
+        :parent-display="parentDisplay"
+        :minimalist="minimalist"
+      />
+    </div>
+  </div>
+
+  <!-- ── Dev mode: janela flutuante (comportamento atual) ──────────────────── -->
   <FloatingWindow
+    v-else
     :show="panelState.show"
     :theme="'light'"
     :minimalist="minimalist"
@@ -140,64 +161,13 @@ const hasValueAppearance  = ref(false)
         <p :class="minimalist ? 'text-[10px]' : 'text-sm'">Selecione uma regra para editar</p>
       </div>
 
-      <div v-else class="flex flex-col">
-        <VisualSection title="Layout" v-model:show="showDisplay" :hasAnyValue="hasValueDisplay">
-          <LayoutEditor
-            @has-value="v => hasValueDisplay = v"
-            :key="activeRuleUid + '_layout'"
-            :rule-getter="() => rule"
-            :parent-display="parentDisplay"
-          />
-        </VisualSection>
-
-        <VisualSection title="Sizing" v-model:show="showSizing" :hasAnyValue="hasValueSizing">
-          <SizingEditor
-            @has-value="v => hasValueSizing = v"
-            :key="activeRuleUid + '_sizing'"
-            :rule-getter="() => rule"
-          />
-        </VisualSection>
-
-        <VisualSection title="Spacing" v-model:show="showSpacing" :hasAnyValue="hasValueSpacing">
-          <SpacingEditor
-            @has-value="v => hasValueSpacing = v"
-            :key="activeRuleUid + '_spacing'"
-            :rule-getter="() => rule"
-          />
-        </VisualSection>
-
-        <VisualSection title="Positioning" v-model:show="showPositioning" :hasAnyValue="hasValuePositioning">
-          <PositioningEditor
-            @has-value="v => hasValuePositioning = v"
-            :key="activeRuleUid + '_pos'"
-            :rule-getter="() => rule"
-          />
-        </VisualSection>
-
-        <VisualSection title="Advanced" v-model:show="showAdvanced" :hasAnyValue="hasValueAdvanced">
-          <AdvancedLayoutEditor
-            @has-value="v => hasValueAdvanced = v"
-            :key="activeRuleUid + '_advanced'"
-            :rule-getter="() => rule"
-          />
-        </VisualSection>
-
-        <VisualSection title="Typography" v-model:show="showTypography" :hasAnyValue="hasValueTypography">
-          <TypographyEditor
-            @has-value="v => hasValueTypography = v"
-            :key="activeRuleUid + '_typography'"
-            :rule-getter="() => rule"
-          />
-        </VisualSection>
-
-        <VisualSection title="Appearance" v-model:show="showAppearance" :hasAnyValue="hasValueAppearance">
-          <AppearanceEditor
-            @has-value="v => hasValueAppearance = v"
-            :key="activeRuleUid + '_appearance'"
-            :rule-getter="() => rule"
-          />
-        </VisualSection>
-      </div>
+      <VisualPanelSections
+        v-else
+        :rule-getter="ruleGetter"
+        :active-rule-uid="activeRuleUid"
+        :parent-display="parentDisplay"
+        :minimalist="minimalist"
+      />
     </div>
   </FloatingWindow>
 </template>

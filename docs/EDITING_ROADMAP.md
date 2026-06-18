@@ -203,12 +203,36 @@ como ação distinta de zerar o valor.
 **Pendente (UI/integração):**
 - [x] Menu de duas ações no botão @media do `CssRule.vue` (Restringir /
       Duplicar) + input de condição manual com o base ativo (eixo 6) ✔ 2026-06-12
-- [x] Write-target IMPLÍCITO ✔ 2026-06-12 — `updateDeclaration` (valor) e
-      `addDeclaration` (prop+val dos editores visuais) roteiam via
-      `routeValueEditToBreakpoint` quando: regra não-inline, sem contexto
-      @media/@container, inspector em modo elemento, breakpoint ≠ base.
-      Renomes de prop, toggle e delete NÃO roteiam (editam a regra exibida).
-      Decl placeholder recém-criada na base é removida da origem ao rotear.
+- [~] Write-target IMPLÍCITO — introduzido em 2026-06-12, **removido** no
+      `9f7d98b` (16/jun) por ser opaco no inspetor de Dev (toggle escondido +
+      badge âmbar). **Reintroduzido escopado ao Designer mode** (ver abaixo):
+      `updateDeclaration` (valor) e `addDeclaration` (prop+val dos editores
+      visuais) roteiam via `routeValueEditToBreakpoint` quando o editor está em
+      **Designer mode**, regra não-inline, sem contexto @media/@container,
+      inspector em modo elemento, breakpoint ≠ base. Renomes de prop, toggle e
+      delete NÃO roteiam. Dev mode NÃO roteia (edição explícita na regra visível).
+
+### Designer mode (2026-06-18) — UX element-first p/ leigo
+
+Modo paralelo ao Dev (toggle na toolbar — `EditorStore.setEditorMode`).
+Esconde o inspetor CSS, mostra só o editor visual docado. Config automática:
+desktop-first + blocão por breakpoint (forçada em `modeSlice`, restaurada ao
+sair).
+
+**Chooser de seletores (estilo Webflow)** — `DesignerSelectorBar.vue` +
+`cssDesignerActions.js`. O header do painel mostra chips com os seletores do
+elemento (classes + id); o usuário escolhe qual editar. Pode renomear qualquer
+classe editável (2 cliques no chip) e adicionar classe nova (`+`).
+
+**Destino da edição:**
+- Seletor com regra em arquivo EDITÁVEL (on_page/internal) → edita ela.
+- Seletor sem regra, ou só em CSS EXTERNO (CDN/terceiro, **read-only**) → cria
+  regra de mesmo seletor no stylesheet do editor (override). Externo nunca é tocado.
+- Elemento SEM classe nenhuma → cria classe base `el-*` (fallback) e mira ela.
+- Alvo padrão ao selecionar = última classe do elemento.
+
+Com breakpoint ativo, a edição duplica a regra alvo (sem props) no @media e grava
+lá (write-target implícito acima); base intacta.
 - [x] Toolbar dinâmica ✔ 2026-06-12 — `BreakpointControl.vue` renderiza de
       `projectBreakpoints` (ícone por faixa de largura, marcador no
       breakpoint base da estratégia). UI p/ adicionar/editar breakpoints

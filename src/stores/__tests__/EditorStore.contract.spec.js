@@ -24,6 +24,8 @@ const PUBLIC_API = [
   // Inspect / overlays
   'inspectMode', 'showBoxModel', 'outlineMode', 'showEmptyPlaceholder',
   'applyEditorStyles', 'activate', 'deactivate', 'showCssExplorer',
+  // Modo de edição (modeSlice)
+  'editorMode', 'isDesignerMode', 'setEditorMode',
   // Arquivos / documentos
   'fileHandle', 'fileName', 'currentDocument', 'openFile', 'saveFile',
   'saveFileAs', 'openDocument', 'openDocumentByPath', 'saveDocument',
@@ -61,7 +63,7 @@ describe('EditorStore — contrato da API pública', () => {
       'saveFileAs', 'openDocument', 'openDocumentByPath', 'saveDocument',
       'setViewport', 'setPreviewBreakpoint', 'unlockComponent',
       'lockComponent', 'isNodeInsideLockedComponent',
-      'refreshComponentInstances',
+      'refreshComponentInstances', 'setEditorMode',
     ]
     for (const fn of fns) {
       expect(typeof store[fn], `${fn} deve ser função`).toBe('function')
@@ -77,6 +79,8 @@ describe('EditorStore — contrato da API pública', () => {
     expect(store.canPaste).toBe(false)
     expect(store.htmlEditor.show).toBe(false)
     expect(store.visualEditor.panel.show).toBe(false)
+    expect(store.editorMode).toBe('dev')
+    expect(store.isDesignerMode).toBe(false)
   })
 
   it('openCodeEditor roteia html/css/quick', () => {
