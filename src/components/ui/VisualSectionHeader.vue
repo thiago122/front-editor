@@ -8,7 +8,7 @@ defineProps({
   <div class="flex items-center gap-2 mb-1 group/vheader">
     <div class="flex items-center gap-1.5 shrink-0">
       <!-- Label -->
-      <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider select-none leading-none">
+      <span class=" uppercase tracking-wider select-none leading-none">
         {{ label }}
       </span>
 
@@ -19,6 +19,8 @@ defineProps({
     </div>
 
     <!-- Decorative Line -->
-    <div class="flex-1 border-t border-gray-100 mt-0.5 opacity-60 group-hover/vheader:opacity-100 transition-opacity"></div>
+    <div
+      class="flex-1 border-t  border-b border-fuchsia-600 mt-0.5 opacity-60 group-hover/vheader:opacity-100 transition-opacity">
+    </div>
   </div>
 </template>
