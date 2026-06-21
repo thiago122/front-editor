@@ -8,6 +8,7 @@ import SizingEditor from './visual/SizingEditor.vue'
 import SpacingEditor from './visual/SpacingEditor.vue'
 import PositioningEditor from './visual/PositioningEditor.vue'
 import VisualSection from '@/components/ui/VisualSection.vue'
+import VisualSectionHeader from '@/components/ui/VisualSectionHeader.vue'
 
 defineProps({
   // Getter da rule ativa (reativo) — repassado aos editores via :rule-getter.
@@ -19,9 +20,6 @@ defineProps({
 
 // ── Sub-section Visibility ───────────────────────────────────────────────────
 const showDisplay = ref(true)
-const showSizing = ref(false)
-const showSpacing = ref(false)
-const showPositioning = ref(false)
 const showAdvanced = ref(false)
 const showTypography = ref(false)
 const showAppearance = ref(false)
@@ -33,17 +31,11 @@ const hasValuePositioning = ref(false)
 const hasValueAdvanced = ref(false)
 const hasValueTypography = ref(false)
 const hasValueAppearance = ref(false)
-
-import VisualSectionHeader from '@/components/ui/VisualSectionHeader.vue'
-
-
-
 </script>
 
 <template>
   <div class="flex flex-col">
     <VisualSection title="Layout" v-model:show="showDisplay" :hasAnyValue="hasValueDisplay">
-
       <LayoutEditor @has-value="v => hasValueDisplay = v" :key="activeRuleUid + '_layout'" :rule-getter="ruleGetter"
         :parent-display="parentDisplay" />
 
@@ -58,7 +50,6 @@ import VisualSectionHeader from '@/components/ui/VisualSectionHeader.vue'
 
       <PositioningEditor @has-value="v => hasValuePositioning = v" :key="activeRuleUid + '_pos'"
         :rule-getter="ruleGetter" />
-
     </VisualSection>
 
     <VisualSection title="Typography" v-model:show="showTypography" :hasAnyValue="hasValueTypography">
@@ -75,25 +66,5 @@ import VisualSectionHeader from '@/components/ui/VisualSectionHeader.vue'
       <AdvancedLayoutEditor @has-value="v => hasValueAdvanced = v" :key="activeRuleUid + '_advanced'"
         :rule-getter="ruleGetter" />
     </VisualSection>
-
-
-
-
-
-    <!-- <VisualSection title="Sizing" v-model:show="showSizing" :hasAnyValue="hasValueSizing">
-      <SizingEditor @has-value="v => hasValueSizing = v" :key="activeRuleUid + '_sizing'" :rule-getter="ruleGetter" />
-    </VisualSection> -->
-
-    <!-- <VisualSection title="Spacing" v-model:show="showSpacing" :hasAnyValue="hasValueSpacing">
-      <SpacingEditor @has-value="v => hasValueSpacing = v" :key="activeRuleUid + '_spacing'"
-        :rule-getter="ruleGetter" />
-    </VisualSection> -->
-
-    <!-- <VisualSection title="Positioning" v-model:show="showPositioning" :hasAnyValue="hasValuePositioning">
-      <PositioningEditor @has-value="v => hasValuePositioning = v" :key="activeRuleUid + '_pos'"
-        :rule-getter="ruleGetter" />
-    </VisualSection> -->
-
-
   </div>
 </template>
